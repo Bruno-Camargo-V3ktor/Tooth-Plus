@@ -1,0 +1,218 @@
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f5f6f8;
+    color: #333;
+}
+
+.login-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.login-box {
+    background: white;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    width: 100%;
+    max-width: 380px;
+}
+
+.login-title {
+    text-align: center;
+    color: #00a0e4;
+    margin-bottom: 30px;
+    font-weight: 600;
+}
+
+.error-msg {
+    background: #ffebee;
+    color: #c62828;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    text-align: center;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.input-field {
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.input-field:focus {
+    border-color: #00a0e4;
+}
+
+.btn-primary {
+    padding: 14px;
+    background: #00a0e4;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+    background: #008cc9;
+}
+
+.context-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 80px 20px;
+    height: 100vh;
+}
+
+.card-grid {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.clinic-card {
+    background: white;
+    padding: 24px;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    width: 280px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid #eee;
+}
+
+.clinic-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0,160,228,0.15);
+    border-color: #00a0e4;
+}
+
+.clinic-name {
+    margin: 0 0 8px 0;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.clinic-role {
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+}
+
+.dashboard-layout {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.sidebar {
+    width: 240px;
+    background-color: #ffffff;
+    border-right: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+}
+
+.sidebar-header {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    background-color: #00a0e4;
+    color: white;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.nav-menu {
+    display: flex;
+    flex-direction: column;
+    padding: 16px 0;
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+.nav-item {
+    padding: 12px 24px;
+    color: #555;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s;
+    border-left: 4px solid transparent;
+}
+
+.nav-item:hover {
+    background-color: #f5f6f8;
+    color: #00a0e4;
+}
+
+.nav-item-active {
+    background-color: #e6f7ff;
+    color: #00a0e4;
+    border-left: 4px solid #00a0e4;
+}
+
+.main-area {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: #f5f6f8;
+}
+
+.topbar {
+    height: 60px;
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 24px;
+}
+
+.topbar-user {
+    font-size: 14px;
+    color: #555;
+}
+
+.content-wrapper {
+    padding: 24px;
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+.page-title {
+    margin: 0 0 24px 0;
+    font-size: 20px;
+    color: #333;
+    font-weight: 500;
+}
+
+.content-card {
+    background: white;
+    border-radius: 6px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border: 1px solid #e0e0e0;
+}
