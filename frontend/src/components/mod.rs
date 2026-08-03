@@ -1,7 +1,4 @@
-mod context_selector;
-mod home;
-mod login;
-
-pub use context_selector::*;
-pub use home::*;
-pub use login::*;
+pub mod clinic_card;
+pub mod icons;
+pub mod sidebar;
+pub mod topbar;

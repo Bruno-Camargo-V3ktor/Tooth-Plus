@@ -1,5 +1,6 @@
 use crate::pages::auth::{ContextSelector, LoginScreen};
-use crate::pages::dashboard::{AgendaView, DashboardLayout, FinanceView, PatientsView, StockView};
+use crate::pages::dashboard::DashboardLayout;
+use crate::pages::views::*;
 use dioxus::prelude::*;
 
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -22,6 +23,15 @@ pub enum Route {
 
     #[route("/stock")]
     StockView {},
+
+    #[route("/users")]
+    UsersView {},
+
+    #[route("/documents")]
+    DocumentsView {},
+
+    #[route("/clinics")]
+    ClinicsView {},
     #[end_layout]
     #[route("/:.._route")]
     NotFound { _route: Vec<String> },

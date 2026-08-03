@@ -19,6 +19,7 @@ struct ClinicAccessRecord {
     clinic_id: surrealdb::types::RecordId,
     trading_name: String,
     theme_color: String,
+    logo_url: Option<String>,
     role: String,
 }
 
@@ -62,6 +63,7 @@ pub async fn login(req: web::Json<LoginRequest>, db: web::Data<Db>) -> impl Resp
                     clinic_id: record.clinic_id.key.to_sql(),
                     trading_name: record.trading_name,
                     theme_color: record.theme_color,
+                    logo_url: record.logo_url,
                     role: record.role,
                 })
                 .collect();

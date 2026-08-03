@@ -1,117 +1,79 @@
+use crate::components::sidebar::Sidebar;
+use crate::components::topbar::Topbar;
 use crate::router::Route;
 use crate::{ActiveClinicState, SessionState};
 use dioxus::prelude::*;
 
 #[component]
 pub fn DashboardLayout() -> Element {
-    let session = consume_context::<Signal<SessionState>>();
-    let active_clinic = consume_context::<Signal<ActiveClinicState>>();
+    // 1. Declarados com 'mut' (Exigência do Dioxus 0.7)
+    let mut session = consume_context::<Signal<SessionState>>();
+    let mut active_clinic = consume_context::<Signal<ActiveClinicState>>();
     let navigator = use_navigator();
 
-    if session.read().is_none() || active_clinic.read().is_none() {
+    let mut is_collapsed = use_signal(|| false);
+    let mut is_settings_open = use_signal(|| false);
+    let mut active_tab = use_signal(|| "Geral".to_string());
+
+    if session().is_none() || active_clinic().is_none() {
         spawn(async move {
             navigator.replace(Route::LoginScreen {});
         });
         return rsx! { div {} };
     }
 
-    let clinic_name = active_clinic.read().as_ref().unwrap().trading_name.clone();
-    let theme_color = active_clinic.read().as_ref().unwrap().theme_color.clone();
-    let user_name = session.read().as_ref().unwrap().full_name.clone();
+    let clinic = active_clinic().as_ref().unwrap().clone();
+    let user_name = session().as_ref().unwrap().full_name.clone();
+
+    // 2. Extrair a leitura ANTES da macro para evitar o E0502
+    let collapsed_val = is_collapsed();
+    let settings_open_val = is_settings_open();
+    let tab_val = active_tab();
 
     rsx! {
         div { class: "dashboard-layout",
-            div { class: "sidebar",
-                div {
-                    class: "sidebar-header",
-                    style: "background-color: {theme_color};",
-                    "{clinic_name}"
-                }
-
-                div { class: "nav-menu",
-                    Link {
-                        to: Route::AgendaView {},
-                        class: "nav-item",
-                        active_class: "nav-item-active",
-                        "Agenda"
-                    }
-                    Link {
-                        to: Route::PatientsView {},
-                        class: "nav-item",
-                        active_class: "nav-item-active",
-                        "Pacientes"
-                    }
-                    Link {
-                        to: Route::FinanceView {},
-                        class: "nav-item",
-                        active_class: "nav-item-active",
-                        "Financeiro"
-                    }
-                    Link {
-                        to: Route::StockView {},
-                        class: "nav-item",
-                        active_class: "nav-item-active",
-                        "Estoque"
-                    }
+            Sidebar {
+                theme_color: clinic.theme_color,
+                logo_url: clinic.logo_url,
+                is_collapsed: collapsed_val, // Usa o valor lido
+                on_toggle: move |_| is_collapsed.set(!is_collapsed()), // Captura o signal com permissão mutável
+                on_settings: move |_| is_settings_open.set(true),
+                on_logout: move |_| {
+                    active_clinic.set(None);
+                    session.set(None);
                 }
             }
 
             div { class: "main-area",
-                div { class: "topbar",
-                    div { class: "topbar-user", "{user_name}" }
-                }
+                Topbar { user_name: user_name }
 
                 div { class: "content-wrapper",
                     Outlet::<Route> {}
                 }
             }
-        }
-    }
-}
 
-#[component]
-pub fn AgendaView() -> Element {
-    rsx! {
-        div {
-            h1 { class: "page-title", "Agenda" }
-            div { class: "content-card",
-                "Calendar component will be rendered here."
-            }
-        }
-    }
-}
-
-#[component]
-pub fn PatientsView() -> Element {
-    rsx! {
-        div {
-            h1 { class: "page-title", "Pacientes" }
-            div { class: "content-card",
-                "Patient list and registration form will be rendered here."
-            }
-        }
-    }
-}
-
-#[component]
-pub fn FinanceView() -> Element {
-    rsx! {
-        div {
-            h1 { class: "page-title", "Fluxo de Caixa" }
-            div { class: "content-card",
-                "Financial data will be rendered here."
-            }
-        }
-    }
-}
-
-#[component]
-pub fn StockView() -> Element {
-    rsx! {
-        div {
-            h1 { class: "page-title", "Estoque" }
-            div { class: "content-card",
-                "Inventory data will be rendered here."
+            if settings_open_val {
+                div { class: "modal-overlay",
+                    div { class: "settings-modal",
+                        div { class: "settings-header",
+                            h2 { class: "settings-title", "Configurações do Sistema" }
+                            button { class: "close-btn", onclick: move |_| is_settings_open.set(false), "×" }
+                        }
+                        div { class: "settings-tabs",
+                            for tab in ["Geral", "Aparência", "Impressão", "Segurança"] {
+                                button {
+                                    class: if tab_val == tab { "tab-btn active" } else { "tab-btn" },
+                                    onclick: move |_| active_tab.set(tab.to_string()),
+                                    "{tab}"
+                                }
+                            }
+                        }
+                        div { class: "settings-content",
+                            h3 { "Categoria: {tab_val}" }
+                            p { "As opções de {tab_val} serão renderizadas aqui." }
+                        }
+                    }
+                }
             }
         }
     }
