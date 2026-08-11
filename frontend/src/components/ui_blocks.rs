@@ -1,0 +1,64 @@
+use crate::components::icons::{IconPlus, IconSearch};
+use dioxus::prelude::*;
+
+#[component]
+pub fn PageHeader(
+    title: String,
+    subtitle: String,
+    search_query: Signal<String>,
+    on_new: EventHandler<()>,
+    btn_text: String,
+) -> Element {
+    rsx! {
+        div { class: "page-action-header",
+            div {
+                h1 { class: "page-title", style: "margin: 0;", "{title}" }
+                p { class: "page-subtitle", "{subtitle}" }
+            }
+            div { class: "header-actions-group",
+                div { class: "modern-search-bar",
+                    div { class: "search-icon" , IconSearch { size: 18, color: "currentColor".to_string() } }
+                    input {
+                        class: "search-input",
+                        placeholder: "Buscar...",
+                        value: "{search_query}",
+                        oninput: move |e| search_query.set(e.value())
+                    }
+                }
+                button {
+                    class: "btn-primary",
+                    style: "margin: 0; display: flex; align-items: center; gap: 8px;",
+                    onclick: move |_| on_new.call(()),
+                    IconPlus { size: 18, color: "currentColor".to_string() }
+                    "{btn_text}"
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn ActionModal(
+    is_open: bool,
+    title: String,
+    on_close: EventHandler<()>,
+    children: Element,
+) -> Element {
+    if !is_open {
+        return rsx! { div {} };
+    }
+
+    rsx! {
+        div { class: "modal-overlay",
+            div { class: "settings-modal", style: "height: auto; max-height: 90vh;",
+                div { class: "settings-header",
+                    h2 { class: "settings-title", "{title}" }
+                    button { class: "close-btn", onclick: move |_| on_close.call(()), "×" }
+                }
+                div { class: "settings-content",
+                    {children}
+                }
+            }
+        }
+    }
+}

@@ -18,7 +18,7 @@ pub fn LoginScreen() -> Element {
     let error_msg_val = error_msg();
     let loading_val = is_loading();
 
-    let handle_login = move |e: Event<FormData>| {
+    let handle_login = move |_e: Event<FormData>| {
         spawn(async move {
             is_loading.set(true);
             error_msg.set(String::new());
