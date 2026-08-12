@@ -8,6 +8,7 @@ pub struct UserResponse {
     pub is_active: bool,
     pub role: String,
     pub permissions: Vec<String>,
+    pub clinic_ids: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -16,8 +17,8 @@ pub struct CreateUserRequest {
     pub password_plain: String,
     pub full_name: String,
     pub role: String,
-    pub clinic_id: String,
     pub permissions: Vec<String>,
+    pub clinic_ids: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -25,6 +26,7 @@ pub struct UpdateUserRequest {
     pub full_name: Option<String>,
     pub role: Option<String>,
     pub permissions: Option<Vec<String>>,
+    pub clinic_ids: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

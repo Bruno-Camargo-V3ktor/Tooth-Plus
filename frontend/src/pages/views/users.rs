@@ -1,47 +1,31 @@
+use crate::api;
 use crate::components::icons::{IconChevronDown, IconEdit, IconLock, IconPower, IconTrash};
 use crate::components::ui_blocks::{ActionModal, PageHeader};
 use dioxus::prelude::*;
-
-#[derive(Clone, PartialEq)]
-pub struct MockUser {
-    pub id: String,
-    pub full_name: String,
-    pub username: String,
-    pub role: String,
-    pub is_active: bool,
-    pub permissions_count: usize,
-}
+use shared::users::{CreateUserRequest, ToggleStatusRequest, UserResponse};
 
 #[component]
 pub fn UsersView() -> Element {
-    let mut users = use_signal(|| {
-        vec![
-            MockUser {
-                id: "1".into(),
-                full_name: "Dr. Admin User".into(),
-                username: "admin".into(),
-                role: "admin".into(),
-                is_active: true,
-                permissions_count: 12,
-            },
-            MockUser {
-                id: "2".into(),
-                full_name: "Fernanda Alves".into(),
-                username: "fernanda.a".into(),
-                role: "dentist".into(),
-                is_active: true,
-                permissions_count: 5,
-            },
-        ]
+    let active_clinic = consume_context::<Signal<crate::ActiveClinicState>>();
+    let clinic_id = active_clinic()
+        .as_ref()
+        .map(|c| c.clinic_id.clone())
+        .unwrap_or_default();
+
+    let mut users_resource = use_resource(move || {
+        let cid = clinic_id.clone();
+        async move { api::fetch_users(&cid).await.unwrap_or_default() }
     });
 
     let mut search_query = use_signal(|| String::new());
     let mut is_form_modal_open = use_signal(|| false);
     let mut is_delete_modal_open = use_signal(|| false);
-    let mut selected_user = use_signal(|| None::<MockUser>);
+    let mut selected_user = use_signal(|| None::<UserResponse>);
 
     let search_val = search_query();
-    let filtered_users: Vec<MockUser> = users()
+    let current_users = users_resource().unwrap_or_default();
+
+    let filtered_users: Vec<UserResponse> = current_users
         .into_iter()
         .filter(|u| {
             u.full_name
@@ -77,12 +61,12 @@ pub fn UsersView() -> Element {
                             selected_user.set(Some(u));
                             is_delete_modal_open.set(true);
                         },
-                        on_toggle: move |u: MockUser| {
-                            let mut current = users();
-                            if let Some(target) = current.iter_mut().find(|x| x.id == u.id) {
-                                target.is_active = !target.is_active;
-                            }
-                            users.set(current);
+                        on_toggle: move |u: UserResponse| {
+                            spawn(async move {
+                                let req = ToggleStatusRequest { is_active: !u.is_active };
+                                let _ = api::toggle_user_status(&u.id, req).await;
+                                users_resource.restart();
+                            });
                         }
                     }
                 }
@@ -90,13 +74,20 @@ pub fn UsersView() -> Element {
 
             UserFormModal {
                 is_open: is_form_modal_open,
-                user: selected_user
+                user: selected_user,
+                on_success: move |_| {
+                    is_form_modal_open.set(false);
+                    users_resource.restart();
+                }
             }
 
             UserDeleteModal {
                 is_open: is_delete_modal_open,
                 user: selected_user,
-                users_signal: users
+                on_success: move |_| {
+                    is_delete_modal_open.set(false);
+                    users_resource.restart();
+                }
             }
         }
     }
@@ -104,14 +95,16 @@ pub fn UsersView() -> Element {
 
 #[component]
 fn UserRow(
-    user: MockUser,
-    on_edit: EventHandler<MockUser>,
-    on_delete: EventHandler<MockUser>,
-    on_toggle: EventHandler<MockUser>,
+    user: UserResponse,
+    on_edit: EventHandler<UserResponse>,
+    on_delete: EventHandler<UserResponse>,
+    on_toggle: EventHandler<UserResponse>,
 ) -> Element {
     let u_edit = user.clone();
     let u_delete = user.clone();
     let u_toggle = user.clone();
+
+    let perms_count = user.permissions.len();
 
     rsx! {
         div { class: "user-card-row",
@@ -131,7 +124,7 @@ fn UserRow(
             }
             div { class: "user-perms-section",
                 IconLock { size: 16, color: "#94a3b8".to_string() }
-                span { style: "margin-left: 6px;", "{user.permissions_count} permissões" }
+                span { style: "margin-left: 6px;", "{perms_count} permissões" }
             }
             div { class: "user-actions-section",
                 button { class: "icon-action-btn edit-btn-row", onclick: move |_| on_edit.call(u_edit.clone()), IconEdit { size: 18, color: "currentColor".to_string() } }
@@ -143,7 +136,11 @@ fn UserRow(
 }
 
 #[component]
-fn UserFormModal(is_open: Signal<bool>, user: Signal<Option<MockUser>>) -> Element {
+fn UserFormModal(
+    is_open: Signal<bool>,
+    user: Signal<Option<UserResponse>>,
+    on_success: EventHandler<()>,
+) -> Element {
     let title = if user().is_some() {
         "Editar Membro"
     } else {
@@ -159,7 +156,7 @@ fn UserFormModal(is_open: Signal<bool>, user: Signal<Option<MockUser>>) -> Eleme
             div { class: "form-grid",
                 div { class: "input-group-wrapper", style: "grid-column: 1 / -1;", input { class: "modern-input-field", placeholder: "Nome Completo" } }
                 div { class: "input-group-wrapper", input { class: "modern-input-field", placeholder: "Login" } }
-                div { class: "input-group-wrapper", input { class: "modern-input-field", r#type: "password", placeholder: "Senha" } }
+                div { class: "input-group-wrapper", input { class: "modern-input-field", r#type: "password", placeholder: "Senha Temporária" } }
                 div { class: "input-group-wrapper", style: "grid-column: 1 / -1;",
                     select { class: "modern-input-field modern-select",
                         option { value: "dentist", "Dentista" }
@@ -168,7 +165,7 @@ fn UserFormModal(is_open: Signal<bool>, user: Signal<Option<MockUser>>) -> Eleme
                     }
                 }
                 div { style: "grid-column: 1 / -1; margin-top: 16px;",
-                    h4 { style: "margin: 0 0 12px 0; font-size: 14px; color: #0f172a;", "Permissões de Acesso" }
+                    h4 { style: "margin: 0 0 12px 0; font-size: 14px; color: #0f172a;", "Permissões de Acesso (PBAC)" }
                     div { class: "permissions-container",
                         PermissionCategory { title: "Módulo: Agenda".to_string(), permissions: vec!["Ler Agendamentos".into(), "Criar Agendamento".into(), "Deletar Agendamento".into()] }
                         PermissionCategory { title: "Módulo: Pacientes".to_string(), permissions: vec!["Ler Prontuário".into(), "Editar Ficha".into(), "Deletar Paciente".into()] }
@@ -178,7 +175,23 @@ fn UserFormModal(is_open: Signal<bool>, user: Signal<Option<MockUser>>) -> Eleme
             }
             div { class: "modal-footer-actions",
                 button { class: "btn-secondary", onclick: move |_| is_open.set(false), "Cancelar" }
-                button { class: "btn-primary", "Salvar Membro" }
+                button {
+                    class: "btn-primary",
+                    onclick: move |_| {
+                        spawn(async move {
+                            let _ = api::create_user(CreateUserRequest {
+                                username: "".into(),
+                                password_plain: "".into(),
+                                full_name: "".into(),
+                                role: "".into(),
+                                clinic_id: "".into(),
+                                permissions: vec![]
+                            }).await;
+                            on_success.call(());
+                        });
+                    },
+                    "Salvar Membro"
+                }
             }
         }
     }
@@ -187,8 +200,8 @@ fn UserFormModal(is_open: Signal<bool>, user: Signal<Option<MockUser>>) -> Eleme
 #[component]
 fn UserDeleteModal(
     is_open: Signal<bool>,
-    user: Signal<Option<MockUser>>,
-    mut users_signal: Signal<Vec<MockUser>>,
+    user: Signal<Option<UserResponse>>,
+    on_success: EventHandler<()>,
 ) -> Element {
     rsx! {
         ActionModal {
@@ -204,11 +217,11 @@ fn UserDeleteModal(
                         class: "btn-danger",
                         onclick: move |_| {
                             if let Some(u) = user() {
-                                let mut current = users_signal();
-                                current.retain(|x| x.id != u.id);
-                                users_signal.set(current);
+                                spawn(async move {
+                                    let _ = api::delete_user(&u.id).await;
+                                    on_success.call(());
+                                });
                             }
-                            is_open.set(false);
                         },
                         "Sim, excluir usuário"
                     }
