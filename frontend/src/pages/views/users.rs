@@ -156,7 +156,7 @@ fn UserFormModal(
             div { class: "form-grid",
                 div { class: "input-group-wrapper", style: "grid-column: 1 / -1;", input { class: "modern-input-field", placeholder: "Nome Completo" } }
                 div { class: "input-group-wrapper", input { class: "modern-input-field", placeholder: "Login" } }
-                div { class: "input-group-wrapper", input { class: "modern-input-field", r#type: "password", placeholder: "Senha Temporária" } }
+                div { class: "input-group-wrapper", input { class: "modern-input-field", r#type: "password", placeholder: "Senha" } }
                 div { class: "input-group-wrapper", input { class: "modern-input-field", placeholder: "CPF" } }
                 div { class: "input-group-wrapper", input { class: "modern-input-field", placeholder: "Registro Profissional (CRO)" } }
 
@@ -164,7 +164,9 @@ fn UserFormModal(
                     select { class: "modern-input-field modern-select",
                         option { value: "dentist", "Dentista" }
                         option { value: "receptionist", "Recepcionista" }
+                        option { value: "assistant", "Ajudante" }
                         option { value: "admin", "Administrador" }
+                        option { value: "other", "Outro" }
                     }
                 }
 

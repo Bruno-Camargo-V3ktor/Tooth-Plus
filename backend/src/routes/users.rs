@@ -1,5 +1,5 @@
 use crate::auth_guard::{AuthenticatedUser, check_permission};
-use crate::crypto::hash_password;
+use crate::crypto::{decrypt_deterministic, encrypt_deterministic, hash_password};
 use crate::db::Db;
 use actix_web::{HttpResponse, Responder, delete, get, patch, post, put, web};
 use serde::Deserialize;
@@ -43,6 +43,11 @@ pub async fn create_user(
         Err(_) => return HttpResponse::InternalServerError().json("Failed to secure password"),
     };
 
+    let encrypted_cpf = match encrypt_deterministic(&data.document_cpf) {
+        Ok(enc) => enc,
+        Err(_) => return HttpResponse::InternalServerError().json("Failed to encrypt document"),
+    };
+
     let mut response = match db
         .query(
             "
@@ -69,11 +74,11 @@ pub async fn create_user(
         .bind(("username", data.username))
         .bind(("password_hash", hashed_password))
         .bind(("full_name", data.full_name))
-        .bind(("document_cpf", data.document_cpf))
+        .bind(("document_cpf", encrypted_cpf))
         .bind(("professional_registry", data.professional_registry))
         .bind(("clinic_ids", data.clinic_ids))
         .bind(("role", data.role))
-        .bind(("permissions", data.permissions)) // Passado diretamente como Vec<String>
+        .bind(("permissions", data.permissions))
         .await
     {
         Ok(res) => res,
@@ -131,7 +136,7 @@ pub async fn list_users(
             id: u.id.key.to_sql(),
             username: u.username,
             full_name: u.full_name,
-            document_cpf: u.document_cpf,
+            document_cpf: decrypt_deterministic(&u.document_cpf).unwrap_or_default(),
             professional_registry: u.professional_registry,
             is_active: u.is_active,
             role: u.role,
@@ -162,7 +167,6 @@ pub async fn update_user(
         return HttpResponse::Forbidden().json("Insufficient permissions");
     }
 
-    // 1. Atualiza os dados base na tabela user
     if data.full_name.is_some()
         || data.document_cpf.is_some()
         || data.professional_registry.is_some()
@@ -172,21 +176,24 @@ pub async fn update_user(
         if let Some(ref name) = data.full_name {
             q.push_str(&format!("full_name: '{}', ", name));
         }
+
         if let Some(ref cpf) = data.document_cpf {
-            q.push_str(&format!("document_cpf: '{}', ", cpf));
+            if let Ok(encrypted_cpf) = encrypt_deterministic(cpf) {
+                q.push_str(&format!("document_cpf: '{}', ", encrypted_cpf));
+            }
         }
+
         if let Some(ref reg) = data.professional_registry {
             q.push_str(&format!("professional_registry: '{}', ", reg));
         }
 
         q.pop();
-        q.pop(); // Remove a última vírgula
+        q.pop();
         q.push_str("}");
 
         let _ = db.query(q).bind(("target_id", target_id.clone())).await;
     }
 
-    // 2. Atualiza a aresta de conexão (Cargo e Permissões)
     if data.role.is_some() || data.permissions.is_some() {
         if let Some(ref role) = data.role {
             let _ = db.query("UPDATE works_at SET role = $role WHERE in = type::thing($target_id) AND out = type::thing($clinic_id)")
@@ -200,7 +207,7 @@ pub async fn update_user(
             let _ = db.query("UPDATE works_at SET permissions = $perms WHERE in = type::thing($target_id) AND out = type::thing($clinic_id)")
                 .bind(("target_id", target_id.clone()))
                 .bind(("clinic_id", clinic_id.clone()))
-                .bind(("perms", perms)) // Binding nativo seguro para Vec<String>
+                .bind(("perms", perms))
                 .await;
         }
     }
