@@ -157,6 +157,9 @@ fn UserFormModal(
                 div { class: "input-group-wrapper", style: "grid-column: 1 / -1;", input { class: "modern-input-field", placeholder: "Nome Completo" } }
                 div { class: "input-group-wrapper", input { class: "modern-input-field", placeholder: "Login" } }
                 div { class: "input-group-wrapper", input { class: "modern-input-field", r#type: "password", placeholder: "Senha Temporária" } }
+                div { class: "input-group-wrapper", input { class: "modern-input-field", placeholder: "CPF" } }
+                div { class: "input-group-wrapper", input { class: "modern-input-field", placeholder: "Registro Profissional (CRO)" } }
+
                 div { class: "input-group-wrapper", style: "grid-column: 1 / -1;",
                     select { class: "modern-input-field modern-select",
                         option { value: "dentist", "Dentista" }
@@ -164,12 +167,23 @@ fn UserFormModal(
                         option { value: "admin", "Administrador" }
                     }
                 }
+
+                div { style: "grid-column: 1 / -1; margin-top: 16px;",
+                    h4 { style: "margin: 0 0 12px 0; font-size: 14px; color: #0f172a;", "Unidades de Acesso" }
+                    div { class: "permissions-container",
+                        div { class: "perm-category-body", style: "border-top: none; border: 1px solid #e2e8f0; border-radius: 8px;",
+                            label { class: "perm-checkbox-item", input { r#type: "checkbox", checked: true }, span { "Tooth Plus (Matriz)" } }
+                            label { class: "perm-checkbox-item", input { r#type: "checkbox" }, span { "Boutique Odonto (Filial)" } }
+                        }
+                    }
+                }
+
                 div { style: "grid-column: 1 / -1; margin-top: 16px;",
                     h4 { style: "margin: 0 0 12px 0; font-size: 14px; color: #0f172a;", "Permissões de Acesso (PBAC)" }
                     div { class: "permissions-container",
-                        PermissionCategory { title: "Módulo: Agenda".to_string(), permissions: vec!["Ler Agendamentos".into(), "Criar Agendamento".into(), "Deletar Agendamento".into()] }
-                        PermissionCategory { title: "Módulo: Pacientes".to_string(), permissions: vec!["Ler Prontuário".into(), "Editar Ficha".into(), "Deletar Paciente".into()] }
-                        PermissionCategory { title: "Módulo: Financeiro".to_string(), permissions: vec!["Ver Fluxo de Caixa".into(), "Lançar Receita".into(), "Estornar Pagamento".into()] }
+                        PermissionCategory { title: "Módulo: Agenda".to_string(), permissions: vec!["Ler Agendamentos".to_string(), "Criar Agendamento".to_string(), "Deletar Agendamento".to_string()] }
+                        PermissionCategory { title: "Módulo: Pacientes".to_string(), permissions: vec!["Ler Prontuário".to_string(), "Editar Ficha".to_string(), "Deletar Paciente".to_string()] }
+                        PermissionCategory { title: "Módulo: Financeiro".to_string(), permissions: vec!["Ver Fluxo de Caixa".to_string(), "Lançar Receita".to_string(), "Estornar Pagamento".to_string()] }
                     }
                 }
             }
@@ -180,12 +194,14 @@ fn UserFormModal(
                     onclick: move |_| {
                         spawn(async move {
                             let _ = api::create_user(CreateUserRequest {
-                                username: "".into(),
-                                password_plain: "".into(),
-                                full_name: "".into(),
-                                role: "".into(),
-                                clinic_id: "".into(),
-                                permissions: vec![]
+                                username: "".to_string(),
+                                password_plain: "".to_string(),
+                                full_name: "".to_string(),
+                                document_cpf: "".to_string(),
+                                professional_registry: None,
+                                role: "".to_string(),
+                                permissions: vec![],
+                                clinic_ids: vec![]
                             }).await;
                             on_success.call(());
                         });

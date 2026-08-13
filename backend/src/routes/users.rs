@@ -1,7 +1,7 @@
-use crate::auth_guard::check_permission;
+use crate::auth_guard::{AuthenticatedUser, check_permission};
+use crate::crypto::hash_password;
 use crate::db::Db;
-use crate::{auth_guard::AuthenticatedUser, crypto::hash_password};
-use actix_web::{HttpResponse, Responder, get, patch, post, put, web};
+use actix_web::{HttpResponse, Responder, delete, get, patch, post, put, web};
 use serde::Deserialize;
 use shared::users::{CreateUserRequest, ToggleStatusRequest, UpdateUserRequest, UserResponse};
 use surrealdb::types::{SurrealValue, ToSql};
@@ -16,6 +16,8 @@ struct DbUserRecord {
     id: surrealdb::types::RecordId,
     username: String,
     full_name: String,
+    document_cpf: String,
+    professional_registry: Option<String>,
     is_active: bool,
     role: String,
     permissions: Vec<String>,
@@ -29,7 +31,7 @@ pub async fn create_user(
 ) -> impl Responder {
     let data = req.into_inner();
 
-    if !check_permission(&db, &auth.id, &data.clinic_id, "users:write")
+    if !check_permission(&db, &auth.id, &data.clinic_ids[0], "users:write")
         .await
         .unwrap_or(false)
     {
@@ -50,10 +52,14 @@ pub async fn create_user(
                 username = $username,
                 password_hash = $password_hash,
                 full_name = $full_name,
+                document_cpf = $document_cpf,
+                professional_registry = $professional_registry,
                 is_active = true
             );
 
-            RELATE ($new_user[0].id)->works_at->(type::thing($clinic_id)) SET
+            LET $clinics = (SELECT id FROM type::thing($clinic_ids));
+
+            RELATE ($new_user[0].id)->works_at->$clinics SET
                 role = $role,
                 permissions = $permissions;
 
@@ -63,9 +69,11 @@ pub async fn create_user(
         .bind(("username", data.username))
         .bind(("password_hash", hashed_password))
         .bind(("full_name", data.full_name))
-        .bind(("clinic_id", data.clinic_id))
+        .bind(("document_cpf", data.document_cpf))
+        .bind(("professional_registry", data.professional_registry))
+        .bind(("clinic_ids", data.clinic_ids))
         .bind(("role", data.role))
-        .bind(("permissions", data.permissions))
+        .bind(("permissions", data.permissions)) // Passado diretamente como Vec<String>
         .await
     {
         Ok(res) => res,
@@ -99,6 +107,8 @@ pub async fn list_users(
                 in.id AS id,
                 in.username AS username,
                 in.full_name AS full_name,
+                in.document_cpf AS document_cpf,
+                in.professional_registry AS professional_registry,
                 in.is_active AS is_active,
                 role,
                 permissions
@@ -121,9 +131,12 @@ pub async fn list_users(
             id: u.id.key.to_sql(),
             username: u.username,
             full_name: u.full_name,
+            document_cpf: u.document_cpf,
+            professional_registry: u.professional_registry,
             is_active: u.is_active,
             role: u.role,
             permissions: u.permissions,
+            clinic_ids: vec![query.clinic_id.clone()],
         })
         .collect();
 
@@ -138,53 +151,58 @@ pub async fn update_user(
     req: web::Json<UpdateUserRequest>,
     db: web::Data<Db>,
 ) -> impl Responder {
-    if !check_permission(&db, &auth.id, &query.clinic_id, "users:write")
+    let target_id = path.into_inner();
+    let data = req.into_inner();
+    let clinic_id = query.clinic_id.clone();
+
+    if !check_permission(&db, &auth.id, &clinic_id, "users:write")
         .await
         .unwrap_or(false)
     {
         return HttpResponse::Forbidden().json("Insufficient permissions");
     }
 
-    let target_id = path.into_inner();
-    let data = req.into_inner();
+    // 1. Atualiza os dados base na tabela user
+    if data.full_name.is_some()
+        || data.document_cpf.is_some()
+        || data.professional_registry.is_some()
+    {
+        let mut q = String::from("UPDATE type::thing($target_id) MERGE {");
 
-    if let Some(name) = data.full_name {
-        let _ = db
-            .query("UPDATE type::thing($target_id) SET full_name = $name")
-            .bind(("target_id", target_id.clone()))
-            .bind(("name", name))
-            .await;
+        if let Some(ref name) = data.full_name {
+            q.push_str(&format!("full_name: '{}', ", name));
+        }
+        if let Some(ref cpf) = data.document_cpf {
+            q.push_str(&format!("document_cpf: '{}', ", cpf));
+        }
+        if let Some(ref reg) = data.professional_registry {
+            q.push_str(&format!("professional_registry: '{}', ", reg));
+        }
+
+        q.pop();
+        q.pop(); // Remove a última vírgula
+        q.push_str("}");
+
+        let _ = db.query(q).bind(("target_id", target_id.clone())).await;
     }
 
+    // 2. Atualiza a aresta de conexão (Cargo e Permissões)
     if data.role.is_some() || data.permissions.is_some() {
-        let mut q = String::from("UPDATE works_at SET ");
-        let mut bindings = Vec::new();
-
-        if let Some(r) = data.role {
-            q.push_str("role = $role, ");
-            bindings.push(("role", r));
+        if let Some(ref role) = data.role {
+            let _ = db.query("UPDATE works_at SET role = $role WHERE in = type::thing($target_id) AND out = type::thing($clinic_id)")
+                .bind(("target_id", target_id.clone()))
+                .bind(("clinic_id", clinic_id.clone()))
+                .bind(("role", role.clone()))
+                .await;
         }
 
-        if let Some(p) = data.permissions {
-            q.push_str("permissions = $permissions, ");
-            bindings.push(("permissions", serde_json::to_string(&p).unwrap_or_default()));
+        if let Some(perms) = data.permissions {
+            let _ = db.query("UPDATE works_at SET permissions = $perms WHERE in = type::thing($target_id) AND out = type::thing($clinic_id)")
+                .bind(("target_id", target_id.clone()))
+                .bind(("clinic_id", clinic_id.clone()))
+                .bind(("perms", perms)) // Binding nativo seguro para Vec<String>
+                .await;
         }
-
-        q.pop();
-        q.pop();
-
-        q.push_str(" WHERE in = type::thing($target_id) AND out = type::thing($clinic_id)");
-
-        let mut stmt = db
-            .query(q)
-            .bind(("target_id", target_id.clone()))
-            .bind(("clinic_id", query.clinic_id.clone()));
-
-        for (k, v) in bindings {
-            stmt = stmt.bind((k, v));
-        }
-
-        let _ = stmt.await;
     }
 
     HttpResponse::Ok().json("User updated successfully")
@@ -216,5 +234,34 @@ pub async fn toggle_status(
     {
         Ok(_) => HttpResponse::Ok().json("Status updated"),
         Err(_) => HttpResponse::InternalServerError().json("Failed to update status"),
+    }
+}
+
+#[delete("/users/{target_id}")]
+pub async fn delete_user(
+    auth: AuthenticatedUser,
+    path: web::Path<String>,
+    query: web::Query<ClinicQuery>,
+    db: web::Data<Db>,
+) -> impl Responder {
+    if !check_permission(&db, &auth.id, &query.clinic_id, "users:write")
+        .await
+        .unwrap_or(false)
+    {
+        return HttpResponse::Forbidden().json("Insufficient permissions");
+    }
+
+    let target_id = path.into_inner();
+
+    match db
+        .query(
+            "DELETE works_at WHERE in = type::thing($target_id) AND out = type::thing($clinic_id)",
+        )
+        .bind(("target_id", target_id))
+        .bind(("clinic_id", query.clinic_id.clone()))
+        .await
+    {
+        Ok(_) => HttpResponse::Ok().json("User access removed successfully"),
+        Err(_) => HttpResponse::InternalServerError().json("Failed to remove user access"),
     }
 }
