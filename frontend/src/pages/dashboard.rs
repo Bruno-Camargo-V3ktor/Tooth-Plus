@@ -60,7 +60,9 @@ pub fn DashboardLayout() -> Element {
     let tab_val = active_tab();
 
     rsx! {
-        div { class: "dashboard-layout",
+        div {
+            class: "dashboard-layout",
+            style: "--clinic-primary: {clinic_data.theme_color};",
 
             if let Some(err_msg) = error_toast() {
                 div { class: "toast-error",

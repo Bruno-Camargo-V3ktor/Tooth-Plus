@@ -84,7 +84,13 @@ async fn main() -> std::io::Result<()> {
                     .service(routes::users::list_users)
                     .service(routes::users::update_user)
                     .service(routes::users::toggle_status)
-                    .service(routes::users::delete_user),
+                    .service(routes::users::delete_user)
+                    .service(routes::appointments::list_appointments)
+                    .service(routes::appointments::get_agenda_resources)
+                    .service(routes::appointments::create_appointment)
+                    .service(routes::appointments::update_appointment)
+                    .service(routes::appointments::update_appointment_status)
+                    .service(routes::appointments::delete_appointment),
             )
     })
     .bind(("127.0.0.1", port.parse::<u16>().unwrap_or(4000)))?

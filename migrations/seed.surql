@@ -1,5 +1,12 @@
 BEGIN TRANSACTION;
 
+DELETE consumes;
+DELETE assigned_to;
+DELETE appointment;
+DELETE financial_transaction;
+DELETE stock_movement;
+DELETE inventory_item;
+DELETE patient;
 DELETE works_at;
 DELETE user;
 DELETE clinic;
@@ -68,6 +75,11 @@ RELATE user:administrador->works_at->clinic:smile_plus CONTENT {
         "agenda:read",
         "agenda:write",
         "agenda:delete",
+        "agenda:finance",
+        "appointments:read",
+        "appointments:write",
+        "appointments:delete",
+        "appointments:finance",
         "finance:read",
         "finance:write",
         "finance:delete",
@@ -99,6 +111,11 @@ RELATE user:administrador->works_at->clinic:luria_odonto CONTENT {
         "agenda:read",
         "agenda:write",
         "agenda:delete",
+        "agenda:finance",
+        "appointments:read",
+        "appointments:write",
+        "appointments:delete",
+        "appointments:finance",
         "finance:read",
         "finance:write",
         "finance:delete",
@@ -109,6 +126,49 @@ RELATE user:administrador->works_at->clinic:luria_odonto CONTENT {
         "documents:write",
         "documents:delete"
     ]
+};
+
+CREATE patient:ana_silva CONTENT {
+    clinic_id: clinic:smile_plus,
+    full_name: "Ana Clara Silva",
+    document_cpf: "123.456.789-00",
+    phone: "(11) 98765-4321",
+    email: "ana.silva@email.com"
+};
+
+CREATE patient:carlos_souza CONTENT {
+    clinic_id: clinic:smile_plus,
+    full_name: "Carlos Eduardo Souza",
+    document_cpf: "234.567.890-11",
+    phone: "(11) 97654-3210",
+    email: "carlos.souza@email.com"
+};
+
+CREATE inventory_item:anestesico CONTENT {
+    clinic_id: clinic:smile_plus,
+    name: "Anestésico Articaína 4% (Tubete)",
+    unit: "unidade",
+    current_stock: 50,
+    min_stock: 10,
+    cost_cents: 850
+};
+
+CREATE inventory_item:luvas CONTENT {
+    clinic_id: clinic:smile_plus,
+    name: "Par de Luvas Cirúrgicas Estéreis",
+    unit: "par",
+    current_stock: 200,
+    min_stock: 30,
+    cost_cents: 400
+};
+
+CREATE inventory_item:resina CONTENT {
+    clinic_id: clinic:smile_plus,
+    name: "Resina Composta Z350 XT (Tubo)",
+    unit: "unidade",
+    current_stock: 15,
+    min_stock: 3,
+    cost_cents: 12000
 };
 
 COMMIT TRANSACTION;

@@ -46,6 +46,15 @@ fn clinic_record_id(id: &str) -> String {
     }
 }
 
+fn parse_record_id(table: &str, raw: &str) -> RecordId {
+    let key = if let Some(stripped) = raw.strip_prefix(&format!("{}:", table)) {
+        stripped
+    } else {
+        raw
+    };
+    RecordId::new(table, key)
+}
+
 #[post("/users")]
 pub async fn create_user(
     auth: AuthenticatedUser,
@@ -60,21 +69,20 @@ pub async fn create_user(
         ));
     }
 
-    let first_clinic = clinic_record_id(&data.clinic_ids[0]);
-    if !check_permission(&db, &auth.id, &first_clinic, "users:write")
+    let check_clinic = clinic_record_id(&data.clinic_ids[0]);
+    if !check_permission(&db, &auth.id, &check_clinic, "users:write")
         .await
         .unwrap_or(false)
     {
         return Err(ApiError::Forbidden(
-            "Sem privilégios para criar usuários nesta unidade.".into(),
+            "Sem privilégios para criar novos membros.".into(),
         ));
     }
 
-    let hashed_password = hash_password(&data.password_plain)
-        .map_err(|_| ApiError::Internal("Falha ao proteger senha.".into()))?;
-
+    let hashed_password =
+        hash_password(&data.password_plain).map_err(|e| ApiError::Internal(e.to_string()))?;
     let encrypted_cpf = encrypt_deterministic(&data.document_cpf)
-        .map_err(|_| ApiError::Internal("Falha ao criptografar CPF.".into()))?;
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let mut create_resp = db
         .query(
@@ -106,13 +114,13 @@ pub async fn create_user(
         .id;
 
     for clinic_id in &data.clinic_ids {
-        let clinic_rec = clinic_record_id(clinic_id);
+        let clinic_rec = parse_record_id("clinic", clinic_id);
         db.query(
-            "RELATE type::record($user)->works_at->type::record($clinic) SET
+            "RELATE $user->works_at->$clinic SET
                 role        = $role,
                 permissions = $permissions",
         )
-        .bind(("user", new_user_id.to_sql()))
+        .bind(("user", new_user_id.clone()))
         .bind(("clinic", clinic_rec))
         .bind(("role", data.role.clone()))
         .bind(("permissions", data.permissions.clone()))
@@ -282,11 +290,13 @@ pub async fn update_user(
 
         for existing_cid in &existing_cids {
             if !normalized_new_cids.contains(existing_cid) {
+                let target_rec_id = parse_record_id("user", &target_id);
+                let old_cid_id = parse_record_id("clinic", existing_cid);
                 db.query(
-                    "DELETE works_at WHERE in = type::record($target_id) AND out = type::record($clinic)",
+                    "DELETE works_at WHERE in = $target_id AND out = $clinic",
                 )
-                .bind(("target_id", target_rec.clone()))
-                .bind(("clinic", existing_cid.clone()))
+                .bind(("target_id", target_rec_id))
+                .bind(("clinic", old_cid_id))
                 .await
                 .map_err(|_| ApiError::Database("Falha ao remover vínculo com clínica.".into()))?;
             }
@@ -297,13 +307,15 @@ pub async fn update_user(
 
         for new_cid in &normalized_new_cids {
             if !existing_cids.contains(new_cid) {
+                let target_rec_id = parse_record_id("user", &target_id);
+                let new_cid_id = parse_record_id("clinic", new_cid);
                 db.query(
-                    "RELATE type::record($target_id)->works_at->type::record($clinic) SET
+                    "RELATE $target_id->works_at->$clinic SET
                         role        = $role,
                         permissions = $permissions",
                 )
-                .bind(("target_id", target_rec.clone()))
-                .bind(("clinic", new_cid.clone()))
+                .bind(("target_id", target_rec_id))
+                .bind(("clinic", new_cid_id))
                 .bind(("role", user_role.clone()))
                 .bind(("permissions", user_perms.clone()))
                 .await

@@ -51,8 +51,12 @@ pub fn ActionModal(
     }
 
     rsx! {
-        div { class: "modal-overlay",
-            div { class: "action-modal",
+        div {
+            class: "modal-overlay",
+            onclick: move |_| on_close.call(()),
+            div {
+                class: "action-modal",
+                onclick: move |e| e.stop_propagation(),
                 div { class: "settings-header",
                     h2 { class: "settings-title", "{title}" }
                     button { class: "close-btn", onclick: move |_| on_close.call(()), "×" }

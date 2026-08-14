@@ -1,7 +1,9 @@
+mod appointments;
 mod auth;
 mod clinic;
 mod user;
 
+pub use appointments::*;
 pub use auth::*;
 pub use clinic::*;
 pub use user::*;

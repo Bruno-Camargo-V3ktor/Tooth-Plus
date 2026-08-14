@@ -9,9 +9,10 @@ pub const ALL_PERMISSION_GROUPS: &[PermGroup] = &[
     PermGroup {
         label: "Módulo: Agenda",
         items: &[
-            ("agenda:read", "Visualizar Agendamentos"),
-            ("agenda:write", "Criar e Editar Agendamentos"),
-            ("agenda:delete", "Cancelar Agendamentos"),
+            ("appointments:read", "Visualizar Agendamentos"),
+            ("appointments:write", "Criar e Editar Agendamentos"),
+            ("appointments:delete", "Cancelar e Excluir Agendamentos"),
+            ("appointments:finance", "Comissão e Rateio Financeiro"),
         ],
     },
     PermGroup {
@@ -88,7 +89,20 @@ pub fn has_permission(
     };
     let access = sess.clinics.iter().find(|c| c.clinic_id == clinic.clinic_id);
     let Some(a) = access else { return false };
-    a.role == "admin" || a.permissions.iter().any(|p| p == perm)
+    if a.role == "admin" || a.permissions.iter().any(|p| p == "admin:all") {
+        return true;
+    }
+    let alt_perm = if perm.starts_with("appointments:") {
+        Some(perm.replace("appointments:", "agenda:"))
+    } else if perm.starts_with("agenda:") {
+        Some(perm.replace("agenda:", "appointments:"))
+    } else {
+        None
+    };
+
+    a.permissions.iter().any(|p| {
+        p == perm || alt_perm.as_deref() == Some(p.as_str())
+    })
 }
 
 pub fn has_any_permission(

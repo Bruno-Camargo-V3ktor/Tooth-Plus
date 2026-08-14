@@ -468,25 +468,61 @@ fn UserFormModal(
 fn PermissionCategoryAccordion(
     title: String,
     permissions: Vec<(String, String)>,
-    selected: Signal<Vec<String>>,
+    mut selected: Signal<Vec<String>>,
 ) -> Element {
     let mut expanded = use_signal(|| false);
     let chevron_class = if expanded() { "chevron-icon rotated" } else { "chevron-icon" };
 
+    let total = permissions.len();
+    let current_selected = selected();
+    let count_selected = permissions.iter().filter(|(k, _)| current_selected.contains(k)).count();
+    let all_keys: Vec<String> = permissions.iter().map(|(k, _)| k.clone()).collect();
+    let all_selected = count_selected == total && total > 0;
+
     rsx! {
         div { class: "perm-category-box",
             div { class: "perm-category-header", onclick: move |_| expanded.set(!expanded()),
-                span { class: "perm-category-title", "{title}" }
+                div { class: "perm-header-left",
+                    span { class: "perm-category-title", "{title}" }
+                    span { class: if count_selected > 0 { "perm-badge-count active" } else { "perm-badge-count" },
+                        "{count_selected}/{total}"
+                    }
+                }
                 IconChevronDown { size: 16, color: "currentColor".to_string(), class: chevron_class.to_string() }
             }
             if expanded() {
                 div { class: "perm-category-body",
-                    for (perm_key, perm_label) in permissions {
-                        PermissionItemCheckbox {
-                            key: "{perm_key}",
-                            perm_key: perm_key.clone(),
-                            perm_label: perm_label.clone(),
-                            selected,
+                    div { class: "perm-category-actions-bar",
+                        button {
+                            class: "btn-text-sm",
+                            r#type: "button",
+                            onclick: {
+                                let keys = all_keys.clone();
+                                move |_| {
+                                    let mut curr = selected();
+                                    if all_selected {
+                                        curr.retain(|k| !keys.contains(k));
+                                    } else {
+                                        for k in &keys {
+                                            if !curr.contains(k) {
+                                                curr.push(k.clone());
+                                            }
+                                        }
+                                    }
+                                    selected.set(curr);
+                                }
+                            },
+                            if all_selected { "Desmarcar todos" } else { "Marcar todos" }
+                        }
+                    }
+                    div { class: "perm-checkbox-grid",
+                        for (perm_key, perm_label) in permissions {
+                            PermissionItemCheckbox {
+                                key: "{perm_key}",
+                                perm_key: perm_key.clone(),
+                                perm_label: perm_label.clone(),
+                                selected,
+                            }
                         }
                     }
                 }

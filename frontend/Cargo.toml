@@ -12,6 +12,7 @@ tokio = "1.53.1"
 gloo-timers = {version = "0.4.0", features=["futures"]}
 base64 = "0.23.1"
 reqwest = { version = "0.11", features = ["json"] }
+chrono = { version = "0.4.45", features = ["serde"] }
 
 [features]
 default = ["web"]

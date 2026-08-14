@@ -165,3 +165,59 @@ pub fn IconChevronDown(size: i32, color: String, class: Option<String>) -> Eleme
         }
     }
 }
+
+#[component]
+pub fn IconChevronLeft(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M15.75 19.5L8.25 12l7.5-7.5" }
+        }
+    }
+}
+
+#[component]
+pub fn IconChevronRight(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M8.25 4.5l7.5 7.5-7.5 7.5" }
+        }
+    }
+}
+
+#[component]
+pub fn IconClock(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            circle { cx: "12", cy: "12", r: "10" }
+            polyline { points: "12 6 12 12 16 14" }
+        }
+    }
+}
+
+#[component]
+pub fn IconCheck(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            polyline { points: "20 6 9 17 4 12" }
+        }
+    }
+}
+
+#[component]
+pub fn IconX(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            line { x1: "18", y1: "6", x2: "6", y2: "18" }
+            line { x1: "6", y1: "6", x2: "18", y2: "18" }
+        }
+    }
+}
+
+#[component]
+pub fn IconFilter(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            polygon { points: "22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" }
+        }
+    }
+}

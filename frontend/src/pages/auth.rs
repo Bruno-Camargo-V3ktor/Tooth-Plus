@@ -64,21 +64,27 @@ pub fn LoginScreen() -> Element {
 
                     if !error_msg_val.is_empty() {
                         div { class: "modern-error-box",
-                            span { "{error_msg_val}" }
+                            svg { class: "error-box-icon", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "currentColor",
+                                path { stroke_linecap: "round", stroke_linejoin: "round", d: "M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" }
+                            }
+                            div { class: "error-box-content",
+                                strong { "Falha na Autenticação" }
+                                span { "{error_msg_val}" }
+                            }
                         }
                     }
 
                     form { class: "login-form",
                         onsubmit: handle_login,
 
-                        div { class: "input-group-wrapper",
-                            span { class: "input-icon",
+                        div { class: "login-input-wrapper",
+                            span { class: "login-input-icon",
                                 svg { xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "1.8", stroke: "currentColor",
                                     path { stroke_linecap: "round", stroke_linejoin: "round", d: "M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" }
                                 }
                             }
                             input {
-                                class: "modern-input-field",
+                                class: "login-input-field",
                                 r#type: "text",
                                 placeholder: "Nome de usuário",
                                 value: "{username}",
@@ -86,14 +92,14 @@ pub fn LoginScreen() -> Element {
                             }
                         }
 
-                        div { class: "input-group-wrapper",
-                            span { class: "input-icon",
+                        div { class: "login-input-wrapper",
+                            span { class: "login-input-icon",
                                 svg { xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "1.8", stroke: "currentColor",
                                     path { stroke_linecap: "round", stroke_linejoin: "round", d: "M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0V10.5m-2.25 0h13.5c.621 0 1.125.504 1.125 1.125v7.497c0 .621-.504 1.125-1.125 1.125H3.75c-.621 0-1.125-.504-1.125-1.125v-7.497c0-.621.504-1.125 1.125-1.125Z" }
                                 }
                             }
                             input {
-                                class: "modern-input-field",
+                                class: "login-input-field",
                                 r#type: "password",
                                 placeholder: "Senha de acesso",
                                 value: "{password}",

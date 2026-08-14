@@ -50,10 +50,8 @@ pub async fn check_permission(
 ) -> Result<bool, actix_web::Error> {
     let mut response = db
         .query(
-            "
-            SELECT permissions FROM works_at
-            WHERE in = type::record($user_id) AND out = type::record($clinic_id)
-        ",
+            "SELECT role, permissions FROM works_at
+            WHERE in = type::record($user_id) AND out = type::record($clinic_id)",
         )
         .bind(("user_id", user_id))
         .bind(("clinic_id", clinic_id))
@@ -63,10 +61,29 @@ pub async fn check_permission(
     let record: Option<serde_json::Value> = response.take(0).unwrap_or(None);
 
     if let Some(r) = record {
+        if let Some(role) = r.get("role").and_then(|ro| ro.as_str()) {
+            if role == "admin" {
+                return Ok(true);
+            }
+        }
+
+        let alt_perm = if required_permission.starts_with("appointments:") {
+            Some(required_permission.replace("appointments:", "agenda:"))
+        } else if required_permission.starts_with("agenda:") {
+            Some(required_permission.replace("agenda:", "appointments:"))
+        } else {
+            None
+        };
+
         if let Some(perms) = r.get("permissions").and_then(|p| p.as_array()) {
             for p in perms {
-                if p.as_str() == Some(required_permission) || p.as_str() == Some("admin:all") {
-                    return Ok(true);
+                if let Some(s) = p.as_str() {
+                    if s == required_permission
+                        || s == "admin:all"
+                        || alt_perm.as_deref() == Some(s)
+                    {
+                        return Ok(true);
+                    }
                 }
             }
         }
