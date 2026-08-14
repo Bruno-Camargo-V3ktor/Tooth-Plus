@@ -8,6 +8,8 @@ shared = { path = "../shared" }
 dioxus = { version = "0.7", features = ["desktop", "router"] }
 serde = { version = "1.0", features = ["derive"] }
 tokio = "1.53.1"
+gloo-timers = {version = "0.4.0", features=["futures"]}
+base64 = "0.23.1"
 
 [features]
 default = ["web"]
