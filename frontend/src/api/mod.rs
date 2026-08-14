@@ -1,14 +1,18 @@
 mod appointments;
 mod auth;
 mod clinic;
+mod documents;
 mod finance;
+mod patients;
 mod stock;
 mod user;
 
 pub use appointments::*;
 pub use auth::*;
 pub use clinic::*;
+pub use documents::*;
 pub use finance::*;
+pub use patients::*;
 pub use stock::*;
 pub use user::*;
 

@@ -1,7 +1,9 @@
 use crate::pages::auth::{ContextSelector, LoginScreen};
 use crate::pages::dashboard::DashboardLayout;
+use crate::pages::sign_portal::SignPortal;
 use crate::pages::views::*;
-use dioxus::prelude::{Element, Routable, component, rsx};
+use dioxus::prelude::*;
+
 
 #[derive(Routable, Clone, PartialEq, Debug)]
 pub enum Route {
@@ -10,6 +12,9 @@ pub enum Route {
 
     #[route("/context")]
     ContextSelector {},
+
+    #[route("/sign/:token")]
+    SignPortal { token: String },
 
     #[layout(DashboardLayout)]
     #[route("/agenda")]

@@ -113,3 +113,47 @@ pub fn decrypt_deterministic(encrypted_b64: &str) -> Result<String, String> {
 
     String::from_utf8(decrypted).map_err(|_| "Invalid UTF-8 in decrypted data".to_string())
 }
+
+pub fn hash_blind_index(data: &str) -> String {
+    let cleaned: String = data.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
+    let mut hasher = Sha256::new();
+    hasher.update(cleaned.as_bytes());
+    let result = hasher.finalize();
+    result.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+pub fn calculate_sha256_checksum(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    result.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_print_seed_data() {
+        let cpfs = [
+            ("Ana Clara Silva", "123.456.789-00"),
+            ("Carlos Eduardo Souza", "234.567.890-11"),
+            ("Juliana Mendes Prado", "345.678.901-22"),
+            ("Roberto Albuquerque Neto", "456.789.012-33"),
+            ("Mariana Castro Fernandes", "567.890.123-44"),
+        ];
+
+        for (name, cpf) in cpfs {
+            let enc = encrypt_deterministic(cpf).unwrap();
+            let dec = decrypt_deterministic(&enc).unwrap();
+            assert_eq!(dec, cpf);
+            let hash = hash_blind_index(cpf);
+            println!("// SEED_CPF_{}", name);
+            println!("CPF: {}", cpf);
+            println!("ENC: {}", enc);
+            println!("HASH: {}", hash);
+        }
+    }
+}
+
+

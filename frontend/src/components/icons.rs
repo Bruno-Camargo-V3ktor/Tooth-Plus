@@ -303,4 +303,112 @@ pub fn IconExternalLink(size: i32, color: String) -> Element {
     }
 }
 
+#[component]
+pub fn IconTooth(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M12 2C8 2 5 4.5 5 8c0 3 1.5 6.5 3 11 1 3 2.5 3 4 1 1.5 2 3 2 4-1 1.5-4.5 3-8 3-11 0-3.5-3-6-7-6z" }
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M9 8c0 1.5 1.5 2.5 3 2.5s3-1 3-2.5" }
+        }
+    }
+}
+
+#[component]
+pub fn IconSignature(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" }
+        }
+    }
+}
+
+#[component]
+pub fn IconQrCode(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            rect { x: "3", y: "3", width: "7", height: "7", rx: "1" }
+            rect { x: "14", y: "3", width: "7", height: "7", rx: "1" }
+            rect { x: "3", y: "14", width: "7", height: "7", rx: "1" }
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M14 14h3v3h-3zM14 20h3M20 14v3M20 20h.01" }
+        }
+    }
+}
+
+#[component]
+pub fn IconHeartPulse(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M19.5 12.572l-7.5 7.428-7.5-7.428A5 5 0 1 1 12 6.006a5 5 0 1 1 7.5 6.572" }
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M3.5 12h3l2-3 3 6 2-3h5" }
+        }
+    }
+}
+
+#[component]
+pub fn IconShieldCheck(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" }
+        }
+    }
+}
+
+#[component]
+pub fn IconEye(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" }
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" }
+        }
+    }
+}
+
+#[component]
+pub fn IconDownload(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" }
+        }
+    }
+}
+
+#[component]
+pub fn IconCopy(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            rect { x: "9", y: "9", width: "13", height: "13", rx: "2", ry: "2" }
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" }
+        }
+    }
+}
+
+#[component]
+pub fn IconCheckCircle(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" }
+        }
+    }
+}
+
+#[component]
+pub fn IconPhone(size: i32, color: String) -> Element {
+    rsx! {
+        svg { width: "{size}", height: "{size}", "viewBox": "0 0 24 24", fill: "none", stroke: "{color}", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round",
+            path { d: "M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" }
+        }
+    }
+}
+
+#[component]
+pub fn IconFolder(size: i32, color: String) -> Element {
+    rsx! {
+        svg { width: "{size}", height: "{size}", "viewBox": "0 0 24 24", fill: "none", stroke: "{color}", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round",
+            path { d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" }
+        }
+    }
+}
+
+
+
 

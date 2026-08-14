@@ -8,6 +8,7 @@ pub enum ApiError {
     Unauthorized(String),
     Forbidden(String),
     BadRequest(String),
+    NotFound(String),
     Internal(String),
 }
 
@@ -23,6 +24,7 @@ impl fmt::Display for ApiError {
             ApiError::Unauthorized(msg) => write!(f, "{}", msg),
             ApiError::Forbidden(msg) => write!(f, "{}", msg),
             ApiError::BadRequest(msg) => write!(f, "{}", msg),
+            ApiError::NotFound(msg) => write!(f, "{}", msg),
             ApiError::Internal(msg) => write!(f, "{}", msg),
         }
     }
@@ -42,6 +44,9 @@ impl ResponseError for ApiError {
             }
             ApiError::BadRequest(msg) => {
                 HttpResponse::BadRequest().json(ErrorResponse { error: msg.clone() })
+            }
+            ApiError::NotFound(msg) => {
+                HttpResponse::NotFound().json(ErrorResponse { error: msg.clone() })
             }
             ApiError::Internal(msg) => {
                 HttpResponse::InternalServerError().json(ErrorResponse { error: msg.clone() })
