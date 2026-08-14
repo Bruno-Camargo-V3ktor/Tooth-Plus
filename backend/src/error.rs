@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, ResponseError, http::StatusCode};
+use actix_web::{HttpResponse, ResponseError};
 use serde::Serialize;
 use std::fmt;
 
@@ -13,29 +13,39 @@ pub enum ApiError {
 
 #[derive(Serialize)]
 struct ErrorResponse {
-    code: u16,
-    message: String,
+    error: String,
 }
 
 impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            ApiError::Database(msg) => write!(f, "{}", msg),
+            ApiError::Unauthorized(msg) => write!(f, "{}", msg),
+            ApiError::Forbidden(msg) => write!(f, "{}", msg),
+            ApiError::BadRequest(msg) => write!(f, "{}", msg),
+            ApiError::Internal(msg) => write!(f, "{}", msg),
+        }
     }
 }
 
 impl ResponseError for ApiError {
     fn error_response(&self) -> HttpResponse {
-        let (status, message) = match self {
-            ApiError::Database(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            ApiError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
-            ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
-            ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            ApiError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-        };
-
-        HttpResponse::build(status).json(ErrorResponse {
-            code: status.as_u16(),
-            message: message.to_string(),
-        })
+        match self {
+            ApiError::Database(msg) => {
+                HttpResponse::InternalServerError().json(ErrorResponse { error: msg.clone() })
+            }
+            ApiError::Unauthorized(msg) => {
+                HttpResponse::Unauthorized().json(ErrorResponse { error: msg.clone() })
+            }
+            ApiError::Forbidden(msg) => {
+                HttpResponse::Forbidden().json(ErrorResponse { error: msg.clone() })
+            }
+            ApiError::BadRequest(msg) => {
+                HttpResponse::BadRequest().json(ErrorResponse { error: msg.clone() })
+            }
+            ApiError::Internal(msg) => {
+                HttpResponse::InternalServerError().json(ErrorResponse { error: msg.clone() })
+            }
+        }
     }
 }

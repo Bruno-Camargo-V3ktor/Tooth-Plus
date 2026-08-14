@@ -6,6 +6,7 @@ use shared::models::ClinicAccess;
 mod api;
 mod components;
 mod pages;
+mod permissions;
 mod router;
 
 pub type SessionState = Option<LoginResponse>;

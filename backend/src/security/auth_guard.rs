@@ -52,7 +52,7 @@ pub async fn check_permission(
         .query(
             "
             SELECT permissions FROM works_at
-            WHERE in = type::thing($user_id) AND out = type::thing($clinic_id)
+            WHERE in = type::record($user_id) AND out = type::record($clinic_id)
         ",
         )
         .bind(("user_id", user_id))

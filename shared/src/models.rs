@@ -7,4 +7,5 @@ pub struct ClinicAccess {
     pub theme_color: String,
     pub logo_url: Option<String>,
     pub role: String,
+    pub permissions: Vec<String>,
 }

@@ -6,18 +6,19 @@ pub fn PageHeader(
     title: String,
     subtitle: String,
     search_query: Signal<String>,
-    on_new: EventHandler<()>,
+    show_new_btn: bool,
     btn_text: String,
+    on_new: EventHandler<()>,
 ) -> Element {
     rsx! {
         div { class: "page-action-header",
             div {
-                h1 { class: "page-title", style: "margin: 0;", "{title}" }
+                h1 { class: "page-title", "{title}" }
                 p { class: "page-subtitle", "{subtitle}" }
             }
             div { class: "header-actions-group",
                 div { class: "modern-search-bar",
-                    div { class: "search-icon" , IconSearch { size: 18, color: "currentColor".to_string() } }
+                    div { class: "search-icon", IconSearch { size: 18, color: "currentColor".to_string() } }
                     input {
                         class: "search-input",
                         placeholder: "Buscar...",
@@ -25,12 +26,13 @@ pub fn PageHeader(
                         oninput: move |e| search_query.set(e.value())
                     }
                 }
-                button {
-                    class: "btn-primary",
-                    style: "margin: 0; display: flex; align-items: center; gap: 8px;",
-                    onclick: move |_| on_new.call(()),
-                    IconPlus { size: 18, color: "currentColor".to_string() }
-                    "{btn_text}"
+                if show_new_btn {
+                    button {
+                        class: "btn-primary",
+                        onclick: move |_| on_new.call(()),
+                        IconPlus { size: 18, color: "currentColor".to_string() }
+                        "{btn_text}"
+                    }
                 }
             }
         }
@@ -50,7 +52,7 @@ pub fn ActionModal(
 
     rsx! {
         div { class: "modal-overlay",
-            div { class: "settings-modal", style: "height: auto; max-height: 90vh;",
+            div { class: "action-modal",
                 div { class: "settings-header",
                     h2 { class: "settings-title", "{title}" }
                     button { class: "close-btn", onclick: move |_| on_close.call(()), "×" }

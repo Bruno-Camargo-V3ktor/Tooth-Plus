@@ -80,6 +80,36 @@ body {
 }
 
 /* ==========================================================================
+   TOAST NOTIFICATIONS (POPUP DE ERRO)
+   ========================================================================== */
+.toast-error {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    background: #ef4444;
+    color: white;
+    padding: 16px 24px;
+    border-radius: 8px;
+    z-index: 99999;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-weight: 500;
+    animation: slideInRight 0.3s ease-out forwards;
+}
+
+.toast-close-btn {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-weight: bold;
+    padding: 4px;
+    font-size: 16px;
+}
+
+/* ==========================================================================
    LOGIN
    ========================================================================== */
 .login-wrapper {
@@ -388,38 +418,43 @@ body {
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(0,0,0,0.5);
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
+    z-index: 50;
+    animation: fadeIn 0.2s ease-out;
 }
 
 .settings-modal {
     background: white;
-    width: 800px;
+    width: 900px;
     max-width: 95vw;
-    height: 600px;
-    max-height: 90vh;
+    min-height: 650px;
     border-radius: 16px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15);
+    animation: scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .settings-header {
-    padding: 24px;
+    padding: 20px 24px;
     border-bottom: 1px solid #e2e8f0;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: #f8fafc;
 }
 
 .settings-title {
     margin: 0;
     font-size: 20px;
     color: #0f172a;
+    font-weight: 700;
 }
 
 .close-btn {
@@ -427,8 +462,17 @@ body {
     border: none;
     font-size: 24px;
     cursor: pointer;
-    color: #64748b;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    transition: background-color 0.2s;
 }
+
+.close-btn:hover { background-color: #e2e8f0; color: #475569; }
 
 .settings-body {
     display: grid;
@@ -475,6 +519,7 @@ body {
 .settings-content {
     padding: 24px;
     overflow-y: auto;
+    background: #ffffff;
 }
 
 /* ==========================================================================
@@ -482,13 +527,6 @@ body {
    ========================================================================== */
 .tab-pane h3 {
     margin-top: 0;
-}
-
-.form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 24px;
 }
 
 .branding-grid {
@@ -557,6 +595,17 @@ body {
 .logo-preview span {
     color: #94a3b8;
     font-size: 12px;
+}
+
+.error-state-friendly {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #64748b;
+    font-size: 15px;
+    padding: 40px;
+    text-align: center;
 }
 
 /* ==========================================================================
@@ -787,36 +836,6 @@ body {
 /* ==========================================================================
    UI BLOCKS
    ========================================================================== */
-.modal-overlay {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(15, 23, 42, 0.4);
-    backdrop-filter: blur(4px);
-    display: flex; justify-content: center; align-items: center;
-    z-index: 50; animation: fadeIn 0.2s ease-out;
-}
-
-.settings-modal {
-    background: white; border-radius: 16px; width: 100%; max-width: 640px;
-    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15);
-    display: flex; flex-direction: column; overflow: hidden;
-    border: 1px solid #e2e8f0; animation: scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.settings-header {
-    padding: 20px 24px; border-bottom: 1px solid #e2e8f0;
-    display: flex; justify-content: space-between; align-items: center; background: #f8fafc;
-}
-
-.settings-title { margin: 0; font-size: 18px; color: #0f172a; font-weight: 700; }
-
-.close-btn {
-    background: none; border: none; font-size: 24px; cursor: pointer; color: #94a3b8;
-    display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; transition: background-color 0.2s;
-}
-
-.close-btn:hover { background-color: #e2e8f0; color: #475569; }
-.settings-content { padding: 28px 24px; flex-grow: 1; overflow-y: auto; background: #ffffff; }
-
 .page-title { margin: 0 0 24px 0; font-size: 24px; color: #0f172a; font-weight: 700; letter-spacing: -0.02em; }
 .page-subtitle { margin: 8px 0 0 0; color: #64748b; font-size: 15px; }
 
@@ -881,8 +900,6 @@ body {
 .delete-btn-row:hover { color: #ef4444; border-color: #ef4444; }
 .toggle-btn-row:hover { color: #eab308; border-color: #eab308; }
 
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
 .modern-select {
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
@@ -909,3 +926,128 @@ body {
    ========================================================================== */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* ==========================================================================
+   SIDEBAR NAV BUTTONS (sem CSS inline)
+   ========================================================================== */
+.nav-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+}
+
+.nav-btn-danger { color: #ef4444; }
+.nav-btn-danger:hover { background-color: #fef2f2; color: #dc2626; }
+
+/* ==========================================================================
+   ACTION MODAL (ui_blocks)
+   ========================================================================== */
+.action-modal {
+    background: white;
+    width: 900px;
+    max-width: 95vw;
+    height: auto;
+    max-height: 90vh;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15);
+    animation: scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ==========================================================================
+   ADVANCED TAB — save row (sem inline style)
+   ========================================================================== */
+.advanced-save-row {
+    margin-top: 24px;
+}
+
+/* ==========================================================================
+   PERMISSION DENIED STATE
+   ========================================================================== */
+.permission-denied-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 60%;
+    gap: 16px;
+    text-align: center;
+    padding: 40px;
+}
+
+.permission-denied-icon { font-size: 48px; }
+.permission-denied-title { margin: 0; font-size: 24px; font-weight: 700; color: #0f172a; }
+.permission-denied-desc { margin: 0; font-size: 15px; color: #64748b; max-width: 400px; line-height: 1.6; }
+
+/* ==========================================================================
+   FORM UTILITIES (sem inline style)
+   ========================================================================== */
+.form-section-title {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.perm-key-label {
+    font-size: 11px;
+    color: #94a3b8;
+    font-family: monospace;
+    margin-left: 4px;
+}
+
+.perm-clinics-list {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.perms-count-label {
+    margin-left: 6px;
+}
+
+/* ==========================================================================
+   DANGER ZONE
+   ========================================================================== */
+.danger-zone {
+    margin-top: 32px;
+    padding: 20px;
+    border: 1px solid #fee2e2;
+    border-radius: 12px;
+    background: #fff5f5;
+}
+
+.danger-zone-title {
+    margin: 0 0 4px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #b91c1c;
+}
+
+.danger-zone-desc {
+    margin: 0 0 16px 0;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.text-error-small {
+    font-size: 13px;
+    color: #ef4444;
+    margin: 0;
+}
+

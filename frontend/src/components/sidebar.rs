@@ -7,6 +7,8 @@ pub fn Sidebar(
     theme_color: String,
     logo_url: Option<String>,
     is_collapsed: bool,
+    can_see_users: bool,
+    can_see_settings: bool,
     on_toggle: EventHandler<()>,
     on_settings: EventHandler<()>,
     on_logout: EventHandler<()>,
@@ -51,23 +53,25 @@ pub fn Sidebar(
                     IconFile { size: 20, color: icon_color.clone() }
                     span { class: "nav-text", "Documentos" }
                 }
-                Link { to: Route::UsersView {}, class: "nav-item", active_class: "nav-item-active",
-                    IconUsers { size: 20, color: icon_color.clone() }
-                    span { class: "nav-text", "Usuários" }
+                if can_see_users {
+                    Link { to: Route::UsersView {}, class: "nav-item", active_class: "nav-item-active",
+                        IconUsers { size: 20, color: icon_color.clone() }
+                        span { class: "nav-text", "Usuários" }
+                    }
                 }
             }
 
             div { class: "sidebar-footer",
-                button {
-                    class: "nav-item",
-                    style: "background: none; border: none; cursor: pointer; width: 100%; text-align: left;",
-                    onclick: move |_| on_settings.call(()),
-                    IconSettings { size: 20, color: icon_color.clone() }
-                    span { class: "nav-text", "Configurações" }
+                if can_see_settings {
+                    button {
+                        class: "nav-item nav-btn",
+                        onclick: move |_| on_settings.call(()),
+                        IconSettings { size: 20, color: icon_color.clone() }
+                        span { class: "nav-text", "Configurações" }
+                    }
                 }
                 button {
-                    class: "nav-item",
-                    style: "background: none; border: none; cursor: pointer; width: 100%; text-align: left; color: #ef4444;",
+                    class: "nav-item nav-btn nav-btn-danger",
                     onclick: move |_| on_logout.call(()),
                     IconLogout { size: 20, color: "#ef4444".to_string() }
                     span { class: "nav-text", "Sair" }

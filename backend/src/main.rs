@@ -27,12 +27,12 @@ async fn main() -> std::io::Result<()> {
         access_key: env::var("STORAGE_ACCESS_KEY").unwrap_or_default(),
         secret_key: env::var("STORAGE_SECRET_KEY").unwrap_or_default(),
         public_url: env::var("STORAGE_PUBLIC_URL")
-            .unwrap_or_else(|_| "http://localhost:8080/uploads".into()),
+            .unwrap_or_else(|_| "http://localhost:4000/uploads".into()),
     };
     let storage_provider = storage::build_storage_provider(storage_config).await;
 
     let evolution_url =
-        env::var("EVOLUTION_API_URL").unwrap_or_else(|_| "http://localhost:8080".into());
+        env::var("EVOLUTION_API_URL").unwrap_or_else(|_| "http://localhost:8081".into());
     let evolution_client = EvolutionClient::new(evolution_url);
 
     let db_data = web::Data::new(db_client.clone());
@@ -68,13 +68,18 @@ async fn main() -> std::io::Result<()> {
         }
 
         App::new()
-            .wrap(cors) // Injeta o middleware de CORS
+            .wrap(cors)
             .app_data(db_data.clone())
             .app_data(storage_data.clone())
             .app_data(evolution_data.clone())
             .service(
                 web::scope("/api")
                     .service(routes::auth::login)
+                    .service(routes::clinics::get_clinic)
+                    .service(routes::clinics::update_clinic)
+                    .service(routes::clinics::delete_clinic)
+                    .service(routes::clinics::upload_logo)
+                    .service(routes::clinics::get_whatsapp_qr)
                     .service(routes::users::create_user)
                     .service(routes::users::list_users)
                     .service(routes::users::update_user)

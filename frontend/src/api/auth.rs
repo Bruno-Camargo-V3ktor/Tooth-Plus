@@ -1,39 +1,32 @@
+use super::API_BASE;
+use reqwest::Client;
 use shared::auth::{LoginRequest, LoginResponse};
-use shared::models::ClinicAccess;
-use std::time::Duration;
+
+fn get_client() -> Client {
+    Client::new()
+}
 
 pub async fn authenticate(req: LoginRequest) -> Result<LoginResponse, String> {
-    tokio::time::sleep(Duration::from_millis(800)).await;
+    let url = format!("{}/login", API_BASE);
 
-    if req.username == "laura" && req.password_plain == "1234" {
-        Ok(LoginResponse {
-            token: "mock_jwt_token_12345".to_string(),
-            user_id: "user:001".to_string(),
-            full_name: "Dr. Laura Alves".to_string(),
-            clinics: vec![
-                ClinicAccess {
-                    clinic_id: "clinic:001".to_string(),
-                    trading_name: "Smile Plus".to_string(),
-                    theme_color: "#0052cc".to_string(),
-                    logo_url: Some(
-                        "https://placehold.co/400x120/transparent/00a0e4?text=Smile+Plus"
-                            .to_string(),
-                    ),
-                    role: "admin".to_string(),
-                },
-                ClinicAccess {
-                    clinic_id: "clinic:002".to_string(),
-                    trading_name: "Luria Odontologia".to_string(),
-                    theme_color: "#263d25".to_string(),
-                    logo_url: Some(
-                        "https://placehold.co/400x120/transparent/1e293b?text=Luria+Odonto"
-                            .to_string(),
-                    ),
-                    role: "dentist".to_string(),
-                },
-            ],
-        })
+    let res = get_client()
+        .post(&url)
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de comunicação com o servidor. Verifique sua conexão.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<LoginResponse>()
+            .await
+            .map_err(|_| "Erro ao processar resposta do servidor.".into())
     } else {
-        Err("Invalid credentials".to_string())
+        let err_text = res.text().await.unwrap_or_default();
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&err_text) {
+            if let Some(err) = val.get("error").and_then(|e| e.as_str()) {
+                return Err(err.to_string());
+            }
+        }
+        Err("Usuário ou senha inválidos.".to_string())
     }
 }

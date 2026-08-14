@@ -1,59 +1,113 @@
+use super::API_BASE;
+use reqwest::Client;
 use shared::users::{CreateUserRequest, ToggleStatusRequest, UpdateUserRequest, UserResponse};
 
-pub async fn fetch_users(_clinic_id: &str) -> Result<Vec<UserResponse>, String> {
-    Ok(vec![
-        UserResponse {
-            id: "1".into(),
-            username: "admin".into(),
-            full_name: "Dr. Admin User".into(),
-            document_cpf: "00000000000".into(),
-            professional_registry: Some("CRO-SP 12345".into()),
-            is_active: true,
-            role: "admin".into(),
-            permissions: vec!["admin:all".into()],
-            clinic_ids: vec!["clinic:1".into(), "clinic:2".into()],
-        },
-        UserResponse {
-            id: "2".into(),
-            username: "fernanda.a".into(),
-            full_name: "Fernanda Alves".into(),
-            document_cpf: "11111111111".into(),
-            professional_registry: Some("CRO-RJ 54321".into()),
-            is_active: true,
-            role: "dentist".into(),
-            permissions: vec![
-                "patients:read".into(),
-                "patients:write".into(),
-                "agenda:read".into(),
-            ],
-            clinic_ids: vec!["clinic:1".into()],
-        },
-        UserResponse {
-            id: "3".into(),
-            username: "carlos.rec".into(),
-            full_name: "Carlos Recepcionista".into(),
-            document_cpf: "22222222222".into(),
-            professional_registry: None,
-            is_active: false,
-            role: "receptionist".into(),
-            permissions: vec!["agenda:read".into(), "agenda:write".into()],
-            clinic_ids: vec!["clinic:1".into()],
-        },
-    ])
+fn get_client() -> Client {
+    Client::new()
 }
 
-pub async fn create_user(_req: CreateUserRequest) -> Result<(), String> {
-    Ok(())
+pub async fn fetch_users(token: &str, clinic_id: &str) -> Result<Vec<UserResponse>, String> {
+    let url = format!("{}/users?clinic_id={}", API_BASE, clinic_id);
+
+    let res = get_client()
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|_| "Falha de comunicação com o servidor ao buscar usuários.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<Vec<UserResponse>>()
+            .await
+            .map_err(|_| "Erro ao processar listagem de usuários.".into())
+    } else {
+        Err("Não foi possível carregar os usuários desta unidade.".to_string())
+    }
 }
 
-pub async fn update_user(_id: &str, _req: UpdateUserRequest) -> Result<(), String> {
-    Ok(())
+pub async fn create_user(token: &str, req: CreateUserRequest) -> Result<(), String> {
+    let url = format!("{}/users", API_BASE);
+
+    let res = get_client()
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de comunicação com o servidor ao criar usuário.".to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        let err_text = res.text().await.unwrap_or_default();
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&err_text) {
+            if let Some(err) = val.get("error").and_then(|e| e.as_str()) {
+                return Err(err.to_string());
+            }
+        }
+        Err("Não foi possível criar o usuário. Verifique as permissões e dados informados.".to_string())
+    }
 }
 
-pub async fn toggle_user_status(_id: &str, _req: ToggleStatusRequest) -> Result<(), String> {
-    Ok(())
+pub async fn update_user(
+    token: &str,
+    target_id: &str,
+    clinic_id: &str,
+    req: UpdateUserRequest,
+) -> Result<(), String> {
+    let url = format!("{}/users/{}?clinic_id={}", API_BASE, target_id, clinic_id);
+
+    let res = get_client()
+        .put(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de comunicação ao atualizar dados do usuário.".to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err("Não foi possível atualizar o usuário. Verifique suas permissões.".to_string())
+    }
 }
 
-pub async fn delete_user(_id: &str) -> Result<(), String> {
-    Ok(())
+pub async fn toggle_user_status(
+    token: &str,
+    target_id: &str,
+    clinic_id: &str,
+    req: ToggleStatusRequest,
+) -> Result<(), String> {
+    let url = format!("{}/users/{}/status?clinic_id={}", API_BASE, target_id, clinic_id);
+
+    let res = get_client()
+        .patch(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de comunicação ao alterar status do usuário.".to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err("Não foi possível alterar o status do usuário.".to_string())
+    }
+}
+
+pub async fn delete_user(token: &str, target_id: &str, clinic_id: &str) -> Result<(), String> {
+    let url = format!("{}/users/{}?clinic_id={}", API_BASE, target_id, clinic_id);
+
+    let res = get_client()
+        .delete(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|_| "Falha de comunicação ao remover usuário.".to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err("Não foi possível remover o acesso do usuário nesta unidade.".to_string())
+    }
 }
