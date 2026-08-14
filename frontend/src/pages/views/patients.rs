@@ -4,9 +4,8 @@ pub use dioxus::prelude::*;
 pub fn PatientsView() -> Element {
     rsx! {
         div {
-            h1 { class: "page-title", "Pacientes" }
             div { class: "content-card",
-                "Patient list and registration form will be rendered here."
+                "Gestão de pacientes e prontuários clínicos."
             }
         }
     }

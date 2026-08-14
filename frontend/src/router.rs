@@ -35,6 +35,20 @@ pub enum Route {
     NotFound { _route: Vec<String> },
 }
 
+impl Route {
+    pub fn title(&self) -> &'static str {
+        match self {
+            Route::AgendaView {} => "Agenda de Atendimentos",
+            Route::PatientsView {} => "Gestão de Pacientes",
+            Route::FinanceView {} => "Fluxo Financeiro",
+            Route::StockView {} => "Controle de Estoque",
+            Route::UsersView {} => "Equipe e Usuários",
+            Route::DocumentsView {} => "Emissão de Documentos",
+            _ => "Tooth Plus",
+        }
+    }
+}
+
 #[component]
 pub fn NotFound(_route: Vec<String>) -> Element {
     rsx! {

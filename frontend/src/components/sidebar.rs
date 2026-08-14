@@ -8,6 +8,7 @@ pub fn Sidebar(
     logo_url: Option<String>,
     is_collapsed: bool,
     can_see_users: bool,
+    can_see_finance: bool,
     can_see_settings: bool,
     on_toggle: EventHandler<()>,
     on_settings: EventHandler<()>,
@@ -41,9 +42,11 @@ pub fn Sidebar(
                     IconUsers { size: 20, color: icon_color.clone() }
                     span { class: "nav-text", "Pacientes" }
                 }
-                Link { to: Route::FinanceView {}, class: "nav-item", active_class: "nav-item-active",
-                    IconFinance { size: 20, color: icon_color.clone() }
-                    span { class: "nav-text", "Financeiro" }
+                if can_see_finance {
+                    Link { to: Route::FinanceView {}, class: "nav-item", active_class: "nav-item-active",
+                        IconFinance { size: 20, color: icon_color.clone() }
+                        span { class: "nav-text", "Financeiro" }
+                    }
                 }
                 Link { to: Route::StockView {}, class: "nav-item", active_class: "nav-item-active",
                     IconBox { size: 20, color: icon_color.clone() }

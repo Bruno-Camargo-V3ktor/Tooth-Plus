@@ -48,6 +48,11 @@ pub fn DashboardLayout() -> Element {
     let can_write_adv = permissions::has_permission(&sess, &clinic, "advanced:write");
     let can_delete = permissions::has_permission(&sess, &clinic, "clinics:delete");
     let can_read_users = permissions::has_permission(&sess, &clinic, "users:read");
+    let can_read_finance = permissions::has_permission(&sess, &clinic, "finance:read_all")
+        || permissions::has_permission(&sess, &clinic, "finance:read_income")
+        || permissions::has_permission(&sess, &clinic, "finance:read_expense")
+        || permissions::has_permission(&sess, &clinic, "finance:read_pending")
+        || permissions::has_permission(&sess, &clinic, "finance:read");
     let can_see_settings = can_read_clinics || can_read_wpp || can_read_adv;
 
     let clinic_data = clinic.clone().unwrap();
@@ -76,6 +81,7 @@ pub fn DashboardLayout() -> Element {
                 logo_url: clinic_data.logo_url.clone(),
                 is_collapsed: collapsed_val,
                 can_see_users: can_read_users,
+                can_see_finance: can_read_finance,
                 can_see_settings,
                 on_toggle: move |_| is_collapsed.set(!is_collapsed()),
                 on_settings: move |_| is_settings_open.set(true),

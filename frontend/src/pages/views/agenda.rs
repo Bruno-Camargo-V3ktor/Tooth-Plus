@@ -233,23 +233,17 @@ pub fn AgendaView() -> Element {
                 }
             }
 
-            div { class: "agenda-top-header",
-                div { class: "agenda-title-group",
-                    h1 { class: "page-title", "Agenda de Atendimentos" }
-                    p { class: "page-subtitle", "Organize os horários, pacientes, equipe e consumo de materiais." }
-                }
-                div { class: "agenda-top-actions",
-                    if can_write {
-                        button {
-                            class: "btn-primary",
-                            onclick: move |_| {
-                                selected_appointment.set(None);
-                                selected_time.set("09:00".to_string());
-                                is_form_modal_open.set(true);
-                            },
-                            IconPlus { size: 18, color: "currentColor".to_string() }
-                            "Novo Agendamento"
-                        }
+            if can_write {
+                div { class: "agenda-top-actions-bar",
+                    button {
+                        class: "btn-primary",
+                        onclick: move |_| {
+                            selected_appointment.set(None);
+                            selected_time.set("09:00".to_string());
+                            is_form_modal_open.set(true);
+                        },
+                        IconPlus { size: 18, color: "currentColor".to_string() }
+                        "Novo Agendamento"
                     }
                 }
             }

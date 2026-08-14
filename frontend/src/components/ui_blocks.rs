@@ -3,20 +3,14 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn PageHeader(
-    title: String,
-    subtitle: String,
     search_query: Signal<String>,
     show_new_btn: bool,
     btn_text: String,
     on_new: EventHandler<()>,
 ) -> Element {
     rsx! {
-        div { class: "page-action-header",
-            div {
-                h1 { class: "page-title", "{title}" }
-                p { class: "page-subtitle", "{subtitle}" }
-            }
-            div { class: "header-actions-group",
+        div { class: "page-action-header compact-toolbar",
+            div { class: "header-actions-group full-width-toolbar",
                 div { class: "modern-search-bar",
                     div { class: "search-icon", IconSearch { size: 18, color: "currentColor".to_string() } }
                     input {

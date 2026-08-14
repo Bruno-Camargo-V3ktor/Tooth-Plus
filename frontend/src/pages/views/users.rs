@@ -88,8 +88,6 @@ pub fn UsersView() -> Element {
             }
 
             PageHeader {
-                title: "Equipe e Acessos".to_string(),
-                subtitle: "Gerencie os funcionários e defina as permissões granulares por área.".to_string(),
                 search_query,
                 show_new_btn: can_write,
                 btn_text: "Novo Usuário".to_string(),

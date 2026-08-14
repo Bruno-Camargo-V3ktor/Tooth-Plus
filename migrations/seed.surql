@@ -3,6 +3,7 @@ BEGIN TRANSACTION;
 DELETE consumes;
 DELETE assigned_to;
 DELETE appointment;
+DELETE transaction;
 DELETE financial_transaction;
 DELETE stock_movement;
 DELETE inventory_item;
@@ -81,7 +82,14 @@ RELATE user:administrador->works_at->clinic:smile_plus CONTENT {
         "appointments:delete",
         "appointments:finance",
         "finance:read",
+        "finance:read_all",
+        "finance:read_income",
+        "finance:read_expense",
+        "finance:read_pending",
         "finance:write",
+        "finance:write_income",
+        "finance:write_expense",
+        "finance:update_status",
         "finance:delete",
         "stock:read",
         "stock:write",
@@ -117,7 +125,14 @@ RELATE user:administrador->works_at->clinic:luria_odonto CONTENT {
         "appointments:delete",
         "appointments:finance",
         "finance:read",
+        "finance:read_all",
+        "finance:read_income",
+        "finance:read_expense",
+        "finance:read_pending",
         "finance:write",
+        "finance:write_income",
+        "finance:write_expense",
+        "finance:update_status",
         "finance:delete",
         "stock:read",
         "stock:write",
@@ -169,6 +184,62 @@ CREATE inventory_item:resina CONTENT {
     current_stock: 15,
     min_stock: 3,
     cost_cents: 12000
+};
+
+CREATE transaction CONTENT {
+    clinic_id: clinic:smile_plus,
+    direction: "income",
+    amount_cents: 35000,
+    description: "Tratamento de Clareamento Dental",
+    category: "Procedimento Clínico",
+    status: "paid",
+    due_date: time::now(),
+    paid_date: time::now(),
+    payment_method: "Pix",
+    installment_current: 1,
+    installment_total: 1
+};
+
+CREATE transaction CONTENT {
+    clinic_id: clinic:smile_plus,
+    direction: "income",
+    amount_cents: 18000,
+    description: "Consulta e Limpeza Geral",
+    category: "Consulta",
+    status: "paid",
+    due_date: time::now(),
+    paid_date: time::now(),
+    payment_method: "Cartão de Crédito",
+    installment_current: 1,
+    installment_total: 1
+};
+
+CREATE transaction CONTENT {
+    clinic_id: clinic:smile_plus,
+    direction: "expense",
+    amount_cents: 45000,
+    description: "Reposição de Material Odontológico (Dental Cremer)",
+    category: "Insumos & Estoque",
+    status: "paid",
+    due_date: time::now(),
+    paid_date: time::now(),
+    payment_method: "Boleto Bancário",
+    installment_current: 1,
+    installment_total: 1
+};
+
+CREATE transaction CONTENT {
+    clinic_id: clinic:smile_plus,
+    direction: "expense",
+    amount_cents: 12000,
+    description: "Manutenção Preventiva Compressor de Ar",
+    category: "Manutenção",
+    status: "pending",
+    due_date: time::now() + 5d,
+    paid_date: NONE,
+    payment_method: "Pix",
+    installment_current: 1,
+    installment_total: 1
 };
 
 COMMIT TRANSACTION;

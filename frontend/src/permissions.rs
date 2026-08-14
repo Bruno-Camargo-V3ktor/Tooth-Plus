@@ -26,9 +26,14 @@ pub const ALL_PERMISSION_GROUPS: &[PermGroup] = &[
     PermGroup {
         label: "Módulo: Financeiro",
         items: &[
-            ("finance:read", "Visualizar Fluxo de Caixa"),
-            ("finance:write", "Lançar Receitas e Despesas"),
-            ("finance:delete", "Estornar Pagamentos"),
+            ("finance:read_all", "Visualizar Todas as Finanças"),
+            ("finance:read_income", "Visualizar Entradas (Receitas)"),
+            ("finance:read_expense", "Visualizar Saídas (Despesas)"),
+            ("finance:read_pending", "Visualizar Lançamentos Pendentes"),
+            ("finance:write_income", "Lançar Novas Entradas"),
+            ("finance:write_expense", "Lançar Novas Saídas"),
+            ("finance:update_status", "Alterar Status de Pagamentos"),
+            ("finance:delete", "Excluir e Estornar Lançamentos"),
         ],
     },
     PermGroup {
@@ -96,12 +101,23 @@ pub fn has_permission(
         Some(perm.replace("appointments:", "agenda:"))
     } else if perm.starts_with("agenda:") {
         Some(perm.replace("agenda:", "appointments:"))
+    } else if perm == "finance:read" {
+        Some("finance:read_all".to_string())
+    } else if perm == "finance:write" {
+        Some("finance:write_income".to_string())
     } else {
         None
     };
 
     a.permissions.iter().any(|p| {
-        p == perm || alt_perm.as_deref() == Some(p.as_str())
+        p == perm
+            || alt_perm.as_deref() == Some(p.as_str())
+            || (perm == "finance:read_all" && p == "finance:read")
+            || (perm == "finance:read_income" && (p == "finance:read_all" || p == "finance:read"))
+            || (perm == "finance:read_expense" && (p == "finance:read_all" || p == "finance:read"))
+            || (perm == "finance:read_pending" && (p == "finance:read_all" || p == "finance:read"))
+            || (perm == "finance:write_income" && p == "finance:write")
+            || (perm == "finance:write_expense" && p == "finance:write")
     })
 }
 

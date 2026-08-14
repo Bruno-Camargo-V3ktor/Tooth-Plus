@@ -4,9 +4,8 @@ pub use dioxus::prelude::*;
 pub fn StockView() -> Element {
     rsx! {
         div {
-            h1 { class: "page-title", "Estoque" }
             div { class: "content-card",
-                "Inventory data will be rendered here."
+                "Controle de insumos, materiais e estoque da clínica."
             }
         }
     }
