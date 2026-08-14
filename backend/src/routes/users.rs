@@ -1,6 +1,6 @@
-use crate::auth_guard::{AuthenticatedUser, check_permission};
-use crate::crypto::{decrypt_deterministic, encrypt_deterministic, hash_password};
 use crate::db::Db;
+use crate::security::auth_guard::{AuthenticatedUser, check_permission};
+use crate::security::crypto::{decrypt_deterministic, encrypt_deterministic, hash_password};
 use actix_web::{HttpResponse, Responder, delete, get, patch, post, put, web};
 use serde::Deserialize;
 use shared::users::{CreateUserRequest, ToggleStatusRequest, UpdateUserRequest, UserResponse};

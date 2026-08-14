@@ -1,4 +1,4 @@
-use crate::crypto::Claims;
+use super::crypto::Claims;
 use crate::db::Db;
 use actix_web::{Error as ActixError, FromRequest, HttpRequest, dev::Payload};
 use jsonwebtoken::{DecodingKey, Validation, decode};

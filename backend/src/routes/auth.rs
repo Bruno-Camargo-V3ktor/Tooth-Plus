@@ -4,8 +4,8 @@ use shared::auth::{LoginRequest, LoginResponse};
 use shared::models::ClinicAccess;
 use surrealdb::types::{SurrealValue, ToSql};
 
-use crate::crypto::{generate_jwt, verify_password};
 use crate::db::Db;
+use crate::security::crypto::{generate_jwt, verify_password};
 
 #[derive(Deserialize, Debug, SurrealValue)]
 struct UserRecord {

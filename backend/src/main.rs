@@ -1,14 +1,12 @@
+use crate::{evolution::EvolutionClient, storage::StorageConfig};
+use actix_web::{App, HttpServer, web};
 use std::env;
 
-use actix_web::{App, HttpServer, web};
-
-use crate::storage::StorageConfig;
-
-mod auth_guard;
-mod crypto;
 mod db;
+mod evolution;
 mod migrations;
 mod routes;
+mod security;
 mod storage;
 
 #[actix_web::main]
@@ -31,14 +29,20 @@ async fn main() -> std::io::Result<()> {
     };
     let storage_provider = storage::build_storage_provider(storage_config).await;
 
+    let evolution_url =
+        env::var("EVOLUTION_API_URL").unwrap_or_else(|_| "http://localhost:8080".into());
+    let evolution_client = EvolutionClient::new(evolution_url);
+
     let db_data = web::Data::new(db_client.clone());
     let storage_data = web::Data::from(storage_provider);
+    let evolution_data = web::Data::new(evolution_client);
 
     println!("Server run in http://127.0.0.1:4000");
     HttpServer::new(move || {
         App::new()
             .app_data(db_data.clone())
             .app_data(storage_data.clone())
+            .app_data(evolution_data.clone())
             .service(
                 web::scope("/api")
                     .service(routes::auth::login)
