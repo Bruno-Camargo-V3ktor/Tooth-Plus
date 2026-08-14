@@ -30,8 +30,6 @@ pub enum Route {
     #[route("/documents")]
     DocumentsView {},
 
-    #[route("/clinics")]
-    ClinicsView {},
     #[end_layout]
     #[route("/:.._route")]
     NotFound { _route: Vec<String> },

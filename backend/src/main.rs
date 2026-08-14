@@ -1,8 +1,10 @@
 use crate::{evolution::EvolutionClient, storage::StorageConfig};
-use actix_web::{App, HttpServer, web};
+use actix_cors::Cors;
+use actix_web::{App, HttpServer, http::header, web};
 use std::env;
 
 mod db;
+mod error;
 mod evolution;
 mod migrations;
 mod routes;
@@ -37,9 +39,36 @@ async fn main() -> std::io::Result<()> {
     let storage_data = web::Data::from(storage_provider);
     let evolution_data = web::Data::new(evolution_client);
 
-    println!("Server run in http://127.0.0.1:4000");
+    let port = env::var("SERVER_PORT").unwrap_or_else(|_| "4000".to_string());
+    let frontend_url_env = env::var("FRONTEND_URL").unwrap_or_else(|_| "*".to_string());
+
+    let allowed_origins: Vec<String> = frontend_url_env
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .collect();
+
+    println!("Server run in http://127.0.0.1:{}", port);
+
     HttpServer::new(move || {
+        let mut cors = Cors::default()
+            .allowed_methods(vec!["GET", "POST", "PUT", "PATCH", "DELETE"])
+            .allowed_headers(vec![
+                header::AUTHORIZATION,
+                header::ACCEPT,
+                header::CONTENT_TYPE,
+            ])
+            .max_age(3600);
+
+        if allowed_origins.contains(&"*".to_string()) {
+            cors = cors.allow_any_origin();
+        } else {
+            for origin in &allowed_origins {
+                cors = cors.allowed_origin(origin.as_str());
+            }
+        }
+
         App::new()
+            .wrap(cors) // Injeta o middleware de CORS
             .app_data(db_data.clone())
             .app_data(storage_data.clone())
             .app_data(evolution_data.clone())
@@ -49,10 +78,11 @@ async fn main() -> std::io::Result<()> {
                     .service(routes::users::create_user)
                     .service(routes::users::list_users)
                     .service(routes::users::update_user)
-                    .service(routes::users::toggle_status),
+                    .service(routes::users::toggle_status)
+                    .service(routes::users::delete_user),
             )
     })
-    .bind(("127.0.0.1", 4000))?
+    .bind(("127.0.0.1", port.parse::<u16>().unwrap_or(4000)))?
     .run()
     .await
 }

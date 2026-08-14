@@ -1,10 +1,11 @@
-use actix_web::{HttpResponse, Responder, post, web};
+use actix_web::{HttpResponse, post, web};
 use serde::Deserialize;
 use shared::auth::{LoginRequest, LoginResponse};
 use shared::models::ClinicAccess;
 use surrealdb::types::{SurrealValue, ToSql};
 
 use crate::db::Db;
+use crate::error::ApiError;
 use crate::security::crypto::{generate_jwt, verify_password};
 
 #[derive(Deserialize, Debug, SurrealValue)]
@@ -24,35 +25,30 @@ struct ClinicAccessRecord {
 }
 
 #[post("/login")]
-pub async fn login(req: web::Json<LoginRequest>, db: web::Data<Db>) -> impl Responder {
+pub async fn login(
+    req: web::Json<LoginRequest>,
+    db: web::Data<Db>,
+) -> Result<HttpResponse, ApiError> {
     let credentials = req.into_inner();
 
-    let mut response = match db
+    let mut response = db
         .query("SELECT * FROM user WHERE username = $user")
         .bind(("user", credentials.username))
         .await
-    {
-        Ok(res) => res,
-        Err(_) => return HttpResponse::InternalServerError().json("Database connection error"),
-    };
+        .map_err(|_| ApiError::Database("Database connection error".into()))?;
 
     let user: Option<UserRecord> = response.take(0).unwrap_or(None);
 
     if let Some(u) = user {
         if verify_password(&u.password_hash, &credentials.password_plain) {
-            let token = match generate_jwt(&u.id.key.to_sql()) {
-                Ok(t) => t,
-                Err(_) => return HttpResponse::InternalServerError().json("Failed to sign token"),
-            };
+            let token = generate_jwt(&u.id.key.to_sql())
+                .map_err(|_| ApiError::Internal("Failed to sign token".into()))?;
 
-            let mut access_response = match db
+            let mut access_response = db
                 .query("SELECT out.id AS clinic_id, out.trading_name AS trading_name, out.theme_color AS theme_color, role FROM works_at WHERE in = $user_id")
                 .bind(("user_id", u.id.clone()))
                 .await
-            {
-                Ok(res) => res,
-                Err(_) => return HttpResponse::InternalServerError().json("Failed to fetch clinic access"),
-            };
+                .map_err(|_| ApiError::Database("Failed to fetch clinic access".into()))?;
 
             let access_records: Vec<ClinicAccessRecord> =
                 access_response.take(0).unwrap_or_default();
@@ -75,9 +71,9 @@ pub async fn login(req: web::Json<LoginRequest>, db: web::Data<Db>) -> impl Resp
                 clinics,
             };
 
-            return HttpResponse::Ok().json(response_data);
+            return Ok(HttpResponse::Ok().json(response_data));
         }
     }
 
-    HttpResponse::Unauthorized().json("Invalid credentials")
+    Err(ApiError::Unauthorized("Invalid credentials".into()))
 }

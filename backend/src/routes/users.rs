@@ -1,7 +1,8 @@
 use crate::db::Db;
+use crate::error::ApiError;
 use crate::security::auth_guard::{AuthenticatedUser, check_permission};
 use crate::security::crypto::{decrypt_deterministic, encrypt_deterministic, hash_password};
-use actix_web::{HttpResponse, Responder, delete, get, patch, post, put, web};
+use actix_web::{HttpResponse, delete, get, patch, post, put, web};
 use serde::Deserialize;
 use shared::users::{CreateUserRequest, ToggleStatusRequest, UpdateUserRequest, UserResponse};
 use surrealdb::types::{SurrealValue, ToSql};
@@ -28,27 +29,23 @@ pub async fn create_user(
     auth: AuthenticatedUser,
     req: web::Json<CreateUserRequest>,
     db: web::Data<Db>,
-) -> impl Responder {
+) -> Result<HttpResponse, ApiError> {
     let data = req.into_inner();
 
     if !check_permission(&db, &auth.id, &data.clinic_ids[0], "users:write")
         .await
         .unwrap_or(false)
     {
-        return HttpResponse::Forbidden().json("Insufficient permissions");
+        return Err(ApiError::Forbidden("Insufficient permissions".into()));
     }
 
-    let hashed_password = match hash_password(&data.password_plain) {
-        Ok(h) => h,
-        Err(_) => return HttpResponse::InternalServerError().json("Failed to secure password"),
-    };
+    let hashed_password = hash_password(&data.password_plain)
+        .map_err(|_| ApiError::Internal("Failed to secure password".into()))?;
 
-    let encrypted_cpf = match encrypt_deterministic(&data.document_cpf) {
-        Ok(enc) => enc,
-        Err(_) => return HttpResponse::InternalServerError().json("Failed to encrypt document"),
-    };
+    let encrypted_cpf = encrypt_deterministic(&data.document_cpf)
+        .map_err(|_| ApiError::Internal("Failed to encrypt document".into()))?;
 
-    let mut response = match db
+    let mut response = db
         .query(
             "
             BEGIN TRANSACTION;
@@ -80,15 +77,12 @@ pub async fn create_user(
         .bind(("role", data.role))
         .bind(("permissions", data.permissions))
         .await
-    {
-        Ok(res) => res,
-        Err(_) => return HttpResponse::InternalServerError().json("Database transaction failed"),
-    };
+        .map_err(|_| ApiError::Database("Database transaction failed".into()))?;
 
     if response.take_errors().is_empty() {
-        HttpResponse::Created().json("User created successfully")
+        Ok(HttpResponse::Created().json("User created successfully"))
     } else {
-        HttpResponse::BadRequest().json("Failed to create user")
+        Err(ApiError::BadRequest("Failed to create user".into()))
     }
 }
 
@@ -97,15 +91,15 @@ pub async fn list_users(
     auth: AuthenticatedUser,
     query: web::Query<ClinicQuery>,
     db: web::Data<Db>,
-) -> impl Responder {
+) -> Result<HttpResponse, ApiError> {
     if !check_permission(&db, &auth.id, &query.clinic_id, "users:read")
         .await
         .unwrap_or(false)
     {
-        return HttpResponse::Forbidden().json("Insufficient permissions");
+        return Err(ApiError::Forbidden("Insufficient permissions".into()));
     }
 
-    let mut response = match db
+    let mut response = db
         .query(
             "
             SELECT
@@ -123,10 +117,7 @@ pub async fn list_users(
         )
         .bind(("clinic_id", query.clinic_id.clone()))
         .await
-    {
-        Ok(res) => res,
-        Err(_) => return HttpResponse::InternalServerError().json("Database query failed"),
-    };
+        .map_err(|_| ApiError::Database("Database query failed".into()))?;
 
     let users: Vec<DbUserRecord> = response.take(0).unwrap_or_default();
 
@@ -145,7 +136,7 @@ pub async fn list_users(
         })
         .collect();
 
-    HttpResponse::Ok().json(result)
+    Ok(HttpResponse::Ok().json(result))
 }
 
 #[put("/users/{target_id}")]
@@ -155,7 +146,7 @@ pub async fn update_user(
     query: web::Query<ClinicQuery>,
     req: web::Json<UpdateUserRequest>,
     db: web::Data<Db>,
-) -> impl Responder {
+) -> Result<HttpResponse, ApiError> {
     let target_id = path.into_inner();
     let data = req.into_inner();
     let clinic_id = query.clinic_id.clone();
@@ -164,7 +155,7 @@ pub async fn update_user(
         .await
         .unwrap_or(false)
     {
-        return HttpResponse::Forbidden().json("Insufficient permissions");
+        return Err(ApiError::Forbidden("Insufficient permissions".into()));
     }
 
     if data.full_name.is_some()
@@ -191,7 +182,11 @@ pub async fn update_user(
         q.pop();
         q.push_str("}");
 
-        let _ = db.query(q).bind(("target_id", target_id.clone())).await;
+        let _ = db
+            .query(q)
+            .bind(("target_id", target_id.clone()))
+            .await
+            .map_err(|_| ApiError::Database("Failed to update user base data".into()))?;
     }
 
     if data.role.is_some() || data.permissions.is_some() {
@@ -200,7 +195,8 @@ pub async fn update_user(
                 .bind(("target_id", target_id.clone()))
                 .bind(("clinic_id", clinic_id.clone()))
                 .bind(("role", role.clone()))
-                .await;
+                .await
+                .map_err(|_| ApiError::Database("Failed to update user role".into()))?;
         }
 
         if let Some(perms) = data.permissions {
@@ -208,11 +204,12 @@ pub async fn update_user(
                 .bind(("target_id", target_id.clone()))
                 .bind(("clinic_id", clinic_id.clone()))
                 .bind(("perms", perms))
-                .await;
+                .await
+                .map_err(|_| ApiError::Database("Failed to update user permissions".into()))?;
         }
     }
 
-    HttpResponse::Ok().json("User updated successfully")
+    Ok(HttpResponse::Ok().json("User updated successfully"))
 }
 
 #[patch("/users/{target_id}/status")]
@@ -222,26 +219,24 @@ pub async fn toggle_status(
     query: web::Query<ClinicQuery>,
     req: web::Json<ToggleStatusRequest>,
     db: web::Data<Db>,
-) -> impl Responder {
+) -> Result<HttpResponse, ApiError> {
     if !check_permission(&db, &auth.id, &query.clinic_id, "users:manage_status")
         .await
         .unwrap_or(false)
     {
-        return HttpResponse::Forbidden().json("Insufficient permissions");
+        return Err(ApiError::Forbidden("Insufficient permissions".into()));
     }
 
     let target_id = path.into_inner();
     let is_active = req.into_inner().is_active;
 
-    match db
-        .query("UPDATE type::thing($target_id) SET is_active = $is_active")
+    db.query("UPDATE type::thing($target_id) SET is_active = $is_active")
         .bind(("target_id", target_id))
         .bind(("is_active", is_active))
         .await
-    {
-        Ok(_) => HttpResponse::Ok().json("Status updated"),
-        Err(_) => HttpResponse::InternalServerError().json("Failed to update status"),
-    }
+        .map_err(|_| ApiError::Database("Failed to update status".into()))?;
+
+    Ok(HttpResponse::Ok().json("Status updated"))
 }
 
 #[delete("/users/{target_id}")]
@@ -250,25 +245,23 @@ pub async fn delete_user(
     path: web::Path<String>,
     query: web::Query<ClinicQuery>,
     db: web::Data<Db>,
-) -> impl Responder {
+) -> Result<HttpResponse, ApiError> {
     if !check_permission(&db, &auth.id, &query.clinic_id, "users:write")
         .await
         .unwrap_or(false)
     {
-        return HttpResponse::Forbidden().json("Insufficient permissions");
+        return Err(ApiError::Forbidden("Insufficient permissions".into()));
     }
 
     let target_id = path.into_inner();
 
-    match db
-        .query(
-            "DELETE works_at WHERE in = type::thing($target_id) AND out = type::thing($clinic_id)",
-        )
-        .bind(("target_id", target_id))
-        .bind(("clinic_id", query.clinic_id.clone()))
-        .await
-    {
-        Ok(_) => HttpResponse::Ok().json("User access removed successfully"),
-        Err(_) => HttpResponse::InternalServerError().json("Failed to remove user access"),
-    }
+    db.query(
+        "DELETE works_at WHERE in = type::thing($target_id) AND out = type::thing($clinic_id)",
+    )
+    .bind(("target_id", target_id))
+    .bind(("clinic_id", query.clinic_id.clone()))
+    .await
+    .map_err(|_| ApiError::Database("Failed to remove user access".into()))?;
+
+    Ok(HttpResponse::Ok().json("User access removed successfully"))
 }

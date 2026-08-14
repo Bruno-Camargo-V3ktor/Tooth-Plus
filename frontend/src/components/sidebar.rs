@@ -55,10 +55,6 @@ pub fn Sidebar(
                     IconUsers { size: 20, color: icon_color.clone() }
                     span { class: "nav-text", "Usuários" }
                 }
-                Link { to: Route::ClinicsView {}, class: "nav-item", active_class: "nav-item-active",
-                    IconBuilding { size: 20, color: icon_color.clone() }
-                    span { class: "nav-text", "Clínicas" }
-                }
             }
 
             div { class: "sidebar-footer",
