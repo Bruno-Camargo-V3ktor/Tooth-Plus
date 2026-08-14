@@ -94,6 +94,7 @@ RELATE user:administrador->works_at->clinic:smile_plus CONTENT {
         "stock:read",
         "stock:write",
         "stock:delete",
+        "stock:movement",
         "documents:read",
         "documents:write",
         "documents:delete"
@@ -137,6 +138,7 @@ RELATE user:administrador->works_at->clinic:luria_odonto CONTENT {
         "stock:read",
         "stock:write",
         "stock:delete",
+        "stock:movement",
         "documents:read",
         "documents:write",
         "documents:delete"
@@ -159,31 +161,125 @@ CREATE patient:carlos_souza CONTENT {
     email: "carlos.souza@email.com"
 };
 
-CREATE inventory_item:anestesico CONTENT {
-    clinic_id: clinic:smile_plus,
-    name: "Anestésico Articaína 4% (Tubete)",
-    unit: "unidade",
-    current_stock: 50,
-    min_stock: 10,
-    cost_cents: 850
-};
-
 CREATE inventory_item:luvas CONTENT {
     clinic_id: clinic:smile_plus,
-    name: "Par de Luvas Cirúrgicas Estéreis",
-    unit: "par",
-    current_stock: 200,
+    item_type: "material",
+    name: "Par de Luvas Cirúrgicas Estéreis (M)",
+    unit_type: "par",
+    current_stock: 180,
     min_stock: 30,
-    cost_cents: 400
+    cost_price_cents: 450,
+    manufacturer: "Supermax",
+    attachments: []
 };
 
 CREATE inventory_item:resina CONTENT {
     clinic_id: clinic:smile_plus,
-    name: "Resina Composta Z350 XT (Tubo)",
-    unit: "unidade",
-    current_stock: 15,
-    min_stock: 3,
-    cost_cents: 12000
+    item_type: "material",
+    name: "Resina Composta Z350 XT (Tubo A2)",
+    unit_type: "unidade",
+    current_stock: 4,
+    min_stock: 6,
+    cost_price_cents: 12500,
+    manufacturer: "3M ESPE",
+    attachments: []
+};
+
+CREATE inventory_item:anestesico CONTENT {
+    clinic_id: clinic:smile_plus,
+    item_type: "chemical",
+    name: "Anestésico Articaína 4% c/ Epinefrina",
+    unit_type: "tubete",
+    current_stock: 45,
+    min_stock: 15,
+    cost_price_cents: 890,
+    manufacturer: "DFL",
+    batch_number: "LT-2026B",
+    expiration_date: time::now() + 18d,
+    attachments: []
+};
+
+CREATE inventory_item:hipoclorito CONTENT {
+    clinic_id: clinic:smile_plus,
+    item_type: "chemical",
+    name: "Hipoclorito de Sódio 2.5% (Endodontia)",
+    unit_type: "frasco",
+    current_stock: 6,
+    min_stock: 2,
+    cost_price_cents: 1850,
+    manufacturer: "Asfer",
+    batch_number: "HP-8802",
+    expiration_date: time::now() + 150d,
+    attachments: []
+};
+
+CREATE inventory_item:autoclave CONTENT {
+    clinic_id: clinic:smile_plus,
+    item_type: "equipment",
+    name: "Autoclave Digital Vitale 12L",
+    unit_type: "unidade",
+    current_stock: 1,
+    min_stock: 1,
+    cost_price_cents: 680000,
+    manufacturer: "Cristófoli",
+    serial_number: "CRIST-2025-9912",
+    warranty_until: time::now() + 320d,
+    next_maintenance_date: time::now() + 12d,
+    equipment_status: "active",
+    attachments: []
+};
+
+CREATE inventory_item:fotopolimerizador CONTENT {
+    clinic_id: clinic:smile_plus,
+    item_type: "equipment",
+    name: "Fotopolimerizador LED Emitter Now",
+    unit_type: "unidade",
+    current_stock: 2,
+    min_stock: 1,
+    cost_price_cents: 195000,
+    manufacturer: "Schuster",
+    serial_number: "SCH-8831",
+    warranty_until: time::now() + 200d,
+    next_maintenance_date: time::now() + 60d,
+    equipment_status: "active",
+    attachments: []
+};
+
+CREATE inventory_item:compressor CONTENT {
+    clinic_id: clinic:smile_plus,
+    item_type: "equipment",
+    name: "Compressor Odontológico Isento de Óleo 60L",
+    unit_type: "unidade",
+    current_stock: 1,
+    min_stock: 1,
+    cost_price_cents: 480000,
+    manufacturer: "Schulz",
+    serial_number: "SCH-AIR-990",
+    warranty_until: time::now() - 40d,
+    next_maintenance_date: time::now() - 3d,
+    equipment_status: "in_maintenance",
+    attachments: []
+};
+
+CREATE stock_movement CONTENT {
+    item_id: inventory_item:luvas,
+    clinic_id: clinic:smile_plus,
+    user_id: user:administrador,
+    quantity_change: 200,
+    movement_type: "purchase_in",
+    unit_cost_cents: 450,
+    invoice_number: "NF-88412",
+    notes: "Compra inicial de estoque Dental Cremer"
+};
+
+CREATE stock_movement CONTENT {
+    item_id: inventory_item:luvas,
+    clinic_id: clinic:smile_plus,
+    user_id: user:administrador,
+    quantity_change: -20,
+    movement_type: "manual_out",
+    unit_cost_cents: 450,
+    notes: "Consumo da semana em procedimentos cirúrgicos"
 };
 
 CREATE transaction CONTENT {
@@ -243,3 +339,4 @@ CREATE transaction CONTENT {
 };
 
 COMMIT TRANSACTION;
+

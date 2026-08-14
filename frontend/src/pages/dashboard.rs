@@ -1,10 +1,11 @@
 use crate::api;
+use crate::components::icons::{IconBuilding, IconFlask, IconRefresh, IconSettings};
 use crate::components::sidebar::Sidebar;
 use crate::components::topbar::Topbar;
 use crate::permissions;
 use crate::router::Route;
 use crate::{ActiveClinicState, SessionState};
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use dioxus::prelude::*;
 use shared::clinics::UpdateClinicRequest;
 use shared::files::FileUploadRequest;
@@ -94,8 +95,12 @@ pub fn DashboardLayout() -> Element {
             }
 
             if settings_open_val {
-                div { class: "modal-overlay",
-                    div { class: "settings-modal",
+                div {
+                    class: "modal-overlay",
+                    onclick: move |_| is_settings_open.set(false),
+                    div {
+                        class: "settings-modal",
+                        onclick: move |e| e.stop_propagation(),
 
                         div { class: "settings-header",
                             h2 { class: "settings-title", "Configurações da Clínica" }
@@ -108,26 +113,30 @@ pub fn DashboardLayout() -> Element {
                                     button {
                                         class: if tab_val == "Perfil" { "settings-tab-btn active" } else { "settings-tab-btn" },
                                         onclick: move |_| active_tab.set("Perfil".to_string()),
-                                        "Perfil"
+                                        IconBuilding { size: 16, color: "currentColor".to_string() }
+                                        span { "Perfil" }
                                     }
                                     button {
                                         class: if tab_val == "Identidade Visual" { "settings-tab-btn active" } else { "settings-tab-btn" },
                                         onclick: move |_| active_tab.set("Identidade Visual".to_string()),
-                                        "Identidade Visual"
+                                        IconFlask { size: 16, color: "currentColor".to_string() }
+                                        span { "Identidade Visual" }
                                     }
                                 }
                                 if can_read_wpp {
                                     button {
                                         class: if tab_val == "WhatsApp" { "settings-tab-btn active" } else { "settings-tab-btn" },
                                         onclick: move |_| active_tab.set("WhatsApp".to_string()),
-                                        "WhatsApp"
+                                        IconRefresh { size: 16, color: "currentColor".to_string() }
+                                        span { "WhatsApp" }
                                     }
                                 }
                                 if can_read_adv {
                                     button {
                                         class: if tab_val == "Avançado" { "settings-tab-btn active" } else { "settings-tab-btn" },
                                         onclick: move |_| active_tab.set("Avançado".to_string()),
-                                        "Avançado"
+                                        IconSettings { size: 16, color: "currentColor".to_string() }
+                                        span { "Avançado" }
                                     }
                                 }
                             }
@@ -236,28 +245,30 @@ fn ProfileTab(
             };
 
             rsx! {
-                div { class: "tab-pane",
-                    h3 { class: "tab-title", "Dados Cadastrais" }
-                    div { class: "form-grid",
-                        div { class: "input-group-wrapper",
-                            label { "Nome Fantasia" }
+                div { class: "settings-pane-container",
+                    h3 { class: "settings-pane-title", "Dados Cadastrais" }
+                    div { class: "form-row-2",
+                        div { class: "form-group",
+                            label { class: "form-label", "Nome Fantasia" }
                             input { class: "modern-input-field", disabled: !can_write, value: "{trading_name}", oninput: move |e| trading_name.set(e.value()) }
                         }
-                        div { class: "input-group-wrapper",
-                            label { "Razão Social" }
+                        div { class: "form-group",
+                            label { class: "form-label", "Razão Social" }
                             input { class: "modern-input-field", disabled: !can_write, value: "{corporate_name}", oninput: move |e| corporate_name.set(e.value()) }
                         }
-                        div { class: "input-group-wrapper full-width",
-                            label { "CNPJ" }
-                            input { class: "modern-input-field", disabled: !can_write, value: "{document_cnpj}", oninput: move |e| document_cnpj.set(e.value()) }
-                        }
                     }
-                    if can_write {
-                        button { class: "btn-primary", onclick: handle_save, disabled: is_saving(),
-                            if is_saving() { "Salvando..." } else { "Salvar Alterações" }
+                    div { class: "form-group",
+                        label { class: "form-label", "CNPJ" }
+                        input { class: "modern-input-field", disabled: !can_write, value: "{document_cnpj}", oninput: move |e| document_cnpj.set(e.value()) }
+                    }
+                    div { class: "settings-action-bar",
+                        if can_write {
+                            button { class: "btn-primary", onclick: handle_save, disabled: is_saving(),
+                                if is_saving() { "Salvando..." } else { "Salvar Alterações" }
+                            }
+                        } else {
+                            p { class: "text-error-small", "Permissão de leitura apenas." }
                         }
-                    } else {
-                        p { class: "text-error-small", "Permissão de leitura apenas." }
                     }
                 }
             }
@@ -334,18 +345,18 @@ fn BrandingTab(
     };
 
     rsx! {
-        div { class: "tab-pane",
-            h3 { class: "tab-title", "Identidade Visual" }
+        div { class: "settings-pane-container",
+            h3 { class: "settings-pane-title", "Identidade Visual" }
             div { class: "branding-grid",
-                div {
-                    label { class: "branding-label", "Cor Principal" }
+                div { class: "form-group",
+                    label { class: "form-label", "Cor Principal" }
                     div { class: "color-picker-wrapper",
                         input { class: "color-input", r#type: "color", disabled: !can_write, value: "{current_color}", onchange: on_color_change }
                         span { class: "color-hex", "{current_color}" }
                     }
                 }
-                div {
-                    label { class: "branding-label", "Logo da Unidade" }
+                div { class: "form-group",
+                    label { class: "form-label", "Logo da Unidade" }
                     div { class: "logo-upload-wrapper",
                         div { class: "logo-preview",
                             match current_logo {
@@ -392,14 +403,14 @@ fn WhatsAppTab(
     };
 
     rsx! {
-        div { class: "tab-pane qr-container",
-            h3 { class: "tab-title", "Conexão com WhatsApp" }
-            p { class: "qr-description", "Habilite automações de mensagens." }
+        div { class: "settings-pane-container",
+            h3 { class: "settings-pane-title", "Conexão com WhatsApp" }
+            p { class: "qr-description", "Habilite automações de mensagens e lembretes aos pacientes." }
             match qr_code() {
                 Some(base64_str) => rsx! {
                     div { class: "qr-code-wrapper",
                         img { class: "qr-code-image", src: "data:image/png;base64,{base64_str}" }
-                        p { class: "qr-status", "Aguardando leitura..." }
+                        p { class: "qr-status", "Aguardando leitura do QR Code..." }
                     }
                 },
                 None => rsx! {
@@ -495,8 +506,8 @@ fn AdvancedTab(
             };
 
             rsx! {
-                div { class: "tab-pane",
-                    h3 { class: "tab-title", "Configurações Avançadas" }
+                div { class: "settings-pane-container",
+                    h3 { class: "settings-pane-title", "Configurações Avançadas" }
                     p { class: "tab-description", "Gerencie o comportamento global da unidade." }
 
                     div { class: "advanced-setting-row",
@@ -520,7 +531,7 @@ fn AdvancedTab(
                     }
 
                     if can_write {
-                        div { class: "advanced-save-row",
+                        div { class: "settings-action-bar",
                             button { class: "btn-primary", onclick: handle_save, disabled: is_saving(),
                                 if is_saving() { "Salvando..." } else { "Salvar Alterações" }
                             }

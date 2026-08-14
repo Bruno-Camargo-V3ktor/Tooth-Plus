@@ -94,7 +94,13 @@ async fn main() -> std::io::Result<()> {
                     .service(routes::finance::get_finance_data)
                     .service(routes::finance::create_transaction)
                     .service(routes::finance::update_transaction_status)
-                    .service(routes::finance::delete_transaction),
+                    .service(routes::finance::delete_transaction)
+                    .service(routes::stock::get_stock_data)
+                    .service(routes::stock::create_stock_item)
+                    .service(routes::stock::update_stock_item)
+                    .service(routes::stock::delete_stock_item)
+                    .service(routes::stock::create_stock_movement)
+                    .service(routes::stock::upload_stock_document),
             )
     })
     .bind(("127.0.0.1", port.parse::<u16>().unwrap_or(4000)))?

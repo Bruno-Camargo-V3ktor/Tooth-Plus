@@ -45,11 +45,12 @@ pub const ALL_PERMISSION_GROUPS: &[PermGroup] = &[
         ],
     },
     PermGroup {
-        label: "Módulo: Estoque",
+        label: "Módulo: Estoque e Patrimônio",
         items: &[
-            ("stock:read", "Visualizar Inventário"),
-            ("stock:write", "Movimentar Itens"),
-            ("stock:delete", "Ajustes de Estoque"),
+            ("stock:read", "Visualizar Itens e Alertas"),
+            ("stock:write", "Cadastrar e Editar Itens"),
+            ("stock:movement", "Registrar Entradas e Saídas"),
+            ("stock:delete", "Excluir Itens do Estoque"),
         ],
     },
     PermGroup {

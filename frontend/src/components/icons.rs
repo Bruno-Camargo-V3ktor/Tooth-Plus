@@ -221,3 +221,86 @@ pub fn IconFilter(size: i32, color: String) -> Element {
         }
     }
 }
+
+#[component]
+pub fn IconAlertTriangle(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 18.75h.007v.008H12v-.008Z" }
+        }
+    }
+}
+
+#[component]
+pub fn IconTool(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.32l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.32 4.486c.09.84.42 1.63 1.02 2.24Z" }
+        }
+    }
+}
+
+#[component]
+pub fn IconFlask(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.942A6 6 0 0 1 15 17H9a6 6 0 0 1-3.23-.942L4.2 15.1" }
+        }
+    }
+}
+
+#[component]
+pub fn IconRefresh(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" }
+        }
+    }
+}
+
+#[component]
+pub fn IconArrowUp(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2.2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" }
+        }
+    }
+}
+
+#[component]
+pub fn IconArrowDown(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2.2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" }
+        }
+    }
+}
+
+#[component]
+pub fn IconPaperclip(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.373L8.559 18.32a1.5 1.5 0 1 1-2.122-2.122l8.25-8.25" }
+        }
+    }
+}
+
+#[component]
+pub fn IconUpload(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" }
+        }
+    }
+}
+
+#[component]
+pub fn IconExternalLink(size: i32, color: String) -> Element {
+    rsx! {
+        svg { style: "width: {size}px; height: {size}px; flex-shrink: 0;", xmlns: "http://www.w3.org/2000/svg", fill: "none", view_box: "0 0 24 24", stroke_width: "2", stroke: "{color}",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: "M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" }
+        }
+    }
+}
+
+

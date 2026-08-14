@@ -2,12 +2,14 @@ mod appointments;
 mod auth;
 mod clinic;
 mod finance;
+mod stock;
 mod user;
 
 pub use appointments::*;
 pub use auth::*;
 pub use clinic::*;
 pub use finance::*;
+pub use stock::*;
 pub use user::*;
 
 pub const API_BASE: &str = match option_env!("API_BASE_URL") {

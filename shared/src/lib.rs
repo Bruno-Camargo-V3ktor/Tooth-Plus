@@ -4,4 +4,6 @@ pub mod clinics;
 pub mod files;
 pub mod finance;
 pub mod models;
+pub mod stock;
 pub mod users;
+

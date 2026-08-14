@@ -41,7 +41,7 @@ impl Route {
             Route::AgendaView {} => "Agenda de Atendimentos",
             Route::PatientsView {} => "Gestão de Pacientes",
             Route::FinanceView {} => "Fluxo Financeiro",
-            Route::StockView {} => "Controle de Estoque",
+            Route::StockView {} => "Estoque e Patrimônio",
             Route::UsersView {} => "Equipe e Usuários",
             Route::DocumentsView {} => "Emissão de Documentos",
             _ => "Tooth Plus",
