@@ -211,7 +211,7 @@ pub fn SignPortal(token: String) -> Element {
                                 div {
                                     span { class: "portal-doc-badge", "{doc.document.document_type.to_uppercase()}" }
                                     h2 { class: "portal-doc-title", "{doc.document.title}" }
-                                    p { class: "portal-doc-meta", "Emitido em {doc.document.created_at.chars().take(10).collect::<String>()}" }
+                                    p { class: "portal-doc-meta", "Emitido em {crate::utils::format_date_br(&doc.document.created_at)}" }
                                 }
                                 div { class: "portal-doc-status-badge",
                                     if doc.document.status == "signed" || is_completed() {

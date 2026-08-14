@@ -50,13 +50,7 @@ fn format_thousands(num: i64) -> String {
 }
 
 fn format_date_br(iso_str: &str) -> String {
-    if iso_str.len() >= 10 {
-        let parts: Vec<&str> = iso_str[0..10].split('-').collect();
-        if parts.len() == 3 {
-            return format!("{}/{}/{}", parts[2], parts[1], parts[0]);
-        }
-    }
-    iso_str.to_string()
+    crate::utils::format_date_br(iso_str)
 }
 
 fn get_today_iso() -> String {

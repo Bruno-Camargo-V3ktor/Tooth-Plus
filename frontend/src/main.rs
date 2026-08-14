@@ -8,6 +8,7 @@ mod components;
 mod pages;
 mod permissions;
 mod router;
+pub mod utils;
 
 pub type SessionState = Option<LoginResponse>;
 pub type ActiveClinicState = Option<ClinicAccess>;

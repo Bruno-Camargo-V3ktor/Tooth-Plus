@@ -568,7 +568,7 @@ pub fn PatientsView() -> Element {
                                         span { class: "hero-chip", "✉️ {em}" }
                                     }
                                     if let Some(ref b) = det.patient.birth_date {
-                                        span { class: "hero-chip", "🎂 Nasc: {b}" }
+                                        span { class: "hero-chip", "🎂 Nasc: {crate::utils::format_date_br(b)}" }
                                     }
                                 }
                             }
@@ -878,7 +878,7 @@ pub fn PatientsView() -> Element {
                                                         h4 { class: "exam-title", "{exam.title}" }
                                                         span { class: "exam-type-badge", "{exam.exam_type}" }
                                                     }
-                                                    p { class: "exam-date", "Data: {exam.requested_date.chars().take(10).collect::<String>()}" }
+                                                    p { class: "exam-date", "Data da Solicitação: {crate::utils::format_date_br(&exam.requested_date)}" }
                                                     if let Some(ref note) = exam.clinical_interpretation {
                                                         p { class: "exam-notes", "Laudo: {note}" }
                                                     }
@@ -945,7 +945,7 @@ pub fn PatientsView() -> Element {
                                                             span { class: if t.status == "completed" { "status-badge-ok" } else { "status-badge-progress" },
                                                                 if t.status == "completed" { "Concluído" } else if t.status == "in_progress" { "Em Andamento" } else { "Planejado" }
                                                             }
-                                                            span { class: "cost-badge", "R$ {((t.cost_cents as f64) / 100.0):.2}" }
+                                                            span { class: "cost-badge", "{crate::utils::format_currency_br(t.cost_cents)}" }
                                                         }
                                                     }
                                                     if let Some(ref note) = t.clinical_notes {
@@ -1464,6 +1464,27 @@ pub fn PatientsView() -> Element {
                         }
 
                         div { class: "modal-body",
+                            if let Some(ref det) = patient_details() {
+                                div { class: "patient-autofill-card",
+                                    div { class: "patient-autofill-item",
+                                        span { class: "patient-autofill-label", "Paciente" }
+                                        span { class: "patient-autofill-val", "{det.patient.full_name}" }
+                                    }
+                                    div { class: "patient-autofill-item",
+                                        span { class: "patient-autofill-label", "CPF Protegido" }
+                                        span { class: "patient-autofill-val", "{det.patient.document_cpf}" }
+                                    }
+                                    div { class: "patient-autofill-item",
+                                        span { class: "patient-autofill-label", "WhatsApp" }
+                                        span { class: "patient-autofill-val", "{det.patient.phone}" }
+                                    }
+                                    div { class: "patient-autofill-item",
+                                        span { class: "patient-autofill-label", "Convênio" }
+                                        span { class: "patient-autofill-val", "{det.patient.insurance_plan.as_deref().unwrap_or(\"Particular\")}" }
+                                    }
+                                }
+                            }
+
                             div { class: "form-group",
                                 label { class: "form-label", "Título do Documento *" }
                                 input {
@@ -1493,7 +1514,17 @@ pub fn PatientsView() -> Element {
                                     select {
                                         class: "select-field",
                                         value: "{emit_template_id}",
-                                        onchange: move |e| emit_template_id.set(e.value()),
+                                        onchange: move |e| {
+                                            let val = e.value();
+                                            emit_template_id.set(val.clone());
+                                            if let Some(t) = templates_list().iter().find(|t| t.id == val) {
+                                                if let Some(ref det) = patient_details() {
+                                                    emit_doc_title.set(format!("{} - {}", t.title, det.patient.full_name));
+                                                } else {
+                                                    emit_doc_title.set(t.title.clone());
+                                                }
+                                            }
+                                        },
                                         option { value: "", "Documento em Branco / Padrão" }
                                         for tpl in templates_list().iter() {
                                             option { value: "{tpl.id}", "{tpl.title}" }

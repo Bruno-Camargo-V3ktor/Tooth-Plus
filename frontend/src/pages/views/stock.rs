@@ -55,19 +55,11 @@ fn parse_currency_input(input: &str) -> i64 {
 }
 
 fn format_date_br(date_str: &str) -> String {
-    if let Ok(dt) = DateTime::parse_from_rfc3339(date_str) {
-        dt.with_timezone(&Local).format("%d/%m/%Y").to_string()
-    } else {
-        date_str.to_string()
-    }
+    crate::utils::format_date_br(date_str)
 }
 
 fn format_datetime_br(date_str: &str) -> String {
-    if let Ok(dt) = DateTime::parse_from_rfc3339(date_str) {
-        dt.with_timezone(&Local).format("%d/%m/%Y às %H:%M").to_string()
-    } else {
-        date_str.to_string()
-    }
+    crate::utils::format_datetime_br(date_str)
 }
 
 fn extract_filename(url: &str) -> String {

@@ -258,6 +258,28 @@ pub async fn create_patient_document(
         pdf_url = "https://placehold.co/800x1100/ffffff/0f172a?text=Documento+Clinico".to_string();
     }
 
+    #[derive(Deserialize, SurrealValue)]
+    struct PatBrief {
+        full_name: String,
+    }
+    let mut pat_res = db.query("SELECT full_name FROM type::record($pid)")
+        .bind(("pid", pat_rec.clone()))
+        .await
+        .map_err(|e| ApiError::Database(e.to_string()))?;
+    let pat_row: Option<PatBrief> = pat_res.take(0).ok().and_then(|mut v: Vec<PatBrief>| v.pop());
+    let p_name = pat_row.map(|p| p.full_name).unwrap_or_default();
+
+    let mut final_title = data.title.trim().to_string();
+    if !p_name.is_empty() {
+        final_title = final_title
+            .replace("{{paciente_nome}}", &p_name)
+            .replace("{{nome_paciente}}", &p_name);
+    }
+    let today_str = chrono::Local::now().format("%d/%m/%Y").to_string();
+    final_title = final_title
+        .replace("{{data_hoje}}", &today_str)
+        .replace("{{data_atual}}", &today_str);
+
     let doc_rec = data.doctor_user_id.as_deref().map(|d| parse_record_id("user", d))
         .or_else(|| Some(parse_record_id("user", &auth.id)));
     let appt_rec = data.appointment_id.as_deref().map(|a| parse_record_id("appointment", a));
@@ -286,7 +308,7 @@ pub async fn create_patient_document(
         .bind(("tid", tpl_rec))
         .bind(("uid", doc_rec))
         .bind(("aid", appt_rec))
-        .bind(("title", data.title.trim().to_string()))
+        .bind(("title", final_title))
         .bind(("dtype", data.document_type))
         .bind(("pdf_url", pdf_url))
         .bind(("st", initial_status))

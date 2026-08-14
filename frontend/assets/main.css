@@ -5046,6 +5046,279 @@ input[type="date"]:focus, .fin-range-date-input:focus {
     cursor: pointer;
 }
 
+/* =========================================================================
+   VISUAL PDF CANVAS & INTERACTIVE SIGNATURE DESIGNER
+   ========================================================================= */
+
+.template-editor-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 22px;
+}
+
+@media (max-width: 900px) {
+    .template-editor-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.pdf-canvas-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pdf-canvas-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #334155;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.pdf-canvas-hint {
+    font-size: 11.5px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.pdf-page-preview-wrapper {
+    background: #1e293b;
+    padding: 16px;
+    border-radius: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.pdf-page-canvas {
+    position: relative;
+    width: 100%;
+    max-width: 380px;
+    aspect-ratio: 1 / 1.414;
+    background: #ffffff;
+    border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    cursor: crosshair;
+    user-select: none;
+    overflow: hidden;
+}
+
+.pdf-canvas-letterhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 2px solid #0052cc;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+}
+
+.pdf-canvas-logo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #0052cc;
+    text-transform: uppercase;
+}
+
+.pdf-canvas-doc-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    text-align: center;
+    margin: 4px 0 8px 0;
+    text-transform: uppercase;
+}
+
+.pdf-simulated-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 9.5px;
+    line-height: 1.4;
+    color: #475569;
+}
+
+.pdf-tag-highlight {
+    background: #eff6ff;
+    color: #0052cc;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid #bfdbfe;
+    font-size: 8.5px;
+}
+
+.pdf-canvas-page-num {
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    font-size: 9px;
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.pdf-signature-marker {
+    position: absolute;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15);
+    z-index: 10;
+    transform: translate(-10%, -50%);
+    pointer-events: auto;
+    transition: all 0.15s ease;
+}
+
+.pdf-signature-marker.patient {
+    background: #eff6ff;
+    border: 2px dashed #0052cc;
+    color: #0052cc;
+}
+
+.pdf-signature-marker.doctor {
+    background: #ecfdf5;
+    border: 2px dashed #10b981;
+    color: #059669;
+}
+
+.marker-close-btn {
+    background: none;
+    border: none;
+    color: #ef4444;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.position-presets-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.btn-preset-anchor {
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-preset-anchor:hover {
+    background: #eff6ff;
+    border-color: #0052cc;
+    color: #0052cc;
+}
+
+.coord-sliders-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 12px;
+    border-radius: 10px;
+}
+
+.coord-slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.coord-slider-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #475569;
+}
+
+.coord-slider-input {
+    width: 100%;
+    accent-color: #0052cc;
+    cursor: pointer;
+}
+
+.variables-pills-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0;
+}
+
+.var-pill {
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0052cc;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    padding: 3px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.var-pill:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    transform: translateY(-1px);
+}
+
+/* Patient Auto-Fill Details Box */
+.patient-autofill-card {
+    background: #f0f9ff;
+    border: 1.5px solid #bae6fd;
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.patient-autofill-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.patient-autofill-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #0284c7;
+    text-transform: uppercase;
+}
+
+.patient-autofill-val {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
 .signature-tags-section {
     background: #f8fafc;
     border: 1px solid #e2e8f0;

@@ -4,7 +4,7 @@ use crate::api::{
 };
 use crate::components::icons::{
     IconCheckCircle, IconExternalLink, IconEye, IconFile, IconQrCode, IconRefresh, IconSearch,
-    IconShieldCheck, IconSignature, IconTrash,
+    IconShieldCheck, IconSignature, IconTooth, IconTrash,
 };
 use crate::permissions;
 use crate::{ActiveClinicState, SessionState};
@@ -74,6 +74,7 @@ pub fn DocumentsView() -> Element {
     let mut editing_template_id = use_signal(|| None::<String>);
     let mut qr_modal_doc = use_signal(|| None::<PatientDocument>);
     let mut pdf_preview_target = use_signal(|| None::<(String, String)>);
+    let mut selected_patient_obj = use_signal(|| None::<Patient>);
 
     // Form inputs: Emit Document
     let mut emit_patient_id = use_signal(String::new);
@@ -624,7 +625,16 @@ pub fn DocumentsView() -> Element {
                                     select {
                                         class: "select-field",
                                         value: "{emit_patient_id}",
-                                        onchange: move |e| emit_patient_id.set(e.value()),
+                                        onchange: move |e| {
+                                            let val = e.value();
+                                            emit_patient_id.set(val.clone());
+                                            if let Some(p) = patients_list().iter().find(|p| p.id == val).cloned() {
+                                                emit_doc_title.set(format!("Contrato de Prestação de Serviços - {}", p.full_name));
+                                                selected_patient_obj.set(Some(p));
+                                            } else {
+                                                selected_patient_obj.set(None);
+                                            }
+                                        },
                                         option { value: "", "Selecione o paciente..." }
                                         for p in patients_list().iter() {
                                             option { value: "{p.id}", "{p.full_name} ({p.document_cpf})" }
@@ -636,11 +646,45 @@ pub fn DocumentsView() -> Element {
                                     select {
                                         class: "select-field",
                                         value: "{emit_template_id}",
-                                        onchange: move |e| emit_template_id.set(e.value()),
+                                        onchange: move |e| {
+                                            let val = e.value();
+                                            emit_template_id.set(val.clone());
+                                            if let Some(t) = templates_list().iter().find(|t| t.id == val) {
+                                                if emit_doc_title().is_empty() || emit_doc_title().starts_with("Contrato") {
+                                                    if let Some(ref p) = selected_patient_obj() {
+                                                        emit_doc_title.set(format!("{} - {}", t.title, p.full_name));
+                                                    } else {
+                                                        emit_doc_title.set(t.title.clone());
+                                                    }
+                                                }
+                                            }
+                                        },
                                         option { value: "", "Documento em Branco / Padrão" }
                                         for tpl in templates_list().iter() {
                                             option { value: "{tpl.id}", "{tpl.title}" }
                                         }
+                                    }
+                                }
+                            }
+
+                            // Dynamic Patient Auto-Fill Details Box
+                            if let Some(ref p) = selected_patient_obj() {
+                                div { class: "patient-autofill-card",
+                                    div { class: "patient-autofill-item",
+                                        span { class: "patient-autofill-label", "Paciente Selecionado" }
+                                        span { class: "patient-autofill-val", "{p.full_name}" }
+                                    }
+                                    div { class: "patient-autofill-item",
+                                        span { class: "patient-autofill-label", "CPF Criptografado / Protegido" }
+                                        span { class: "patient-autofill-val", "{p.document_cpf}" }
+                                    }
+                                    div { class: "patient-autofill-item",
+                                        span { class: "patient-autofill-label", "Telefone / WhatsApp" }
+                                        span { class: "patient-autofill-val", "{p.phone}" }
+                                    }
+                                    div { class: "patient-autofill-item",
+                                        span { class: "patient-autofill-label", "Convênio" }
+                                        span { class: "patient-autofill-val", "{p.insurance_plan.as_deref().unwrap_or(\"Particular\")}" }
                                     }
                                 }
                             }
@@ -674,7 +718,7 @@ pub fn DocumentsView() -> Element {
                                     input {
                                         r#type: "text",
                                         class: "input-field",
-                                        placeholder: "https://... (ou deixe vazio)",
+                                        placeholder: "https://... (ou deixe vazio para usar o PDF do modelo)",
                                         value: "{emit_pdf_url}",
                                         oninput: move |e| emit_pdf_url.set(e.value()),
                                     }
@@ -691,171 +735,376 @@ pub fn DocumentsView() -> Element {
             }
 
             // =========================================================================
-            // MODAL: CRIAR / EDITAR MODELO DE CONTRATO
+            // MODAL: CRIAR / EDITAR MODELO DE CONTRATO (DESIGNER VISUAL COM CANVAS A4)
             // =========================================================================
             if is_template_modal_open() {
                 div { class: "modal-overlay",
                     div { class: "action-modal template-modal-wide",
                         div { class: "modal-header",
                             div {
-                                h2 { class: "modal-title", "Editor de Modelo de Contrato & Tags de Assinatura" }
-                                p { class: "modal-subtitle", "Defina o PDF base e posicione as assinaturas do Paciente e do Doutor." }
+                                h2 { class: "modal-title", "Editor Visual de Modelo & Posição de Assinaturas" }
+                                p { class: "modal-subtitle", "Visualize a página do documento, use as âncoras rápidas ou ajuste as coordenadas exatas." }
                             }
                             button { class: "modal-close", onclick: move |_| is_template_modal_open.set(false), "×" }
                         }
 
                         div { class: "modal-body",
-                            div { class: "form-row-2",
-                                div { class: "form-group",
-                                    label { class: "form-label", "Título do Modelo *" }
-                                    input {
-                                        r#type: "text",
-                                        class: "input-field",
-                                        placeholder: "Ex: Contrato de Prestação de Serviços Odontológicos",
-                                        value: "{tpl_title}",
-                                        oninput: move |e| tpl_title.set(e.value()),
+                            div { class: "template-editor-grid",
+                                // -------------------------------------------------------------
+                                // COLUNA ESQUERDA: CANVAS VISUAL DO DOCUMENTO (PREVIEW A4)
+                                // -------------------------------------------------------------
+                                div { class: "pdf-canvas-column",
+                                    div { class: "pdf-canvas-title",
+                                        span { "Pré-visualização do Documento (A4)" }
+                                        span { class: "pdf-canvas-hint", "Página {new_tag_page()}" }
                                     }
-                                }
-                                div { class: "form-group",
-                                    label { class: "form-label", "Categoria" }
-                                    select {
-                                        class: "select-field",
-                                        value: "{tpl_category}",
-                                        onchange: move |e| tpl_category.set(e.value()),
-                                        option { value: "contract", "Contrato Geral" }
-                                        option { value: "consent", "Termo de Consentimento (TCLE)" }
-                                        option { value: "orthodontics", "Ortodontia" }
-                                        option { value: "implant", "Implantodontia / Cirurgia" }
-                                        option { value: "aesthetic", "Harmonização & Estética" }
-                                    }
-                                }
-                            }
 
-                            div { class: "form-row-2",
-                                div { class: "form-group",
-                                    label { class: "form-label", "Descrição do Modelo" }
-                                    input {
-                                        r#type: "text",
-                                        class: "input-field",
-                                        placeholder: "Breve explicação sobre a finalidade deste contrato...",
-                                        value: "{tpl_desc}",
-                                        oninput: move |e| tpl_desc.set(e.value()),
+                                    div { class: "pdf-page-preview-wrapper",
+                                        div {
+                                            class: "pdf-page-canvas",
+                                            // Header
+                                            div { class: "pdf-canvas-letterhead",
+                                                div { class: "pdf-canvas-logo",
+                                                    IconTooth { size: 14, color: "#0052cc".to_string() }
+                                                    span { "Tooth Plus Dental Clinic" }
+                                                }
+                                                span { style: "font-size: 9px; color: #64748b;", "CNPJ: 00.000.000/0001-00" }
+                                            }
+
+                                            // Title
+                                            div { class: "pdf-canvas-doc-title",
+                                                if tpl_title().is_empty() {
+                                                    "CONTRATO DE PRESTAÇÃO DE SERVIÇOS ODONTOLÓGICOS"
+                                                } else {
+                                                    "{tpl_title().to_uppercase()}"
+                                                }
+                                            }
+
+                                            // Body Text Simulation
+                                            div { class: "pdf-simulated-text",
+                                                p {
+                                                    "Pelo presente instrumento particular, a clínica qualificada no cabeçalho e o paciente "
+                                                    span { class: "pdf-tag-highlight", "{{paciente_nome}}" }
+                                                    ", portador do CPF nº "
+                                                    span { class: "pdf-tag-highlight", "{{paciente_cpf}}" }
+                                                    ", residente no endereço "
+                                                    span { class: "pdf-tag-highlight", "{{paciente_endereco}}" }
+                                                    ", celebram o presente acordo de tratamento odontológico especializado."
+                                                }
+                                                p {
+                                                    "Cláusula 1ª - O profissional responsável "
+                                                    span { class: "pdf-tag-highlight", "{{doutor_nome}}" }
+                                                    " compromete-se a executar os procedimentos acordados com estrita observância das normas do CFO e biossegurança."
+                                                }
+                                                p {
+                                                    "Cláusula 2ª - As partes concordam com os valores pactuados e assinam eletronicamente o presente instrumento em "
+                                                    span { class: "pdf-tag-highlight", "{{data_hoje}}" }
+                                                    "."
+                                                }
+                                            }
+
+                                            // Configured Signature Markers Overlay
+                                            for (idx, tag) in tpl_signature_fields().iter().enumerate() {
+                                                if tag.page_number == new_tag_page() {
+                                                    div {
+                                                        class: if tag.signer_type == "patient" { "pdf-signature-marker patient" } else { "pdf-signature-marker doctor" },
+                                                        style: "left: {tag.x_pct}%; top: {tag.y_pct}%; width: {tag.width_pct}%;",
+                                                        if tag.signer_type == "patient" {
+                                                            IconSignature { size: 12, color: "#0052cc".to_string() }
+                                                        } else {
+                                                            IconShieldCheck { size: 12, color: "#059669".to_string() }
+                                                        }
+                                                        span { style: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{tag.label}" }
+                                                        button {
+                                                            class: "marker-close-btn",
+                                                            onclick: {
+                                                                let mut list = tpl_signature_fields();
+                                                                move |e: MouseEvent| {
+                                                                    e.stop_propagation();
+                                                                    if idx < list.len() {
+                                                                        list.remove(idx);
+                                                                        tpl_signature_fields.set(list.clone());
+                                                                    }
+                                                                }
+                                                            },
+                                                            "×"
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Active Indicator for Tag being positioned
+                                            div {
+                                                class: if new_tag_signer() == "patient" { "pdf-signature-marker patient" } else { "pdf-signature-marker doctor" },
+                                                style: "left: {new_tag_x()}%; top: {new_tag_y()}%; width: 32%; opacity: 0.85; border-style: solid; box-shadow: 0 0 0 3px rgba(0, 82, 204, 0.3);",
+                                                if new_tag_signer() == "patient" {
+                                                    IconSignature { size: 12, color: "#0052cc".to_string() }
+                                                } else {
+                                                    IconShieldCheck { size: 12, color: "#059669".to_string() }
+                                                }
+                                                span { style: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{new_tag_label()}" }
+                                                span { style: "font-size: 8.5px; opacity: 0.8;", "(Novo)" }
+                                            }
+
+                                            div { class: "pdf-canvas-page-num", "Página {new_tag_page()} de 1" }
+                                        }
                                     }
                                 }
-                                div { class: "form-group",
-                                    label { class: "form-label", "URL do PDF Base *" }
-                                    input {
-                                        r#type: "text",
-                                        class: "input-field",
-                                        placeholder: "https://... (URL do PDF template)",
-                                        value: "{tpl_pdf_url}",
-                                        oninput: move |e| tpl_pdf_url.set(e.value()),
+
+                                // -------------------------------------------------------------
+                                // COLUNA DIREITA: CONTROLES DE POSICIONAMENTO E VARIÁVEIS
+                                // -------------------------------------------------------------
+                                div { style: "display: flex; flex-direction: column; gap: 14px;",
+                                    div { class: "form-group",
+                                        label { class: "form-label", "Título do Modelo *" }
+                                        input {
+                                            r#type: "text",
+                                            class: "input-field",
+                                            placeholder: "Ex: Contrato de Prestação de Serviços",
+                                            value: "{tpl_title}",
+                                            oninput: move |e| tpl_title.set(e.value()),
+                                        }
                                     }
-                                }
-                            }
 
-                            // Interactive Signature Markers Manager
-                            div { class: "signature-tags-section",
-                                h3 { class: "section-subtitle", "Marcações de Assinatura no Documento" }
-                                p { class: "section-desc", "Adicione múltiplos pontos de assinatura para o Paciente e para o Doutor." }
-
-                                div { class: "add-tag-box",
                                     div { class: "form-row-2",
                                         div { class: "form-group",
-                                            label { class: "form-label", "Quem deve assinar?" }
+                                            label { class: "form-label", "Categoria" }
                                             select {
                                                 class: "select-field",
-                                                value: "{new_tag_signer}",
-                                                onchange: move |e| {
-                                                    let val = e.value();
-                                                    new_tag_signer.set(val.clone());
-                                                    if val == "patient" {
-                                                        new_tag_label.set("Assinatura do Paciente".into());
-                                                    } else {
-                                                        new_tag_label.set("Assinatura do Cirurgião-Dentista".into());
-                                                    }
-                                                },
-                                                option { value: "patient", "Paciente" }
-                                                option { value: "doctor", "Doutor / Responsável Técnico" }
+                                                value: "{tpl_category}",
+                                                onchange: move |e| tpl_category.set(e.value()),
+                                                option { value: "contract", "Contrato Geral" }
+                                                option { value: "consent", "Termo de Consentimento (TCLE)" }
+                                                option { value: "orthodontics", "Ortodontia" }
+                                                option { value: "implant", "Implantodontia / Cirurgia" }
+                                                option { value: "aesthetic", "Harmonização & Estética" }
                                             }
                                         }
                                         div { class: "form-group",
-                                            label { class: "form-label", "Rótulo da Assinatura" }
+                                            label { class: "form-label", "URL do PDF Base" }
                                             input {
                                                 r#type: "text",
                                                 class: "input-field",
-                                                placeholder: "Ex: Assinatura do Contratante",
-                                                value: "{new_tag_label}",
-                                                oninput: move |e| new_tag_label.set(e.value()),
+                                                placeholder: "https://... (URL do PDF)",
+                                                value: "{tpl_pdf_url}",
+                                                oninput: move |e| tpl_pdf_url.set(e.value()),
                                             }
                                         }
                                     }
 
-                                    div { class: "form-row-2", style: "margin-top: 10px;",
-                                        div { class: "form-group",
-                                            label { class: "form-label", "Página do PDF" }
-                                            input {
-                                                r#type: "number",
-                                                class: "input-field",
-                                                min: "1",
-                                                value: "{new_tag_page}",
-                                                oninput: move |e| {
-                                                    if let Ok(v) = e.value().parse::<u32>() {
-                                                        new_tag_page.set(v);
-                                                    }
-                                                },
-                                            }
+                                    // Dynamic Variables helper pills
+                                    div { class: "form-group",
+                                        label { class: "form-label", "Variáveis Dinâmicas do Paciente / Clínica" }
+                                        div { class: "variables-pills-row",
+                                            span { class: "var-pill", "{{paciente_nome}}" }
+                                            span { class: "var-pill", "{{paciente_cpf}}" }
+                                            span { class: "var-pill", "{{paciente_telefone}}" }
+                                            span { class: "var-pill", "{{paciente_endereco}}" }
+                                            span { class: "var-pill", "{{clinica_nome}}" }
+                                            span { class: "var-pill", "{{doutor_nome}}" }
+                                            span { class: "var-pill", "{{data_hoje}}" }
                                         }
-                                        div { class: "form-group", style: "display: flex; justify-content: flex-end; align-items: flex-end;",
+                                    }
+
+                                    // Signature Tags Designer Section
+                                    div { class: "signature-tags-section",
+                                        h3 { class: "section-subtitle", "Âncoras & Posicionamento de Assinatura" }
+                                        p { class: "section-desc", "Escolha uma posição rápida ou ajuste os controles abaixo:" }
+
+                                        // Preset Anchor Buttons
+                                        div { class: "position-presets-grid",
                                             button {
-                                                class: "btn-secondary",
-                                                style: "height: 42px; width: 100%; justify-content: center;",
+                                                r#type: "button",
+                                                class: "btn-preset-anchor",
                                                 onclick: move |_| {
-                                                    let mut list = tpl_signature_fields();
-                                                    let s_type = new_tag_signer();
-                                                    let default_x = if s_type == "patient" { 15.0 } else { 55.0 };
-                                                    let new_field = SignatureField {
-                                                        id: format!("tag_{}_{}", s_type, list.len() + 1),
-                                                        signer_type: s_type,
-                                                        page_number: new_tag_page(),
-                                                        x_pct: default_x,
-                                                        y_pct: 82.0,
-                                                        width_pct: 30.0,
-                                                        height_pct: 10.0,
-                                                        label: new_tag_label(),
-                                                        is_required: true,
-                                                    };
-                                                    list.push(new_field);
-                                                    tpl_signature_fields.set(list);
+                                                    new_tag_signer.set("patient".into());
+                                                    new_tag_x.set(10.0);
+                                                    new_tag_y.set(82.0);
+                                                    new_tag_label.set("Assinatura do Paciente".into());
                                                 },
                                                 IconSignature { size: 14, color: "#0052cc".to_string() }
-                                                " + Adicionar Ponto de Assinatura"
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // List of configured signature tags
-                                div { class: "tags-configured-list",
-                                    for (idx, tag) in tpl_signature_fields().iter().enumerate() {
-                                        div { class: if tag.signer_type == "patient" { "tag-row patient" } else { "tag-row doctor" },
-                                            div { class: "tag-info",
-                                                span { class: "tag-role-pill",
-                                                    if tag.signer_type == "patient" { "Paciente" } else { "Doutor" }
-                                                }
-                                                span { class: "tag-label-text", "{tag.label}" }
-                                                span { class: "tag-meta-sub", "Pág. {tag.page_number} (Posição: X={tag.x_pct}%, Y={tag.y_pct}%)" }
+                                                " Rodapé Esq. (Paciente)"
                                             }
                                             button {
-                                                class: "btn-remove-tag",
+                                                r#type: "button",
+                                                class: "btn-preset-anchor",
+                                                onclick: move |_| {
+                                                    new_tag_signer.set("doctor".into());
+                                                    new_tag_x.set(55.0);
+                                                    new_tag_y.set(82.0);
+                                                    new_tag_label.set("Dr(a). Responsável Técnico".into());
+                                                },
+                                                IconShieldCheck { size: 14, color: "#059669".to_string() }
+                                                " Rodapé Dir. (Doutor)"
+                                            }
+                                            button {
+                                                r#type: "button",
+                                                class: "btn-preset-anchor",
                                                 onclick: move |_| {
                                                     let mut list = tpl_signature_fields();
-                                                    if idx < list.len() {
-                                                        list.remove(idx);
-                                                        tpl_signature_fields.set(list);
-                                                    }
+                                                    list.push(SignatureField {
+                                                        id: format!("tag_patient_{}", list.len() + 1),
+                                                        signer_type: "patient".into(),
+                                                        page_number: new_tag_page(),
+                                                        x_pct: 10.0,
+                                                        y_pct: 82.0,
+                                                        width_pct: 32.0,
+                                                        height_pct: 10.0,
+                                                        label: "Assinatura do Paciente".into(),
+                                                        is_required: true,
+                                                    });
+                                                    list.push(SignatureField {
+                                                        id: format!("tag_doctor_{}", list.len() + 2),
+                                                        signer_type: "doctor".into(),
+                                                        page_number: new_tag_page(),
+                                                        x_pct: 55.0,
+                                                        y_pct: 82.0,
+                                                        width_pct: 32.0,
+                                                        height_pct: 10.0,
+                                                        label: "Dr(a). Responsável Técnico".into(),
+                                                        is_required: true,
+                                                    });
+                                                    tpl_signature_fields.set(list);
                                                 },
-                                                "Remover"
+                                                IconSignature { size: 14, color: "#f59e0b".to_string() }
+                                                " Dupla Assinatura (Ambos)"
+                                            }
+                                            button {
+                                                r#type: "button",
+                                                class: "btn-preset-anchor",
+                                                onclick: move |_| {
+                                                    new_tag_x.set(30.0);
+                                                    new_tag_y.set(86.0);
+                                                    new_tag_label.set("Assinatura Central".into());
+                                                },
+                                                IconSignature { size: 14, color: "#64748b".to_string() }
+                                                " Centralizado no Final"
+                                            }
+                                        }
+
+                                        // Coordinate Sliders Fine Tuning
+                                        div { class: "coord-sliders-row",
+                                            div { class: "coord-slider-group",
+                                                div { class: "coord-slider-label",
+                                                    span { "Posição Horizontal X" }
+                                                    span { "{new_tag_x():.0}%" }
+                                                }
+                                                input {
+                                                    r#type: "range",
+                                                    min: "5",
+                                                    max: "70",
+                                                    step: "1",
+                                                    class: "coord-slider-input",
+                                                    value: "{new_tag_x()}",
+                                                    oninput: move |e| {
+                                                        if let Ok(v) = e.value().parse::<f32>() {
+                                                            new_tag_x.set(v);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            div { class: "coord-slider-group",
+                                                div { class: "coord-slider-label",
+                                                    span { "Posição Vertical Y" }
+                                                    span { "{new_tag_y():.0}%" }
+                                                }
+                                                input {
+                                                    r#type: "range",
+                                                    min: "5",
+                                                    max: "90",
+                                                    step: "1",
+                                                    class: "coord-slider-input",
+                                                    value: "{new_tag_y()}",
+                                                    oninput: move |e| {
+                                                        if let Ok(v) = e.value().parse::<f32>() {
+                                                            new_tag_y.set(v);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Tag Settings Row
+                                        div { class: "form-row-2",
+                                            div { class: "form-group",
+                                                label { class: "form-label", "Quem Assina?" }
+                                                select {
+                                                    class: "select-field",
+                                                    value: "{new_tag_signer}",
+                                                    onchange: move |e| {
+                                                        let val = e.value();
+                                                        new_tag_signer.set(val.clone());
+                                                        if val == "patient" {
+                                                            new_tag_label.set("Assinatura do Paciente".into());
+                                                        } else {
+                                                            new_tag_label.set("Dr(a). Responsável Técnico".into());
+                                                        }
+                                                    },
+                                                    option { value: "patient", "Paciente" }
+                                                    option { value: "doctor", "Doutor / Responsável Técnico" }
+                                                }
+                                            }
+                                            div { class: "form-group",
+                                                label { class: "form-label", "Rótulo da Assinatura" }
+                                                input {
+                                                    r#type: "text",
+                                                    class: "input-field",
+                                                    value: "{new_tag_label}",
+                                                    oninput: move |e| new_tag_label.set(e.value()),
+                                                }
+                                            }
+                                        }
+
+                                        button {
+                                            r#type: "button",
+                                            class: "btn-secondary",
+                                            style: "height: 42px; width: 100%; justify-content: center; font-weight: 700;",
+                                            onclick: move |_| {
+                                                let mut list = tpl_signature_fields();
+                                                let s_type = new_tag_signer();
+                                                let new_field = SignatureField {
+                                                    id: format!("tag_{}_{}", s_type, list.len() + 1),
+                                                    signer_type: s_type,
+                                                    page_number: new_tag_page(),
+                                                    x_pct: new_tag_x(),
+                                                    y_pct: new_tag_y(),
+                                                    width_pct: 32.0,
+                                                    height_pct: 10.0,
+                                                    label: new_tag_label(),
+                                                    is_required: true,
+                                                };
+                                                list.push(new_field);
+                                                tpl_signature_fields.set(list);
+                                            },
+                                            IconSignature { size: 16, color: "#0052cc".to_string() }
+                                            " + Inserir Marcação na Página"
+                                        }
+
+                                        // Configured Tags List
+                                        div { class: "tags-configured-list",
+                                            for (idx, tag) in tpl_signature_fields().iter().enumerate() {
+                                                div { class: if tag.signer_type == "patient" { "tag-row patient" } else { "tag-row doctor" },
+                                                    div { class: "tag-info",
+                                                        span { class: "tag-role-pill",
+                                                            if tag.signer_type == "patient" { "Paciente" } else { "Doutor" }
+                                                        }
+                                                        span { class: "tag-label-text", "{tag.label}" }
+                                                        span { class: "tag-meta-sub", "Pág. {tag.page_number} (X={tag.x_pct:.0}%, Y={tag.y_pct:.0}%)" }
+                                                    }
+                                                    button {
+                                                        class: "btn-remove-tag",
+                                                        onclick: {
+                                                            let mut list = tpl_signature_fields();
+                                                            move |_| {
+                                                                if idx < list.len() {
+                                                                    list.remove(idx);
+                                                                    tpl_signature_fields.set(list.clone());
+                                                                }
+                                                            }
+                                                        },
+                                                        "Remover"
+                                                    }
+                                                }
                                             }
                                         }
                                     }
