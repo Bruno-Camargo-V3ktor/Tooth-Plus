@@ -250,9 +250,10 @@ pub async fn list_appointments(
         if let Some(ref u_filter) = query.user_id {
             if !u_filter.trim().is_empty()
                 && u_filter != "all"
-                && !db_assigned
-                    .iter()
-                    .any(|a| a.user_id.to_sql().contains(u_filter) || a.user_id.key.to_sql().contains(u_filter))
+                && !db_assigned.iter().any(|a| {
+                    a.user_id.to_sql().contains(u_filter)
+                        || a.user_id.key.to_sql().contains(u_filter)
+                })
             {
                 continue;
             }
@@ -550,7 +551,10 @@ pub async fn update_appointment(
     }
 
     if let Some(dur) = data.duration_minutes {
-        patch.insert("duration_minutes".into(), serde_json::Value::Number(dur.into()));
+        patch.insert(
+            "duration_minutes".into(),
+            serde_json::Value::Number(dur.into()),
+        );
     }
 
     if let Some(ref at) = data.appointment_type {
@@ -700,11 +704,13 @@ pub async fn update_appointment_status(
                 .ok();
 
                 if qty_to_deduct > 0 {
-                    db.query("UPDATE type::record($item_id) SET current_stock = current_stock - $qty")
-                        .bind(("item_id", item_rec.clone()))
-                        .bind(("qty", qty_to_deduct))
-                        .await
-                        .ok();
+                    db.query(
+                        "UPDATE type::record($item_id) SET current_stock = current_stock - $qty",
+                    )
+                    .bind(("item_id", item_rec.clone()))
+                    .bind(("qty", qty_to_deduct))
+                    .await
+                    .ok();
 
                     db.query(
                         "CREATE stock_movement SET
@@ -728,7 +734,9 @@ pub async fn update_appointment_status(
         }
 
         let mut fin_resp = db
-            .query("SELECT financial_amount_cents, financial_type, title FROM type::record($app_id)")
+            .query(
+                "SELECT financial_amount_cents, financial_type, title FROM type::record($app_id)",
+            )
             .bind(("app_id", app_rec.clone()))
             .await
             .map_err(|_| ApiError::Database("Falha ao verificar dados financeiros.".into()))?;
@@ -768,8 +776,7 @@ pub async fn update_appointment_status(
                         .await
                         .unwrap();
 
-                    let assigned: Vec<DbAssignedRecord> =
-                        assigned_resp.take(0).unwrap_or_default();
+                    let assigned: Vec<DbAssignedRecord> = assigned_resp.take(0).unwrap_or_default();
 
                     for a in assigned {
                         let commission_cents = (amount * a.split_percentage as i64) / 100;
@@ -791,10 +798,7 @@ pub async fn update_appointment_status(
                             .bind(("amount", commission_cents))
                             .bind((
                                 "desc",
-                                format!(
-                                    "Comissão ({}%): {}",
-                                    a.split_percentage, fi.title
-                                ),
+                                format!("Comissão ({}%): {}", a.split_percentage, fi.title),
                             ))
                             .await
                             .ok();

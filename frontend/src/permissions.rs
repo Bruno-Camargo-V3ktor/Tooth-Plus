@@ -85,15 +85,14 @@ pub const ALL_PERMISSION_GROUPS: &[PermGroup] = &[
     },
 ];
 
-pub fn has_permission(
-    session: &SessionState,
-    active: &ActiveClinicState,
-    perm: &str,
-) -> bool {
+pub fn has_permission(session: &SessionState, active: &ActiveClinicState, perm: &str) -> bool {
     let (Some(sess), Some(clinic)) = (session, active) else {
         return false;
     };
-    let access = sess.clinics.iter().find(|c| c.clinic_id == clinic.clinic_id);
+    let access = sess
+        .clinics
+        .iter()
+        .find(|c| c.clinic_id == clinic.clinic_id);
     let Some(a) = access else { return false };
     if a.role == "admin" || a.permissions.iter().any(|p| p == "admin:all") {
         return true;

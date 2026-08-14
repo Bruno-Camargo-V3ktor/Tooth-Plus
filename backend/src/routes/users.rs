@@ -81,8 +81,8 @@ pub async fn create_user(
 
     let hashed_password =
         hash_password(&data.password_plain).map_err(|e| ApiError::Internal(e.to_string()))?;
-    let encrypted_cpf = encrypt_deterministic(&data.document_cpf)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let encrypted_cpf =
+        encrypt_deterministic(&data.document_cpf).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let mut create_resp = db
         .query(
@@ -221,10 +221,7 @@ pub async fn update_user(
         patch.insert("document_cpf".into(), serde_json::Value::String(encrypted));
     }
     if let Some(v) = data.professional_registry {
-        patch.insert(
-            "professional_registry".into(),
-            serde_json::Value::String(v),
-        );
+        patch.insert("professional_registry".into(), serde_json::Value::String(v));
     }
 
     if !patch.is_empty() {
@@ -292,13 +289,13 @@ pub async fn update_user(
             if !normalized_new_cids.contains(existing_cid) {
                 let target_rec_id = parse_record_id("user", &target_id);
                 let old_cid_id = parse_record_id("clinic", existing_cid);
-                db.query(
-                    "DELETE works_at WHERE in = $target_id AND out = $clinic",
-                )
-                .bind(("target_id", target_rec_id))
-                .bind(("clinic", old_cid_id))
-                .await
-                .map_err(|_| ApiError::Database("Falha ao remover vínculo com clínica.".into()))?;
+                db.query("DELETE works_at WHERE in = $target_id AND out = $clinic")
+                    .bind(("target_id", target_rec_id))
+                    .bind(("clinic", old_cid_id))
+                    .await
+                    .map_err(|_| {
+                        ApiError::Database("Falha ao remover vínculo com clínica.".into())
+                    })?;
             }
         }
 
@@ -319,7 +316,9 @@ pub async fn update_user(
                 .bind(("role", user_role.clone()))
                 .bind(("permissions", user_perms.clone()))
                 .await
-                .map_err(|_| ApiError::Database("Falha ao vincular usuário à nova clínica.".into()))?;
+                .map_err(|_| {
+                    ApiError::Database("Falha ao vincular usuário à nova clínica.".into())
+                })?;
             }
         }
     }

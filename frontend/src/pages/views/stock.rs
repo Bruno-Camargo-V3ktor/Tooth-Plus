@@ -6,7 +6,7 @@ use crate::components::icons::{
 };
 use crate::permissions::has_permission;
 use crate::{ActiveClinicState, SessionState};
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::{DateTime, Local, Utc};
 use dioxus::prelude::*;
 use shared::files::FileUploadRequest;
@@ -63,7 +63,10 @@ fn format_datetime_br(date_str: &str) -> String {
 }
 
 fn extract_filename(url: &str) -> String {
-    url.rsplit('/').next().unwrap_or("documento.pdf").to_string()
+    url.rsplit('/')
+        .next()
+        .unwrap_or("documento.pdf")
+        .to_string()
 }
 
 #[component]
@@ -104,7 +107,10 @@ pub fn StockView() -> Element {
     let mut is_delete_modal_open = use_signal(|| false);
     let mut delete_target_item = use_signal(|| None::<InventoryItem>);
 
-    let clinic_id = clinic.as_ref().map(|c| c.clinic_id.clone()).unwrap_or_default();
+    let clinic_id = clinic
+        .as_ref()
+        .map(|c| c.clinic_id.clone())
+        .unwrap_or_default();
     let token = sess.as_ref().map(|s| s.token.clone()).unwrap_or_default();
 
     let cid_res = clinic_id.clone();
@@ -694,11 +700,36 @@ fn InventoryItemModal(
     let is_editing = item.is_some();
     let initial_item = item.clone();
 
-    let mut item_type = use_signal(|| initial_item.as_ref().map(|i| i.item_type).unwrap_or(ItemType::Material));
-    let mut name = use_signal(|| initial_item.as_ref().map(|i| i.name.clone()).unwrap_or_default());
-    let mut unit_type = use_signal(|| initial_item.as_ref().map(|i| i.unit_type.clone()).unwrap_or_else(|| "unidade".to_string()));
-    let mut current_stock = use_signal(|| initial_item.as_ref().map(|i| i.current_stock.to_string()).unwrap_or_else(|| "0".to_string()));
-    let mut min_stock = use_signal(|| initial_item.as_ref().map(|i| i.min_stock.to_string()).unwrap_or_else(|| "5".to_string()));
+    let mut item_type = use_signal(|| {
+        initial_item
+            .as_ref()
+            .map(|i| i.item_type)
+            .unwrap_or(ItemType::Material)
+    });
+    let mut name = use_signal(|| {
+        initial_item
+            .as_ref()
+            .map(|i| i.name.clone())
+            .unwrap_or_default()
+    });
+    let mut unit_type = use_signal(|| {
+        initial_item
+            .as_ref()
+            .map(|i| i.unit_type.clone())
+            .unwrap_or_else(|| "unidade".to_string())
+    });
+    let mut current_stock = use_signal(|| {
+        initial_item
+            .as_ref()
+            .map(|i| i.current_stock.to_string())
+            .unwrap_or_else(|| "0".to_string())
+    });
+    let mut min_stock = use_signal(|| {
+        initial_item
+            .as_ref()
+            .map(|i| i.min_stock.to_string())
+            .unwrap_or_else(|| "5".to_string())
+    });
     let mut cost_price_input = use_signal(|| {
         if let Some(ref it) = initial_item {
             format_currency(it.cost_price_cents)
@@ -706,34 +737,77 @@ fn InventoryItemModal(
             "R$ 0,00".to_string()
         }
     });
-    let mut manufacturer = use_signal(|| initial_item.as_ref().and_then(|i| i.manufacturer.clone()).unwrap_or_default());
+    let mut manufacturer = use_signal(|| {
+        initial_item
+            .as_ref()
+            .and_then(|i| i.manufacturer.clone())
+            .unwrap_or_default()
+    });
 
     let mut expiration_date = use_signal(|| {
-        initial_item.as_ref().and_then(|i| i.expiration_date.as_ref()).map(|s| {
-            if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-                dt.format("%Y-%m-%d").to_string()
-            } else { s.clone() }
-        }).unwrap_or_default()
+        initial_item
+            .as_ref()
+            .and_then(|i| i.expiration_date.as_ref())
+            .map(|s| {
+                if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+                    dt.format("%Y-%m-%d").to_string()
+                } else {
+                    s.clone()
+                }
+            })
+            .unwrap_or_default()
     });
-    let mut batch_number = use_signal(|| initial_item.as_ref().and_then(|i| i.batch_number.clone()).unwrap_or_default());
+    let mut batch_number = use_signal(|| {
+        initial_item
+            .as_ref()
+            .and_then(|i| i.batch_number.clone())
+            .unwrap_or_default()
+    });
 
-    let mut serial_number = use_signal(|| initial_item.as_ref().and_then(|i| i.serial_number.clone()).unwrap_or_default());
+    let mut serial_number = use_signal(|| {
+        initial_item
+            .as_ref()
+            .and_then(|i| i.serial_number.clone())
+            .unwrap_or_default()
+    });
     let mut warranty_until = use_signal(|| {
-        initial_item.as_ref().and_then(|i| i.warranty_until.as_ref()).map(|s| {
-            if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-                dt.format("%Y-%m-%d").to_string()
-            } else { s.clone() }
-        }).unwrap_or_default()
+        initial_item
+            .as_ref()
+            .and_then(|i| i.warranty_until.as_ref())
+            .map(|s| {
+                if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+                    dt.format("%Y-%m-%d").to_string()
+                } else {
+                    s.clone()
+                }
+            })
+            .unwrap_or_default()
     });
     let mut next_maintenance_date = use_signal(|| {
-        initial_item.as_ref().and_then(|i| i.next_maintenance_date.as_ref()).map(|s| {
-            if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-                dt.format("%Y-%m-%d").to_string()
-            } else { s.clone() }
-        }).unwrap_or_default()
+        initial_item
+            .as_ref()
+            .and_then(|i| i.next_maintenance_date.as_ref())
+            .map(|s| {
+                if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+                    dt.format("%Y-%m-%d").to_string()
+                } else {
+                    s.clone()
+                }
+            })
+            .unwrap_or_default()
     });
-    let mut equipment_status = use_signal(|| initial_item.as_ref().and_then(|i| i.equipment_status).unwrap_or(EquipmentStatus::Active));
-    let mut attachments = use_signal(|| initial_item.as_ref().map(|i| i.attachments.clone()).unwrap_or_default());
+    let mut equipment_status = use_signal(|| {
+        initial_item
+            .as_ref()
+            .and_then(|i| i.equipment_status)
+            .unwrap_or(EquipmentStatus::Active)
+    });
+    let mut attachments = use_signal(|| {
+        initial_item
+            .as_ref()
+            .map(|i| i.attachments.clone())
+            .unwrap_or_default()
+    });
 
     let mut is_uploading_doc = use_signal(|| false);
     let mut is_submitting = use_signal(|| false);
@@ -818,9 +892,21 @@ fn InventoryItemModal(
             None
         };
 
-        let mfg_opt = if manufacturer().trim().is_empty() { None } else { Some(manufacturer().trim().to_string()) };
-        let batch_opt = if batch_number().trim().is_empty() { None } else { Some(batch_number().trim().to_string()) };
-        let serial_opt = if serial_number().trim().is_empty() { None } else { Some(serial_number().trim().to_string()) };
+        let mfg_opt = if manufacturer().trim().is_empty() {
+            None
+        } else {
+            Some(manufacturer().trim().to_string())
+        };
+        let batch_opt = if batch_number().trim().is_empty() {
+            None
+        } else {
+            Some(batch_number().trim().to_string())
+        };
+        let serial_opt = if serial_number().trim().is_empty() {
+            None
+        } else {
+            Some(serial_number().trim().to_string())
+        };
 
         is_submitting.set(true);
         form_error.set(None);
@@ -847,7 +933,11 @@ fn InventoryItemModal(
                     serial_number: serial_opt,
                     warranty_until: war_rfc,
                     next_maintenance_date: maint_rfc,
-                    equipment_status: if item_type() == ItemType::Equipment { Some(equipment_status()) } else { None },
+                    equipment_status: if item_type() == ItemType::Equipment {
+                        Some(equipment_status())
+                    } else {
+                        None
+                    },
                 };
 
                 match api::update_stock_item(&tok_spawn, &edit_id, req).await {
@@ -873,7 +963,11 @@ fn InventoryItemModal(
                     serial_number: serial_opt,
                     warranty_until: war_rfc,
                     next_maintenance_date: maint_rfc,
-                    equipment_status: if item_type() == ItemType::Equipment { Some(equipment_status()) } else { None },
+                    equipment_status: if item_type() == ItemType::Equipment {
+                        Some(equipment_status())
+                    } else {
+                        None
+                    },
                 };
 
                 match api::create_stock_item(&tok_spawn, req).await {
@@ -1180,9 +1274,10 @@ fn StockMovementModal(
     on_close: EventHandler<()>,
     on_saved: EventHandler<()>,
 ) -> Element {
-    let initial_item_id = target_item.as_ref().map(|i| i.id.clone()).unwrap_or_else(|| {
-        all_items.first().map(|i| i.id.clone()).unwrap_or_default()
-    });
+    let initial_item_id = target_item
+        .as_ref()
+        .map(|i| i.id.clone())
+        .unwrap_or_else(|| all_items.first().map(|i| i.id.clone()).unwrap_or_default());
 
     let mut selected_item_id = use_signal(|| initial_item_id);
     let mut movement_type = use_signal(|| MovementType::PurchaseIn);
@@ -1249,13 +1344,22 @@ fn StockMovementModal(
             return;
         }
 
-        let is_in = movement_type() == MovementType::PurchaseIn || movement_type() == MovementType::Adjustment;
+        let is_in = movement_type() == MovementType::PurchaseIn
+            || movement_type() == MovementType::Adjustment;
         let qty_signed = if is_in { qty_num } else { -qty_num };
 
         let cost_cents = parse_currency_input(&unit_cost_input());
-        let cost_opt = if cost_cents > 0 { Some(cost_cents) } else { None };
-        let inv_opt = if invoice_number().trim().is_empty() { None } else { Some(invoice_number().trim().to_string()) };
-        
+        let cost_opt = if cost_cents > 0 {
+            Some(cost_cents)
+        } else {
+            None
+        };
+        let inv_opt = if invoice_number().trim().is_empty() {
+            None
+        } else {
+            Some(invoice_number().trim().to_string())
+        };
+
         let mut final_notes = notes().trim().to_string();
         if let Some(ref doc_url) = doc_attachment_url() {
             if !final_notes.is_empty() {
@@ -1264,7 +1368,11 @@ fn StockMovementModal(
                 final_notes = format!("[Comprovante: {}]", doc_url);
             }
         }
-        let notes_opt = if final_notes.is_empty() { None } else { Some(final_notes) };
+        let notes_opt = if final_notes.is_empty() {
+            None
+        } else {
+            Some(final_notes)
+        };
 
         is_submitting.set(true);
         form_error.set(None);

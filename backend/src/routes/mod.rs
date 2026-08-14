@@ -6,4 +6,3 @@ pub mod finance;
 pub mod patients;
 pub mod stock;
 pub mod users;
-

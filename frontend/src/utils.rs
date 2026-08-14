@@ -31,7 +31,10 @@ pub fn format_datetime_br(date_str: &str) -> String {
     }
 
     if let Ok(dt) = DateTime::parse_from_rfc3339(trimmed) {
-        return dt.with_timezone(&Local).format("%d/%m/%Y às %H:%M").to_string();
+        return dt
+            .with_timezone(&Local)
+            .format("%d/%m/%Y às %H:%M")
+            .to_string();
     }
 
     let clean: String = trimmed.chars().take(10).collect();
@@ -97,7 +100,11 @@ pub fn replace_template_variables(
         let p_phone = &p.phone;
         let p_email = p.email.as_deref().unwrap_or("Não informado");
         let p_insurance = p.insurance_plan.as_deref().unwrap_or("Particular");
-        let p_birth = p.birth_date.as_deref().map(format_date_br).unwrap_or_else(|| "Não informada".into());
+        let p_birth = p
+            .birth_date
+            .as_deref()
+            .map(format_date_br)
+            .unwrap_or_else(|| "Não informada".into());
 
         let address_full = format!(
             "{}, {} - {}, {} - {} (CEP: {})",

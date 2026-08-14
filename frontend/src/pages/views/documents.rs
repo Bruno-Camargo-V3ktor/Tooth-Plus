@@ -52,8 +52,20 @@ pub fn DocumentsView() -> Element {
     let can_delete = permissions::has_permission(&sess, &clinic, "documents:delete");
 
     let token = sess.as_ref().map(|s| s.token.clone()).unwrap_or_default();
-    let clinic_id = clinic.as_ref().map(|c| c.clinic_id.clone()).unwrap_or_default();
+    let clinic_id = clinic
+        .as_ref()
+        .map(|c| c.clinic_id.clone())
+        .unwrap_or_default();
 
+    if !can_read {
+        return rsx! {
+            div { class: "permission-denied-state",
+                div { class: "permission-denied-icon", "🔒" }
+                h2 { class: "permission-denied-title", "Acesso Restrito" }
+                p { class: "permission-denied-desc", "Você não possui permissão para acessar os documentos desta unidade." }
+            }
+        };
+    }
 
     let mut active_main_tab = use_signal(|| "emitted".to_string()); // "emitted" | "templates"
     let mut documents_list = use_signal(Vec::<PatientDocument>::new);
@@ -87,7 +99,9 @@ pub fn DocumentsView() -> Element {
     let mut tpl_title = use_signal(String::new);
     let mut tpl_category = use_signal(|| "contract".to_string());
     let mut tpl_desc = use_signal(String::new);
-    let mut tpl_pdf_url = use_signal(|| "https://placehold.co/800x1100/ffffff/0f172a?text=Modelo+de+Contrato".to_string());
+    let mut tpl_pdf_url = use_signal(|| {
+        "https://placehold.co/800x1100/ffffff/0f172a?text=Modelo+de+Contrato".to_string()
+    });
     let mut tpl_signature_fields = use_signal(Vec::<SignatureField>::new);
 
     // New Signature Tag Form
@@ -152,8 +166,9 @@ pub fn DocumentsView() -> Element {
         tpl_title.set(String::new());
         tpl_category.set("contract".to_string());
         tpl_desc.set(String::new());
-        tpl_pdf_url.set("https://placehold.co/800x1100/ffffff/0f172a?text=Modelo+de+Contrato".to_string());
-        
+        tpl_pdf_url
+            .set("https://placehold.co/800x1100/ffffff/0f172a?text=Modelo+de+Contrato".to_string());
+
         let default_fields = vec![
             SignatureField {
                 id: "sig_pat_1".to_string(),
@@ -203,7 +218,11 @@ pub fn DocumentsView() -> Element {
                         clinic_id: cid,
                         title: tpl_title(),
                         category: tpl_category(),
-                        description: if tpl_desc().is_empty() { None } else { Some(tpl_desc()) },
+                        description: if tpl_desc().is_empty() {
+                            None
+                        } else {
+                            Some(tpl_desc())
+                        },
                         pdf_url: tpl_pdf_url(),
                         signature_fields: tpl_signature_fields(),
                     };
@@ -217,7 +236,11 @@ pub fn DocumentsView() -> Element {
                         clinic_id: cid,
                         title: tpl_title(),
                         category: tpl_category(),
-                        description: if tpl_desc().is_empty() { None } else { Some(tpl_desc()) },
+                        description: if tpl_desc().is_empty() {
+                            None
+                        } else {
+                            Some(tpl_desc())
+                        },
                         pdf_url: tpl_pdf_url(),
                         signature_fields: tpl_signature_fields(),
                     };
@@ -245,8 +268,16 @@ pub fn DocumentsView() -> Element {
                 return;
             }
 
-            let tpl_id = if emit_template_id().is_empty() { None } else { Some(emit_template_id()) };
-            let pdf = if emit_pdf_url().is_empty() { None } else { Some(emit_pdf_url()) };
+            let tpl_id = if emit_template_id().is_empty() {
+                None
+            } else {
+                Some(emit_template_id())
+            };
+            let pdf = if emit_pdf_url().is_empty() {
+                None
+            } else {
+                Some(emit_pdf_url())
+            };
 
             let req = CreatePatientDocumentRequest {
                 clinic_id: cid,
@@ -254,7 +285,11 @@ pub fn DocumentsView() -> Element {
                 template_id: tpl_id,
                 doctor_user_id: None,
                 appointment_id: None,
-                title: if emit_doc_title().is_empty() { "Termo de Consentimento Odontológico".to_string() } else { emit_doc_title() },
+                title: if emit_doc_title().is_empty() {
+                    "Termo de Consentimento Odontológico".to_string()
+                } else {
+                    emit_doc_title()
+                },
                 document_type: emit_doc_type(),
                 pdf_url: pdf,
             };
@@ -1177,35 +1212,48 @@ pub fn DocumentsView() -> Element {
 
             // =========================================================================
             // MODAL: VISUALIZADOR DE PDF / DOCUMENTO
+            // No Dioxus Desktop, iframes nativos não funcionam — usamos painel de link externo.
             // =========================================================================
             if let Some((ref url, ref title)) = pdf_preview_target() {
                 div { class: "modal-overlay",
+                    onclick: move |_| pdf_preview_target.set(None),
                     div { class: "action-modal pdf-viewer-modal",
+                        onclick: move |e| e.stop_propagation(),
                         div { class: "modal-header",
                             div {
                                 h2 { class: "modal-title", "{title}" }
-                                p { class: "modal-subtitle", "Visualização do documento em PDF" }
+                                p { class: "modal-subtitle", "Documento PDF" }
                             }
-                            div { style: "display: flex; align-items: center; gap: 10px;",
+                            button {
+                                class: "modal-close",
+                                onclick: move |_| pdf_preview_target.set(None),
+                                "×"
+                            }
+                        }
+                        div { class: "modal-body",
+                            div { class: "pdf-desktop-viewer",
+                                div { class: "pdf-desktop-icon",
+                                    IconFile { size: 56, color: "#0052cc".to_string() }
+                                }
+                                p { class: "pdf-desktop-title", "{title}" }
+                                p { class: "pdf-desktop-hint",
+                                    "O visualizador de PDF inline está disponível apenas na versão web. Clique abaixo para abrir o documento no seu navegador."
+                                }
                                 a {
                                     href: "{url}",
                                     target: "_blank",
-                                    class: "btn-secondary",
-                                    IconExternalLink { size: 14, color: "#0052cc".to_string() }
-                                    " Abrir em Nova Aba"
+                                    class: "btn-primary pdf-open-btn",
+                                    IconExternalLink { size: 16, color: "white".to_string() }
+                                    " Abrir PDF no Navegador"
                                 }
-                                button {
-                                    class: "modal-close",
-                                    onclick: move |_| pdf_preview_target.set(None),
-                                    "×"
+                                div { class: "pdf-link-copy-row",
+                                    input {
+                                        r#type: "text",
+                                        readonly: true,
+                                        class: "modern-input-field",
+                                        value: "{url}",
+                                    }
                                 }
-                            }
-                        }
-                        div { class: "modal-body pdf-iframe-container",
-                            iframe {
-                                src: "{url}",
-                                title: "{title}",
-                                style: "width: 100%; height: 100%; min-height: 520px; border: none;",
                             }
                         }
                     }

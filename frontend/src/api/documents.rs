@@ -43,7 +43,11 @@ pub async fn fetch_documents(
             .map_err(|_| "Erro ao processar lista de documentos.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao carregar documentos.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao carregar documentos.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -67,7 +71,11 @@ pub async fn create_patient_document(
             .map_err(|_| "Erro ao processar documento emitido.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao emitir documento.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao emitir documento.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -77,7 +85,10 @@ pub async fn delete_patient_document(
     clinic_id: &str,
 ) -> Result<(), String> {
     let clean_id = doc_id.strip_prefix("patient_document:").unwrap_or(doc_id);
-    let url = format!("{}/documents/{}?clinic_id={}", API_BASE, clean_id, clinic_id);
+    let url = format!(
+        "{}/documents/{}?clinic_id={}",
+        API_BASE, clean_id, clinic_id
+    );
 
     let res = get_client()
         .delete(&url)
@@ -90,7 +101,11 @@ pub async fn delete_patient_document(
         Ok(())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao excluir documento.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao excluir documento.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -113,7 +128,11 @@ pub async fn fetch_templates(
             .map_err(|_| "Erro ao processar modelos de contrato.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao carregar modelos.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao carregar modelos.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -137,7 +156,11 @@ pub async fn create_template(
             .map_err(|_| "Erro ao processar modelo criado.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao criar modelo de contrato.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao criar modelo de contrato.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -163,17 +186,20 @@ pub async fn update_template(
             .map_err(|_| "Erro ao processar modelo atualizado.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao atualizar modelo.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao atualizar modelo.".into()
+        } else {
+            err
+        })
     }
 }
 
-pub async fn delete_template(
-    token: &str,
-    tpl_id: &str,
-    clinic_id: &str,
-) -> Result<(), String> {
+pub async fn delete_template(token: &str, tpl_id: &str, clinic_id: &str) -> Result<(), String> {
     let clean_id = tpl_id.strip_prefix("contract_template:").unwrap_or(tpl_id);
-    let url = format!("{}/documents/templates/{}?clinic_id={}", API_BASE, clean_id, clinic_id);
+    let url = format!(
+        "{}/documents/templates/{}?clinic_id={}",
+        API_BASE, clean_id, clinic_id
+    );
 
     let res = get_client()
         .delete(&url)
@@ -186,7 +212,11 @@ pub async fn delete_template(
         Ok(())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao excluir modelo.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao excluir modelo.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -215,13 +245,18 @@ pub async fn upload_document_pdf(
         struct UploadRes {
             url: String,
         }
-        let data = res.json::<UploadRes>()
+        let data = res
+            .json::<UploadRes>()
             .await
             .map_err(|_| "Erro ao ler resposta do upload.".to_string())?;
         Ok(data.url)
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao fazer upload do documento.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao fazer upload do documento.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -246,7 +281,11 @@ pub async fn fetch_public_signing_document(
             .map_err(|_| "Erro ao processar contrato de assinatura.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Documento de assinatura inválido ou expirado.".into() } else { err })
+        Err(if err.is_empty() {
+            "Documento de assinatura inválido ou expirado.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -269,7 +308,11 @@ pub async fn auth_patient_signing(
             .map_err(|_| "Erro ao autenticar paciente.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "CPF ou senha inválidos para este contrato.".into() } else { err })
+        Err(if err.is_empty() {
+            "CPF ou senha inválidos para este contrato.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -292,13 +335,15 @@ pub async fn auth_doctor_signing(
             .map_err(|_| "Erro ao autenticar profissional.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Usuário ou senha incorretos.".into() } else { err })
+        Err(if err.is_empty() {
+            "Usuário ou senha incorretos.".into()
+        } else {
+            err
+        })
     }
 }
 
-pub async fn request_signing_otp(
-    signing_token: &str,
-) -> Result<String, String> {
+pub async fn request_signing_otp(signing_token: &str) -> Result<String, String> {
     let url = format!("{}/public/sign/{}/request-otp", API_BASE, signing_token);
 
     let res = get_client()
@@ -311,7 +356,11 @@ pub async fn request_signing_otp(
         Ok("Código OTP enviado via WhatsApp com sucesso.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao disparar código WhatsApp.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao disparar código WhatsApp.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -319,7 +368,10 @@ pub async fn submit_digital_signature(
     signing_token: &str,
     req: SubmitSignatureRequest,
 ) -> Result<PatientDocument, String> {
-    let url = format!("{}/public/sign/{}/submit-signature", API_BASE, signing_token);
+    let url = format!(
+        "{}/public/sign/{}/submit-signature",
+        API_BASE, signing_token
+    );
 
     let res = get_client()
         .post(&url)
@@ -334,6 +386,10 @@ pub async fn submit_digital_signature(
             .map_err(|_| "Erro ao processar confirmação de assinatura.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao registrar assinatura digital.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao registrar assinatura digital.".into()
+        } else {
+            err
+        })
     }
 }

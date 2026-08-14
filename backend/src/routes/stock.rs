@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use actix_web::{delete, get, post, put, web, HttpResponse};
+use actix_web::{HttpResponse, delete, get, post, put, web};
 use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 use shared::files::FileUploadRequest;
@@ -8,11 +7,12 @@ use shared::stock::{
     ItemType, MovementType, StockAlertItem, StockAlertSeverity, StockAlertType, StockKPIs,
     StockQuery, StockResponse, UpdateInventoryItemRequest,
 };
+use std::sync::Arc;
 use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
 use crate::db::Db;
 use crate::error::ApiError;
-use crate::security::auth_guard::{check_permission, AuthenticatedUser};
+use crate::security::auth_guard::{AuthenticatedUser, check_permission};
 use crate::storage::StorageProvider;
 
 #[derive(Deserialize, Debug, SurrealValue)]
@@ -320,14 +320,14 @@ pub async fn get_stock_data(
     let items: Vec<InventoryItem> = db_items.into_iter().map(map_db_item).collect();
 
     let mut mov_res = db
-        .query("SELECT * FROM stock_movement WHERE clinic_id = $cid ORDER BY created_at DESC LIMIT 30")
+        .query(
+            "SELECT * FROM stock_movement WHERE clinic_id = $cid ORDER BY created_at DESC LIMIT 30",
+        )
         .bind(("cid", clinic_rec_id))
         .await
         .map_err(|e| ApiError::Internal(format!("Erro ao consultar movimentações: {}", e)))?;
 
-    let db_movements: Vec<DbStockMovementRow> = mov_res
-        .take(0)
-        .unwrap_or_default();
+    let db_movements: Vec<DbStockMovementRow> = mov_res.take(0).unwrap_or_default();
 
     let recent_movements: Vec<shared::stock::StockMovement> = db_movements
         .into_iter()
@@ -349,17 +349,40 @@ pub async fn get_stock_data(
 
     let alerts = calculate_alerts(&items);
 
-    let materials_count = items.iter().filter(|i| i.item_type == ItemType::Material).count();
-    let chemicals_count = items.iter().filter(|i| i.item_type == ItemType::Chemical).count();
-    let equipments_count = items.iter().filter(|i| i.item_type == ItemType::Equipment).count();
+    let materials_count = items
+        .iter()
+        .filter(|i| i.item_type == ItemType::Material)
+        .count();
+    let chemicals_count = items
+        .iter()
+        .filter(|i| i.item_type == ItemType::Chemical)
+        .count();
+    let equipments_count = items
+        .iter()
+        .filter(|i| i.item_type == ItemType::Equipment)
+        .count();
     let total_inventory_value_cents: i64 = items
         .iter()
         .map(|i| (i.current_stock.max(0) as i64) * i.cost_price_cents)
         .sum();
 
-    let low_stock_alerts_count = alerts.iter().filter(|a| a.alert_type == StockAlertType::LowStock).count();
-    let expiring_alerts_count = alerts.iter().filter(|a| a.alert_type == StockAlertType::ExpiringSoon || a.alert_type == StockAlertType::Expired).count();
-    let maintenance_alerts_count = alerts.iter().filter(|a| a.alert_type == StockAlertType::MaintenanceDue || a.alert_type == StockAlertType::MaintenanceOverdue).count();
+    let low_stock_alerts_count = alerts
+        .iter()
+        .filter(|a| a.alert_type == StockAlertType::LowStock)
+        .count();
+    let expiring_alerts_count = alerts
+        .iter()
+        .filter(|a| {
+            a.alert_type == StockAlertType::ExpiringSoon || a.alert_type == StockAlertType::Expired
+        })
+        .count();
+    let maintenance_alerts_count = alerts
+        .iter()
+        .filter(|a| {
+            a.alert_type == StockAlertType::MaintenanceDue
+                || a.alert_type == StockAlertType::MaintenanceOverdue
+        })
+        .count();
 
     let kpis = StockKPIs {
         total_items_count: items.len(),
@@ -475,13 +498,16 @@ pub async fn create_stock_item(
         .map_err(|e| ApiError::Internal(format!("Erro ao recuperar item criado: {}", e)))?;
 
     let Some(item_row) = created else {
-        return Err(ApiError::Internal("Falha ao registrar item no banco.".into()));
+        return Err(ApiError::Internal(
+            "Falha ao registrar item no banco.".into(),
+        ));
     };
 
     if req.current_stock > 0 {
         let auth_rec_id = parse_record_id("user", &auth.id);
         let _ = db
-            .query("
+            .query(
+                "
                 CREATE stock_movement CONTENT {
                     item_id: $item_id,
                     clinic_id: $cid,
@@ -492,7 +518,8 @@ pub async fn create_stock_item(
                     notes: 'Estoque inicial cadastrado',
                     created_at: time::now()
                 }
-            ")
+            ",
+            )
             .bind(("item_id", item_row.id.clone()))
             .bind(("cid", clinic_rec_id))
             .bind(("uid", auth_rec_id))
@@ -709,11 +736,13 @@ pub async fn create_stock_movement(
         .bind(("invoice", req.invoice_number.clone()))
         .bind(("notes", req.notes.clone()))
         .await
-        .map_err(|e| ApiError::Internal(format!("Erro ao registrar movimentação de estoque: {}", e)))?;
+        .map_err(|e| {
+            ApiError::Internal(format!("Erro ao registrar movimentação de estoque: {}", e))
+        })?;
 
-    let created: Option<DbStockMovementRow> = res
-        .take(3)
-        .map_err(|e| ApiError::Internal(format!("Erro ao ler comprovante de movimentação: {}", e)))?;
+    let created: Option<DbStockMovementRow> = res.take(3).map_err(|e| {
+        ApiError::Internal(format!("Erro ao ler comprovante de movimentação: {}", e))
+    })?;
 
     let Some(mov) = created else {
         return Ok(HttpResponse::Ok().body("Movimentação registrada com sucesso."));

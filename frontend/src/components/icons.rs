@@ -408,7 +408,3 @@ pub fn IconFolder(size: i32, color: String) -> Element {
         }
     }
 }
-
-
-
-

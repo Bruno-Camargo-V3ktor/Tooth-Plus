@@ -8,4 +8,3 @@ pub mod models;
 pub mod patients;
 pub mod stock;
 pub mod users;
-

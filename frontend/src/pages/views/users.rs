@@ -18,20 +18,14 @@ pub fn UsersView() -> Element {
     let can_write = permissions::has_permission(&sess, &clinic, "users:write");
     let can_manage_status = permissions::has_permission(&sess, &clinic, "users:manage_status");
 
-    let token = sess
-        .as_ref()
-        .map(|s| s.token.clone())
-        .unwrap_or_default();
+    let token = sess.as_ref().map(|s| s.token.clone()).unwrap_or_default();
 
     let clinic_id = clinic
         .as_ref()
         .map(|c| c.clinic_id.clone())
         .unwrap_or_default();
 
-    let available_clinics = sess
-        .as_ref()
-        .map(|s| s.clinics.clone())
-        .unwrap_or_default();
+    let available_clinics = sess.as_ref().map(|s| s.clinics.clone()).unwrap_or_default();
 
     let tok_res = token.clone();
     let cid_res = clinic_id.clone();
@@ -69,8 +63,12 @@ pub fn UsersView() -> Element {
     let filtered_users: Vec<UserResponse> = current_users
         .into_iter()
         .filter(|u| {
-            u.full_name.to_lowercase().contains(&search_val.to_lowercase())
-                || u.username.to_lowercase().contains(&search_val.to_lowercase())
+            u.full_name
+                .to_lowercase()
+                .contains(&search_val.to_lowercase())
+                || u.username
+                    .to_lowercase()
+                    .contains(&search_val.to_lowercase())
         })
         .collect();
 
@@ -224,7 +222,11 @@ fn UserFormModal(
 ) -> Element {
     let editing_user = user();
     let is_edit_mode = editing_user.is_some();
-    let title = if is_edit_mode { "Editar Membro" } else { "Adicionar Novo Membro" };
+    let title = if is_edit_mode {
+        "Editar Membro"
+    } else {
+        "Adicionar Novo Membro"
+    };
 
     let mut full_name = use_signal(|| String::new());
     let mut username = use_signal(|| String::new());
@@ -469,11 +471,18 @@ fn PermissionCategoryAccordion(
     mut selected: Signal<Vec<String>>,
 ) -> Element {
     let mut expanded = use_signal(|| false);
-    let chevron_class = if expanded() { "chevron-icon rotated" } else { "chevron-icon" };
+    let chevron_class = if expanded() {
+        "chevron-icon rotated"
+    } else {
+        "chevron-icon"
+    };
 
     let total = permissions.len();
     let current_selected = selected();
-    let count_selected = permissions.iter().filter(|(k, _)| current_selected.contains(k)).count();
+    let count_selected = permissions
+        .iter()
+        .filter(|(k, _)| current_selected.contains(k))
+        .count();
     let all_keys: Vec<String> = permissions.iter().map(|(k, _)| k.clone()).collect();
     let all_selected = count_selected == total && total > 0;
 

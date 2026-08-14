@@ -6001,3 +6001,51 @@ input[type="date"]:focus, .fin-range-date-input:focus {
 
 
 
+
+/* =====================================================================
+   PDF DESKTOP VIEWER — Substitui iframe no Dioxus Desktop
+   ===================================================================== */
+.pdf-desktop-viewer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 32px 24px;
+    text-align: center;
+}
+
+.pdf-desktop-icon {
+    opacity: 0.7;
+}
+
+.pdf-desktop-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+    max-width: 420px;
+}
+
+.pdf-desktop-hint {
+    font-size: 13px;
+    color: #64748b;
+    margin: 0;
+    max-width: 380px;
+    line-height: 1.6;
+}
+
+.pdf-open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+}
+
+.pdf-link-copy-row {
+    width: 100%;
+    max-width: 420px;
+}

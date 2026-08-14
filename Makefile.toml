@@ -1,10 +1,13 @@
 [config]
 skip_core_tasks = true
+default_to_workspace = false
 
 [tasks.default]
+workspace = false
 alias = "dev"
 
 [tasks.setup]
+workspace = false
 description = "Verifica dependências locais do ecossistema Rust e SurrealDB"
 script = '''
 echo "==> Verificando dependências..."
@@ -13,11 +16,13 @@ which dx || echo "Instalando Dioxus CLI..." && cargo install dioxus-cli --locked
 '''
 
 [tasks.db]
+workspace = false
 description = "Inicia o banco de dados SurrealDB localmente com RocksDB"
 command = "surreal"
 args = ["start", "--user", "root", "--pass", "root", "rocksdb://database.db"]
 
 [tasks.migrate]
+workspace = false
 description = "Executa as migrações e seed no SurrealDB"
 script = '''
 echo "==> Aplicando migrações no SurrealDB..."
@@ -32,22 +37,26 @@ echo "==> Banco de dados migrado e populado com sucesso!"
 '''
 
 [tasks.backend]
+workspace = false
 description = "Inicia o backend Actix-Web"
 command = "cargo"
 args = ["run", "-p", "backend"]
 
 [tasks.frontend]
+workspace = false
 description = "Inicia o frontend Dioxus"
 cwd = "frontend"
 command = "dx"
 args = ["serve"]
 
 [tasks.check]
+workspace = false
 description = "Verifica a compilação do workspace completo"
 command = "cargo"
 args = ["check", "--workspace"]
 
 [tasks.dev]
+workspace = false
 description = "Inicia todo o ambiente de desenvolvimento (DB, Backend e Frontend)"
 script = '''
 echo "=========================================================="
@@ -61,8 +70,13 @@ if ! curl -s http://127.0.0.1:8000/health > /dev/null 2>&1; then
     sleep 2
 fi
 
-# 2. Executa migrações
-echo "==> Executando migrações..."
+# 2. Executa todas as migrações em sequência
+echo "==> Executando migrações (001→006 + seed)..."
+curl -s -X POST -u root:root -H "Accept: application/json" -d "USE NS saas; USE DB \`tooth-smile\`; $(cat migrations/001_iam_init.surql)" http://127.0.0.1:8000/sql > /dev/null
+curl -s -X POST -u root:root -H "Accept: application/json" -d "USE NS saas; USE DB \`tooth-smile\`; $(cat migrations/002_create_clinics.surql)" http://127.0.0.1:8000/sql > /dev/null
+curl -s -X POST -u root:root -H "Accept: application/json" -d "USE NS saas; USE DB \`tooth-smile\`; $(cat migrations/003_agenda.surql)" http://127.0.0.1:8000/sql > /dev/null
+curl -s -X POST -u root:root -H "Accept: application/json" -d "USE NS saas; USE DB \`tooth-smile\`; $(cat migrations/004_finance.surql)" http://127.0.0.1:8000/sql > /dev/null
+curl -s -X POST -u root:root -H "Accept: application/json" -d "USE NS saas; USE DB \`tooth-smile\`; $(cat migrations/005_stock.surql)" http://127.0.0.1:8000/sql > /dev/null
 curl -s -X POST -u root:root -H "Accept: application/json" -d "USE NS saas; USE DB \`tooth-smile\`; $(cat migrations/006_patients_and_documents.surql)" http://127.0.0.1:8000/sql > /dev/null
 curl -s -X POST -u root:root -H "Accept: application/json" -d "USE NS saas; USE DB \`tooth-smile\`; $(cat migrations/seed.surql)" http://127.0.0.1:8000/sql > /dev/null
 

@@ -56,7 +56,10 @@ pub async fn fetch_agenda_resources(
     token: &str,
     clinic_id: &str,
 ) -> Result<AgendaResourcesResponse, String> {
-    let url = format!("{}/appointments/resources?clinic_id={}", API_BASE, clinic_id);
+    let url = format!(
+        "{}/appointments/resources?clinic_id={}",
+        API_BASE, clinic_id
+    );
 
     let res = get_client()
         .get(&url)
@@ -74,10 +77,7 @@ pub async fn fetch_agenda_resources(
     }
 }
 
-pub async fn create_appointment(
-    token: &str,
-    req: CreateAppointmentRequest,
-) -> Result<(), String> {
+pub async fn create_appointment(token: &str, req: CreateAppointmentRequest) -> Result<(), String> {
     let url = format!("{}/appointments", API_BASE);
 
     let res = get_client()
@@ -130,7 +130,10 @@ pub async fn update_appointment_status(
     clinic_id: &str,
     req: UpdateAppointmentStatusRequest,
 ) -> Result<(), String> {
-    let url = format!("{}/appointments/{}/status?clinic_id={}", API_BASE, id, clinic_id);
+    let url = format!(
+        "{}/appointments/{}/status?clinic_id={}",
+        API_BASE, id, clinic_id
+    );
 
     let res = get_client()
         .patch(&url)
@@ -147,11 +150,7 @@ pub async fn update_appointment_status(
     }
 }
 
-pub async fn delete_appointment(
-    token: &str,
-    id: &str,
-    clinic_id: &str,
-) -> Result<(), String> {
+pub async fn delete_appointment(token: &str, id: &str, clinic_id: &str) -> Result<(), String> {
     let url = format!("{}/appointments/{}?clinic_id={}", API_BASE, id, clinic_id);
 
     let res = get_client()

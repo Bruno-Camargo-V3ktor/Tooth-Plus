@@ -53,8 +53,24 @@ pub fn PatientsView() -> Element {
     let can_delete = permissions::has_permission(&sess, &clinic, "patients:delete");
 
     let token = sess.as_ref().map(|s| s.token.clone()).unwrap_or_default();
-    let clinic_id = clinic.as_ref().map(|c| c.clinic_id.clone()).unwrap_or_default();
-    let clinic_name = clinic.as_ref().map(|c| c.trading_name.clone()).unwrap_or_default();
+    let clinic_id = clinic
+        .as_ref()
+        .map(|c| c.clinic_id.clone())
+        .unwrap_or_default();
+    let clinic_name = clinic
+        .as_ref()
+        .map(|c| c.trading_name.clone())
+        .unwrap_or_default();
+
+    if !can_read {
+        return rsx! {
+            div { class: "permission-denied-state",
+                div { class: "permission-denied-icon", "🔒" }
+                h2 { class: "permission-denied-title", "Acesso Restrito" }
+                p { class: "permission-denied-desc", "Você não possui permissão para acessar os prontuários desta unidade." }
+            }
+        };
+    }
 
     let mut patients_list = use_signal(Vec::<Patient>::new);
     let mut kpis = use_signal(PatientKpis::default);
@@ -148,7 +164,17 @@ pub fn PatientsView() -> Element {
             let search = search_query();
             spawn(async move {
                 is_loading.set(true);
-                match fetch_patients(&t, &cid, if search.is_empty() { None } else { Some(&search) }).await {
+                match fetch_patients(
+                    &t,
+                    &cid,
+                    if search.is_empty() {
+                        None
+                    } else {
+                        Some(&search)
+                    },
+                )
+                .await
+                {
                     Ok(resp) => {
                         patients_list.set(resp.items);
                         kpis.set(resp.kpis);
@@ -173,14 +199,21 @@ pub fn PatientsView() -> Element {
                 match fetch_patient_details(&t, &pid, &cid).await {
                     Ok(details) => {
                         if let Some(ref a) = details.anamnesis {
-                            anam_allergies_penicillin.set(a.allergies.contains(&"Penicilina".to_string()));
-                            anam_allergies_dipyrone.set(a.allergies.contains(&"Dipirona".to_string()));
+                            anam_allergies_penicillin
+                                .set(a.allergies.contains(&"Penicilina".to_string()));
+                            anam_allergies_dipyrone
+                                .set(a.allergies.contains(&"Dipirona".to_string()));
                             anam_allergies_latex.set(a.allergies.contains(&"Látex".to_string()));
-                            anam_allergies_anesthetic.set(a.allergies.contains(&"Anestésico Local".to_string()));
-                            anam_medications.set(a.continuous_medications.clone().unwrap_or_default());
-                            anam_disease_diabetes.set(a.systemic_diseases.contains(&"Diabetes".to_string()));
-                            anam_disease_hypertension.set(a.systemic_diseases.contains(&"Hipertensão".to_string()));
-                            anam_disease_cardiac.set(a.systemic_diseases.contains(&"Cardiopatia".to_string()));
+                            anam_allergies_anesthetic
+                                .set(a.allergies.contains(&"Anestésico Local".to_string()));
+                            anam_medications
+                                .set(a.continuous_medications.clone().unwrap_or_default());
+                            anam_disease_diabetes
+                                .set(a.systemic_diseases.contains(&"Diabetes".to_string()));
+                            anam_disease_hypertension
+                                .set(a.systemic_diseases.contains(&"Hipertensão".to_string()));
+                            anam_disease_cardiac
+                                .set(a.systemic_diseases.contains(&"Cardiopatia".to_string()));
                             anam_is_pregnant.set(a.is_pregnant);
                             anam_bleeding_disorder.set(a.has_bleeding_disorder);
                             anam_smoker.set(a.smoker);
@@ -276,29 +309,88 @@ pub fn PatientsView() -> Element {
                 full_name: form_full_name(),
                 document_cpf: form_cpf(),
                 phone: form_phone(),
-                email: if form_email().is_empty() { None } else { Some(form_email()) },
-                birth_date: if form_birth_date().is_empty() { None } else { Some(form_birth_date()) },
+                email: if form_email().is_empty() {
+                    None
+                } else {
+                    Some(form_email())
+                },
+                birth_date: if form_birth_date().is_empty() {
+                    None
+                } else {
+                    Some(form_birth_date())
+                },
                 gender: Some(form_gender()),
                 marital_status: Some(form_marital_status()),
-                profession: if form_profession().is_empty() { None } else { Some(form_profession()) },
-                emergency_contact_name: if form_em_name().is_empty() { None } else { Some(form_em_name()) },
-                emergency_contact_phone: if form_em_phone().is_empty() { None } else { Some(form_em_phone()) },
-                address_street: if form_street().is_empty() { None } else { Some(form_street()) },
-                address_number: if form_num().is_empty() { None } else { Some(form_num()) },
-                address_complement: if form_comp().is_empty() { None } else { Some(form_comp()) },
-                address_neighborhood: if form_neigh().is_empty() { None } else { Some(form_neigh()) },
-                address_city: if form_city().is_empty() { None } else { Some(form_city()) },
-                address_state: if form_state().is_empty() { None } else { Some(form_state()) },
-                address_zip: if form_zip().is_empty() { None } else { Some(form_zip()) },
+                profession: if form_profession().is_empty() {
+                    None
+                } else {
+                    Some(form_profession())
+                },
+                emergency_contact_name: if form_em_name().is_empty() {
+                    None
+                } else {
+                    Some(form_em_name())
+                },
+                emergency_contact_phone: if form_em_phone().is_empty() {
+                    None
+                } else {
+                    Some(form_em_phone())
+                },
+                address_street: if form_street().is_empty() {
+                    None
+                } else {
+                    Some(form_street())
+                },
+                address_number: if form_num().is_empty() {
+                    None
+                } else {
+                    Some(form_num())
+                },
+                address_complement: if form_comp().is_empty() {
+                    None
+                } else {
+                    Some(form_comp())
+                },
+                address_neighborhood: if form_neigh().is_empty() {
+                    None
+                } else {
+                    Some(form_neigh())
+                },
+                address_city: if form_city().is_empty() {
+                    None
+                } else {
+                    Some(form_city())
+                },
+                address_state: if form_state().is_empty() {
+                    None
+                } else {
+                    Some(form_state())
+                },
+                address_zip: if form_zip().is_empty() {
+                    None
+                } else {
+                    Some(form_zip())
+                },
                 insurance_plan: Some(form_insurance()),
-                insurance_number: if form_insurance_num().is_empty() { None } else { Some(form_insurance_num()) },
-                signature_password: if form_signature_pwd().is_empty() { None } else { Some(form_signature_pwd()) },
+                insurance_number: if form_insurance_num().is_empty() {
+                    None
+                } else {
+                    Some(form_insurance_num())
+                },
+                signature_password: if form_signature_pwd().is_empty() {
+                    None
+                } else {
+                    Some(form_signature_pwd())
+                },
             };
 
             spawn(async move {
                 match create_patient(&t, req).await {
                     Ok(p) => {
-                        toast_msg.set(Some(format!("Paciente {} cadastrado com sucesso!", p.full_name)));
+                        toast_msg.set(Some(format!(
+                            "Paciente {} cadastrado com sucesso!",
+                            p.full_name
+                        )));
                         is_create_patient_open.set(false);
                         lp_call();
                     }
@@ -321,27 +413,53 @@ pub fn PatientsView() -> Element {
             let pid = selected_patient_id().unwrap_or_default();
 
             let mut allergies = Vec::new();
-            if anam_allergies_penicillin() { allergies.push("Penicilina".to_string()); }
-            if anam_allergies_dipyrone() { allergies.push("Dipirona".to_string()); }
-            if anam_allergies_latex() { allergies.push("Látex".to_string()); }
-            if anam_allergies_anesthetic() { allergies.push("Anestésico Local".to_string()); }
+            if anam_allergies_penicillin() {
+                allergies.push("Penicilina".to_string());
+            }
+            if anam_allergies_dipyrone() {
+                allergies.push("Dipirona".to_string());
+            }
+            if anam_allergies_latex() {
+                allergies.push("Látex".to_string());
+            }
+            if anam_allergies_anesthetic() {
+                allergies.push("Anestésico Local".to_string());
+            }
 
             let mut systemic = Vec::new();
-            if anam_disease_diabetes() { systemic.push("Diabetes".to_string()); }
-            if anam_disease_hypertension() { systemic.push("Hipertensão".to_string()); }
-            if anam_disease_cardiac() { systemic.push("Cardiopatia".to_string()); }
+            if anam_disease_diabetes() {
+                systemic.push("Diabetes".to_string());
+            }
+            if anam_disease_hypertension() {
+                systemic.push("Hipertensão".to_string());
+            }
+            if anam_disease_cardiac() {
+                systemic.push("Cardiopatia".to_string());
+            }
 
             let req = SaveAnamnesisRequest {
                 clinic_id: cid,
                 allergies,
-                continuous_medications: if anam_medications().is_empty() { None } else { Some(anam_medications()) },
+                continuous_medications: if anam_medications().is_empty() {
+                    None
+                } else {
+                    Some(anam_medications())
+                },
                 systemic_diseases: systemic,
                 is_pregnant: anam_is_pregnant(),
                 has_bleeding_disorder: anam_bleeding_disorder(),
                 smoker: anam_smoker(),
                 bruxism: anam_bruxism(),
-                chief_complaint: if anam_complaint().is_empty() { None } else { Some(anam_complaint()) },
-                clinical_notes: if anam_clinical_notes().is_empty() { None } else { Some(anam_clinical_notes()) },
+                chief_complaint: if anam_complaint().is_empty() {
+                    None
+                } else {
+                    Some(anam_complaint())
+                },
+                clinical_notes: if anam_clinical_notes().is_empty() {
+                    None
+                } else {
+                    Some(anam_clinical_notes())
+                },
             };
 
             spawn(async move {
@@ -369,7 +487,9 @@ pub fn PatientsView() -> Element {
             let pid = selected_patient_id().unwrap_or_default();
 
             let files = if exam_file_url().is_empty() {
-                vec!["https://placehold.co/600x400/1e293b/ffffff?text=Exame+Radiologico".to_string()]
+                vec![
+                    "https://placehold.co/600x400/1e293b/ffffff?text=Exame+Radiologico".to_string(),
+                ]
             } else {
                 vec![exam_file_url()]
             };
@@ -381,7 +501,11 @@ pub fn PatientsView() -> Element {
                 requested_date: None,
                 result_date: None,
                 file_urls: files,
-                clinical_interpretation: if exam_notes().is_empty() { None } else { Some(exam_notes()) },
+                clinical_interpretation: if exam_notes().is_empty() {
+                    None
+                } else {
+                    Some(exam_notes())
+                },
             };
 
             spawn(async move {
@@ -409,17 +533,30 @@ pub fn PatientsView() -> Element {
             let lpd_call = lpd.clone();
             let pid = selected_patient_id().unwrap_or_default();
 
-            let cost_cents = (treat_cost_reais().replace('.', "").replace(',', ".").parse::<f64>().unwrap_or(0.0) * 100.0) as i64;
+            let cost_cents = (treat_cost_reais()
+                .replace('.', "")
+                .replace(',', ".")
+                .parse::<f64>()
+                .unwrap_or(0.0)
+                * 100.0) as i64;
 
             let req = CreatePatientTreatmentRequest {
                 clinic_id: cid,
                 dentist_user_id: None,
                 appointment_id: None,
                 procedure_name: treat_procedure(),
-                tooth_number: if treat_tooth().is_empty() { None } else { Some(treat_tooth()) },
+                tooth_number: if treat_tooth().is_empty() {
+                    None
+                } else {
+                    Some(treat_tooth())
+                },
                 status: treat_status(),
                 cost_cents,
-                clinical_notes: if treat_notes().is_empty() { None } else { Some(treat_notes()) },
+                clinical_notes: if treat_notes().is_empty() {
+                    None
+                } else {
+                    Some(treat_notes())
+                },
             };
 
             spawn(async move {
@@ -449,8 +586,16 @@ pub fn PatientsView() -> Element {
             let lp_call = lp.clone();
             let pid = selected_patient_id().unwrap_or_default();
 
-            let tpl_id = if emit_template_id().is_empty() { None } else { Some(emit_template_id()) };
-            let pdf = if emit_static_pdf_url().is_empty() { None } else { Some(emit_static_pdf_url()) };
+            let tpl_id = if emit_template_id().is_empty() {
+                None
+            } else {
+                Some(emit_template_id())
+            };
+            let pdf = if emit_static_pdf_url().is_empty() {
+                None
+            } else {
+                Some(emit_static_pdf_url())
+            };
 
             let req = CreatePatientDocumentRequest {
                 clinic_id: cid,
@@ -1613,32 +1758,36 @@ pub fn PatientsView() -> Element {
             // =========================================================================
             if let Some((ref url, ref title)) = pdf_preview_target() {
                 div { class: "modal-overlay",
+                    onclick: move |_| pdf_preview_target.set(None),
                     div { class: "action-modal pdf-viewer-modal",
+                        onclick: move |e| e.stop_propagation(),
                         div { class: "modal-header",
                             div {
                                 h2 { class: "modal-title", "{title}" }
-                                p { class: "modal-subtitle", "Visualização do documento em PDF" }
+                                p { class: "modal-subtitle", "Documento PDF" }
                             }
-                            div { style: "display: flex; align-items: center; gap: 10px;",
+                            button {
+                                class: "modal-close",
+                                onclick: move |_| pdf_preview_target.set(None),
+                                "×"
+                            }
+                        }
+                        div { class: "modal-body",
+                            div { class: "pdf-desktop-viewer",
+                                div { class: "pdf-desktop-icon",
+                                    IconFile { size: 56, color: "#0052cc".to_string() }
+                                }
+                                p { class: "pdf-desktop-title", "{title}" }
+                                p { class: "pdf-desktop-hint",
+                                    "Clique abaixo para abrir o documento no navegador."
+                                }
                                 a {
                                     href: "{url}",
                                     target: "_blank",
-                                    class: "btn-secondary",
-                                    IconExternalLink { size: 14, color: "#0052cc".to_string() }
-                                    " Abrir em Nova Aba"
+                                    class: "btn-primary pdf-open-btn",
+                                    IconExternalLink { size: 16, color: "white".to_string() }
+                                    " Abrir PDF no Navegador"
                                 }
-                                button {
-                                    class: "modal-close",
-                                    onclick: move |_| pdf_preview_target.set(None),
-                                    "×"
-                                }
-                            }
-                        }
-                        div { class: "modal-body pdf-iframe-container",
-                            iframe {
-                                src: "{url}",
-                                title: "{title}",
-                                style: "width: 100%; height: 100%; min-height: 520px; border: none;",
                             }
                         }
                     }

@@ -24,13 +24,11 @@ pub fn AgendaView() -> Element {
 
     let can_read = permissions::has_permission(&sess, &clinic, "appointments:read");
     let can_write = permissions::has_permission(&sess, &clinic, "appointments:write");
-    let can_delete = permissions::has_permission(&sess, &clinic, "appointments:delete") || can_write;
+    let can_delete =
+        permissions::has_permission(&sess, &clinic, "appointments:delete") || can_write;
     let can_finance = permissions::has_permission(&sess, &clinic, "appointments:finance");
 
-    let token = sess
-        .as_ref()
-        .map(|s| s.token.clone())
-        .unwrap_or_default();
+    let token = sess.as_ref().map(|s| s.token.clone()).unwrap_or_default();
 
     let clinic_id = clinic
         .as_ref()
@@ -133,10 +131,9 @@ pub fn AgendaView() -> Element {
             }
 
             if f_member != "all" {
-                let has_member = app
-                    .assigned_users
-                    .iter()
-                    .any(|u| u.user_id == f_member || u.user_id.ends_with(&format!(":{}", f_member)));
+                let has_member = app.assigned_users.iter().any(|u| {
+                    u.user_id == f_member || u.user_id.ends_with(&format!(":{}", f_member))
+                });
                 if !has_member {
                     return false;
                 }
@@ -187,7 +184,9 @@ pub fn AgendaView() -> Element {
         .count();
     let pending_count = filtered_appointments
         .iter()
-        .filter(|a| a.status == AppointmentStatus::Pending || a.status == AppointmentStatus::Confirmed)
+        .filter(|a| {
+            a.status == AppointmentStatus::Pending || a.status == AppointmentStatus::Confirmed
+        })
         .count();
 
     let handle_prev_day = move |_| {
@@ -208,20 +207,21 @@ pub fn AgendaView() -> Element {
         selected_date.set(chrono::Local::now().format("%Y-%m-%d").to_string());
     };
 
-    let date_label = if let Ok(parsed_d) = chrono::NaiveDate::parse_from_str(&selected_date(), "%Y-%m-%d") {
-        let weekday_pt = match parsed_d.weekday() {
-            chrono::Weekday::Mon => "Segunda-feira",
-            chrono::Weekday::Tue => "Terça-feira",
-            chrono::Weekday::Wed => "Quarta-feira",
-            chrono::Weekday::Thu => "Quinta-feira",
-            chrono::Weekday::Fri => "Sexta-feira",
-            chrono::Weekday::Sat => "Sábado",
-            chrono::Weekday::Sun => "Domingo",
+    let date_label =
+        if let Ok(parsed_d) = chrono::NaiveDate::parse_from_str(&selected_date(), "%Y-%m-%d") {
+            let weekday_pt = match parsed_d.weekday() {
+                chrono::Weekday::Mon => "Segunda-feira",
+                chrono::Weekday::Tue => "Terça-feira",
+                chrono::Weekday::Wed => "Quarta-feira",
+                chrono::Weekday::Thu => "Quinta-feira",
+                chrono::Weekday::Fri => "Sexta-feira",
+                chrono::Weekday::Sat => "Sábado",
+                chrono::Weekday::Sun => "Domingo",
+            };
+            format!("{} • {}", parsed_d.format("%d/%m/%Y"), weekday_pt)
+        } else {
+            selected_date()
         };
-        format!("{} • {}", parsed_d.format("%d/%m/%Y"), weekday_pt)
-    } else {
-        selected_date()
-    };
 
     rsx! {
         div { class: "agenda-page-container",
@@ -479,7 +479,12 @@ fn HourlySlotRow(
         .filter(|a| {
             if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&a.scheduled_for) {
                 let local_dt = dt.with_timezone(&chrono::Local);
-                local_dt.format("%H").to_string().parse::<i32>().unwrap_or(-1) == hour
+                local_dt
+                    .format("%H")
+                    .to_string()
+                    .parse::<i32>()
+                    .unwrap_or(-1)
+                    == hour
             } else {
                 false
             }
@@ -542,7 +547,8 @@ fn AppointmentCard(
     let app_status = appointment.clone();
     let app_del = appointment.clone();
 
-    let time_str = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&appointment.scheduled_for) {
+    let time_str = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&appointment.scheduled_for)
+    {
         let local_dt = dt.with_timezone(&chrono::Local);
         let end_dt = local_dt + chrono::Duration::minutes(appointment.duration_minutes as i64);
         format!(
@@ -559,7 +565,11 @@ fn AppointmentCard(
         let reais = amount_cents as f64 / 100.0;
         let is_income = appointment.financial_type.as_deref().unwrap_or("income") == "income";
         let prefix = if is_income { "+ R$" } else { "- R$" };
-        let css_cls = if is_income { "app-fin-income" } else { "app-fin-expense" };
+        let css_cls = if is_income {
+            "app-fin-income"
+        } else {
+            "app-fin-expense"
+        };
         Some((format!("{} {:.2}", prefix, reais), css_cls))
     } else {
         None
@@ -666,7 +676,11 @@ fn AppointmentFormModal(
 ) -> Element {
     let editing_app = appointment();
     let is_edit = editing_app.is_some();
-    let title_modal = if is_edit { "Editar Agendamento" } else { "Novo Agendamento" };
+    let title_modal = if is_edit {
+        "Editar Agendamento"
+    } else {
+        "Novo Agendamento"
+    };
 
     let mut title = use_signal(|| String::new());
     let mut app_type = use_signal(|| AppointmentType::Consultation);
@@ -716,7 +730,10 @@ fn AppointmentFormModal(
                 assigned_users.set(vec![AssignedUserDto {
                     user_id: first_member.id.clone(),
                     user_name: Some(first_member.name.clone()),
-                    role_in_appointment: first_member.extra_info.clone().unwrap_or_else(|| "Dentista Principal".to_string()),
+                    role_in_appointment: first_member
+                        .extra_info
+                        .clone()
+                        .unwrap_or_else(|| "Dentista Principal".to_string()),
                     split_percentage: if can_finance { 100 } else { 0 },
                 }]);
             } else {
@@ -743,21 +760,22 @@ fn AppointmentFormModal(
         }
 
         let combined_dt_str = format!("{}T{}:00", date_val(), time_val());
-        let scheduled_for = match chrono::NaiveDateTime::parse_from_str(&combined_dt_str, "%Y-%m-%dT%H:%M:%S") {
-            Ok(ndt) => {
-                let local_res = ndt.and_local_timezone(chrono::Local);
-                if let Some(local_dt) = local_res.latest() {
-                    local_dt.with_timezone(&chrono::Utc).to_rfc3339()
-                } else {
-                    on_error.call("Horário inválido.".to_string());
+        let scheduled_for =
+            match chrono::NaiveDateTime::parse_from_str(&combined_dt_str, "%Y-%m-%dT%H:%M:%S") {
+                Ok(ndt) => {
+                    let local_res = ndt.and_local_timezone(chrono::Local);
+                    if let Some(local_dt) = local_res.latest() {
+                        local_dt.with_timezone(&chrono::Utc).to_rfc3339()
+                    } else {
+                        on_error.call("Horário inválido.".to_string());
+                        return;
+                    }
+                }
+                Err(_) => {
+                    on_error.call("Data e horário inválidos.".to_string());
                     return;
                 }
-            }
-            Err(_) => {
-                on_error.call("Data e horário inválidos.".to_string());
-                return;
-            }
-        };
+            };
 
         let fin_amount_cents = if !financial_amount_str().trim().is_empty() {
             if let Ok(val) = financial_amount_str().replace(',', ".").parse::<f64>() {

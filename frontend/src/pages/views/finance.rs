@@ -6,8 +6,8 @@ use crate::{ActiveClinicState, SessionState};
 use chrono::{Datelike, Local, Utc};
 use dioxus::prelude::*;
 use shared::finance::{
-    CreateTransactionRequest, Transaction, TransactionDirection,
-    TransactionStatus, UpdateTransactionStatusRequest,
+    CreateTransactionRequest, Transaction, TransactionDirection, TransactionStatus,
+    UpdateTransactionStatusRequest,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -84,9 +84,12 @@ pub fn FinanceView() -> Element {
     let clinic = active_clinic();
 
     let can_read_all = permissions::has_permission(&sess, &clinic, "finance:read_all");
-    let can_read_income = can_read_all || permissions::has_permission(&sess, &clinic, "finance:read_income");
-    let can_read_expense = can_read_all || permissions::has_permission(&sess, &clinic, "finance:read_expense");
-    let can_read_pending = can_read_all || permissions::has_permission(&sess, &clinic, "finance:read_pending");
+    let can_read_income =
+        can_read_all || permissions::has_permission(&sess, &clinic, "finance:read_income");
+    let can_read_expense =
+        can_read_all || permissions::has_permission(&sess, &clinic, "finance:read_expense");
+    let can_read_pending =
+        can_read_all || permissions::has_permission(&sess, &clinic, "finance:read_pending");
     let can_write_income = permissions::has_permission(&sess, &clinic, "finance:write_income");
     let can_write_expense = permissions::has_permission(&sess, &clinic, "finance:write_expense");
     let can_update_status = permissions::has_permission(&sess, &clinic, "finance:update_status");
@@ -137,7 +140,10 @@ pub fn FinanceView() -> Element {
     let mut reload_counter = use_signal(|| 0);
     let mut action_error = use_signal(|| None::<String>);
 
-    let clinic_id = clinic.as_ref().map(|c| c.clinic_id.clone()).unwrap_or_default();
+    let clinic_id = clinic
+        .as_ref()
+        .map(|c| c.clinic_id.clone())
+        .unwrap_or_default();
     let token = sess.as_ref().map(|s| s.token.clone()).unwrap_or_default();
 
     let cid_res = clinic_id.clone();
@@ -166,7 +172,9 @@ pub fn FinanceView() -> Element {
                 }
                 DateFilterPreset::Week => {
                     let end = Local::now().format("%Y-%m-%d").to_string();
-                    let start = (Local::now() - chrono::Duration::days(7)).format("%Y-%m-%d").to_string();
+                    let start = (Local::now() - chrono::Duration::days(7))
+                        .format("%Y-%m-%d")
+                        .to_string();
                     (None, None, Some(start), Some(end))
                 }
                 DateFilterPreset::Year => {
@@ -174,9 +182,7 @@ pub fn FinanceView() -> Element {
                     let end = format!("{}-12-31", y);
                     (None, None, Some(start), Some(end))
                 }
-                DateFilterPreset::Custom => {
-                    (None, None, Some(c_start), Some(c_end))
-                }
+                DateFilterPreset::Custom => (None, None, Some(c_start), Some(c_end)),
             };
 
             api::fetch_finance_data(&tok, &cid, req_m, req_y, req_start, req_end).await
@@ -220,7 +226,9 @@ pub fn FinanceView() -> Element {
     let cid_settle = clinic_id.clone();
     let tok_settle = token.clone();
     let handle_settle = move |_| {
-        let Some(target) = settle_target_tx() else { return };
+        let Some(target) = settle_target_tx() else {
+            return;
+        };
         let cid = cid_settle.clone();
         let tok = tok_settle.clone();
         let method = settle_payment_method();
@@ -246,7 +254,9 @@ pub fn FinanceView() -> Element {
     let cid_del = clinic_id.clone();
     let tok_del = token.clone();
     let handle_delete = move |_| {
-        let Some(target) = delete_target_tx() else { return };
+        let Some(target) = delete_target_tx() else {
+            return;
+        };
         let cid = cid_del.clone();
         let tok = tok_del.clone();
         spawn(async move {
@@ -724,7 +734,11 @@ fn TransactionFormModal(
             return;
         }
 
-        let clean_amount = amount_input().replace(',', ".").replace("R$", "").trim().to_string();
+        let clean_amount = amount_input()
+            .replace(',', ".")
+            .replace("R$", "")
+            .trim()
+            .to_string();
         let Ok(amt_float) = clean_amount.parse::<f64>() else {
             form_error.set(Some("Informe um valor monetário válido.".into()));
             return;
@@ -738,7 +752,11 @@ fn TransactionFormModal(
         let amount_cents = (amt_float * 100.0).round() as i64;
         let due_iso = format!("{}T12:00:00Z", due_date());
         let (st, paid_iso, method) = if is_paid_now() {
-            (TransactionStatus::Paid, Some(Utc::now().to_rfc3339()), Some(payment_method()))
+            (
+                TransactionStatus::Paid,
+                Some(Utc::now().to_rfc3339()),
+                Some(payment_method()),
+            )
         } else {
             (TransactionStatus::Pending, None, None)
         };

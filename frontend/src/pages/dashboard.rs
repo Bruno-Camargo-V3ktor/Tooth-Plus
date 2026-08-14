@@ -5,7 +5,7 @@ use crate::components::topbar::Topbar;
 use crate::permissions;
 use crate::router::Route;
 use crate::{ActiveClinicState, SessionState};
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use dioxus::prelude::*;
 use shared::clinics::UpdateClinicRequest;
 use shared::files::FileUploadRequest;
@@ -54,6 +54,14 @@ pub fn DashboardLayout() -> Element {
         || permissions::has_permission(&sess, &clinic, "finance:read_expense")
         || permissions::has_permission(&sess, &clinic, "finance:read_pending")
         || permissions::has_permission(&sess, &clinic, "finance:read");
+    let can_read_agenda = permissions::has_any_permission(
+        &sess,
+        &clinic,
+        &["appointments:read", "agenda:read"],
+    );
+    let can_read_patients = permissions::has_permission(&sess, &clinic, "patients:read");
+    let can_read_stock = permissions::has_permission(&sess, &clinic, "stock:read");
+    let can_read_documents = permissions::has_permission(&sess, &clinic, "documents:read");
     let can_see_settings = can_read_clinics || can_read_wpp || can_read_adv;
 
     let clinic_data = clinic.clone().unwrap();
@@ -81,8 +89,12 @@ pub fn DashboardLayout() -> Element {
                 theme_color: clinic_data.theme_color.clone(),
                 logo_url: clinic_data.logo_url.clone(),
                 is_collapsed: collapsed_val,
-                can_see_users: can_read_users,
+                can_see_agenda: can_read_agenda,
+                can_see_patients: can_read_patients,
                 can_see_finance: can_read_finance,
+                can_see_stock: can_read_stock,
+                can_see_documents: can_read_documents,
+                can_see_users: can_read_users,
                 can_see_settings,
                 on_toggle: move |_| is_collapsed.set(!is_collapsed()),
                 on_settings: move |_| is_settings_open.set(true),
@@ -214,7 +226,9 @@ fn ProfileTab(
 
     match clinic_resource.read().as_ref() {
         None => rsx! { div { "Carregando dados..." } },
-        Some(Err(_)) => rsx! { div { class: "error-state-friendly", "Não foi possível carregar as informações." } },
+        Some(Err(_)) => {
+            rsx! { div { class: "error-state-friendly", "Não foi possível carregar as informações." } }
+        }
         Some(Ok(data)) => {
             let mut trading_name = use_signal(|| data.trading_name.clone());
             let mut corporate_name = use_signal(|| data.corporate_name.clone());
@@ -223,7 +237,9 @@ fn ProfileTab(
             let id_sv = clinic_id.clone();
             let t_sv = token.clone();
             let handle_save = move |_| {
-                if !can_write { return; }
+                if !can_write {
+                    return;
+                }
                 is_saving.set(true);
                 let id = id_sv.clone();
                 let t = t_sv.clone();
@@ -292,7 +308,9 @@ fn BrandingTab(
     let id_col = clinic_id.clone();
     let t_col = token.clone();
     let on_color_change = move |e: FormEvent| {
-        if !can_write { return; }
+        if !can_write {
+            return;
+        }
         let new_color = e.value();
         if let Some(mut clinic) = active_clinic() {
             clinic.theme_color = new_color.clone();
@@ -303,9 +321,12 @@ fn BrandingTab(
         spawn(async move {
             let req = UpdateClinicRequest {
                 theme_color: Some(new_color),
-                trading_name: None, corporate_name: None,
-                document_cnpj: None, address: None,
-                auto_reminders: None, require_esign: None,
+                trading_name: None,
+                corporate_name: None,
+                document_cnpj: None,
+                address: None,
+                auto_reminders: None,
+                require_esign: None,
             };
             if let Err(msg) = api::update_clinic(&t, &id, req).await {
                 error_toast.set(Some(msg));
@@ -316,7 +337,9 @@ fn BrandingTab(
     let id_up = clinic_id.clone();
     let t_up = token.clone();
     let on_file_drop = move |evt: FormEvent| {
-        if !can_write { return; }
+        if !can_write {
+            return;
+        }
         for file in evt.files() {
             is_uploading.set(true);
             let id = id_up.clone();
@@ -457,7 +480,9 @@ fn AdvancedTab(
 
     match clinic_resource.read().as_ref() {
         None => rsx! { div { "Carregando configurações..." } },
-        Some(Err(_)) => rsx! { div { class: "error-state-friendly", "Não foi possível carregar as configurações." } },
+        Some(Err(_)) => {
+            rsx! { div { class: "error-state-friendly", "Não foi possível carregar as configurações." } }
+        }
         Some(Ok(data)) => {
             let mut auto_reminders = use_signal(|| data.auto_reminders);
             let mut require_esign = use_signal(|| data.require_esign);
@@ -465,14 +490,19 @@ fn AdvancedTab(
             let id_sv = clinic_id.clone();
             let t_sv = token.clone();
             let handle_save = move |_| {
-                if !can_write { return; }
+                if !can_write {
+                    return;
+                }
                 is_saving.set(true);
                 let id = id_sv.clone();
                 let t = t_sv.clone();
                 spawn(async move {
                     let req = UpdateClinicRequest {
-                        trading_name: None, corporate_name: None,
-                        document_cnpj: None, theme_color: None, address: None,
+                        trading_name: None,
+                        corporate_name: None,
+                        document_cnpj: None,
+                        theme_color: None,
+                        address: None,
                         auto_reminders: Some(auto_reminders()),
                         require_esign: Some(require_esign()),
                     };
@@ -490,7 +520,9 @@ fn AdvancedTab(
             let navigator = use_navigator();
 
             let handle_delete = move |_| {
-                if !can_delete { return; }
+                if !can_delete {
+                    return;
+                }
                 let id = id_del.clone();
                 let t = t_del.clone();
                 spawn(async move {

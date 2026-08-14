@@ -7,8 +7,12 @@ pub fn Sidebar(
     theme_color: String,
     logo_url: Option<String>,
     is_collapsed: bool,
-    can_see_users: bool,
+    can_see_agenda: bool,
+    can_see_patients: bool,
     can_see_finance: bool,
+    can_see_stock: bool,
+    can_see_documents: bool,
+    can_see_users: bool,
     can_see_settings: bool,
     on_toggle: EventHandler<()>,
     on_settings: EventHandler<()>,
@@ -34,13 +38,17 @@ pub fn Sidebar(
             }
 
             div { class: "nav-menu",
-                Link { to: Route::AgendaView {}, class: "nav-item", active_class: "nav-item-active",
-                    IconCalendar { size: 20, color: icon_color.clone() }
-                    span { class: "nav-text", "Agenda" }
+                if can_see_agenda {
+                    Link { to: Route::AgendaView {}, class: "nav-item", active_class: "nav-item-active",
+                        IconCalendar { size: 20, color: icon_color.clone() }
+                        span { class: "nav-text", "Agenda" }
+                    }
                 }
-                Link { to: Route::PatientsView {}, class: "nav-item", active_class: "nav-item-active",
-                    IconUsers { size: 20, color: icon_color.clone() }
-                    span { class: "nav-text", "Pacientes" }
+                if can_see_patients {
+                    Link { to: Route::PatientsView {}, class: "nav-item", active_class: "nav-item-active",
+                        IconUsers { size: 20, color: icon_color.clone() }
+                        span { class: "nav-text", "Pacientes" }
+                    }
                 }
                 if can_see_finance {
                     Link { to: Route::FinanceView {}, class: "nav-item", active_class: "nav-item-active",
@@ -48,13 +56,17 @@ pub fn Sidebar(
                         span { class: "nav-text", "Financeiro" }
                     }
                 }
-                Link { to: Route::StockView {}, class: "nav-item", active_class: "nav-item-active",
-                    IconBox { size: 20, color: icon_color.clone() }
-                    span { class: "nav-text", "Estoque" }
+                if can_see_stock {
+                    Link { to: Route::StockView {}, class: "nav-item", active_class: "nav-item-active",
+                        IconBox { size: 20, color: icon_color.clone() }
+                        span { class: "nav-text", "Estoque" }
+                    }
                 }
-                Link { to: Route::DocumentsView {}, class: "nav-item", active_class: "nav-item-active",
-                    IconFile { size: 20, color: icon_color.clone() }
-                    span { class: "nav-text", "Documentos" }
+                if can_see_documents {
+                    Link { to: Route::DocumentsView {}, class: "nav-item", active_class: "nav-item-active",
+                        IconFile { size: 20, color: icon_color.clone() }
+                        span { class: "nav-text", "Documentos" }
+                    }
                 }
                 if can_see_users {
                     Link { to: Route::UsersView {}, class: "nav-item", active_class: "nav-item-active",

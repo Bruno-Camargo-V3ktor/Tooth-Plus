@@ -1,12 +1,11 @@
 use crate::db::Db;
 use crate::error::ApiError;
 use crate::evolution::EvolutionClient;
-use crate::security::auth_guard::{check_permission, AuthenticatedUser};
-use crate::security::crypto::{
-    calculate_sha256_checksum, hash_blind_index, verify_password,
-};
+use crate::security::auth_guard::{AuthenticatedUser, check_permission};
+use crate::security::crypto::{calculate_sha256_checksum, hash_blind_index, verify_password};
+use crate::security::otp::{generate_otp_code, hash_otp, verify_otp};
 use crate::storage::StorageProvider;
-use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, delete, get, post, put, web};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use shared::documents::{
@@ -16,6 +15,7 @@ use shared::documents::{
     SubmitSignatureRequest, UpdateContractTemplateRequest,
 };
 use shared::files::FileUploadRequest;
+use std::env;
 use std::sync::Arc;
 use surrealdb::types::{RecordId, SurrealValue, ToSql};
 use uuid::Uuid;
@@ -69,6 +69,8 @@ struct DbPatientDocumentRow {
     doctor_signed_at: Option<DateTime<Utc>>,
     doctor_signature_data: Option<String>,
     patient_otp_verified: Option<bool>,
+    otp_code_hash: Option<String>,
+    otp_expires_at: Option<DateTime<Utc>>,
     checksum_sha256: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -175,8 +177,10 @@ pub async fn list_documents(
     let clinic_rec = parse_record_id("clinic", &query.clinic_id);
 
     let mut res = db
-        .query("SELECT * FROM patient_document WHERE clinic_id = $cid ORDER BY created_at DESC;
-                SELECT * FROM contract_template WHERE clinic_id = $cid ORDER BY created_at DESC;")
+        .query(
+            "SELECT * FROM patient_document WHERE clinic_id = $cid ORDER BY created_at DESC;
+                SELECT * FROM contract_template WHERE clinic_id = $cid ORDER BY created_at DESC;",
+        )
         .bind(("cid", clinic_rec))
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao consultar documentos: {}", e)))?;
@@ -239,14 +243,17 @@ pub async fn create_patient_document(
 
     let (mut pdf_url, tpl_rec) = if let Some(ref tpl_id) = data.template_id {
         let t_rec = parse_record_id("contract_template", tpl_id);
-        
-        let mut t_res = db.query("SELECT pdf_url FROM type::record($tid)")
+
+        let mut t_res = db
+            .query("SELECT pdf_url FROM type::record($tid)")
             .bind(("tid", t_rec.clone()))
             .await
             .map_err(|e| ApiError::Database(e.to_string()))?;
-        
+
         #[derive(Deserialize, SurrealValue)]
-        struct TplPdf { pdf_url: String }
+        struct TplPdf {
+            pdf_url: String,
+        }
         let pdf_row: Option<TplPdf> = t_res.take(0).ok().and_then(|mut v: Vec<TplPdf>| v.pop());
         let url = pdf_row.map(|r| r.pdf_url).unwrap_or_default();
         (url, Some(t_rec))
@@ -262,11 +269,15 @@ pub async fn create_patient_document(
     struct PatBrief {
         full_name: String,
     }
-    let mut pat_res = db.query("SELECT full_name FROM type::record($pid)")
+    let mut pat_res = db
+        .query("SELECT full_name FROM type::record($pid)")
         .bind(("pid", pat_rec.clone()))
         .await
         .map_err(|e| ApiError::Database(e.to_string()))?;
-    let pat_row: Option<PatBrief> = pat_res.take(0).ok().and_then(|mut v: Vec<PatBrief>| v.pop());
+    let pat_row: Option<PatBrief> = pat_res
+        .take(0)
+        .ok()
+        .and_then(|mut v: Vec<PatBrief>| v.pop());
     let p_name = pat_row.map(|p| p.full_name).unwrap_or_default();
 
     let mut final_title = data.title.trim().to_string();
@@ -280,15 +291,26 @@ pub async fn create_patient_document(
         .replace("{{data_hoje}}", &today_str)
         .replace("{{data_atual}}", &today_str);
 
-    let doc_rec = data.doctor_user_id.as_deref().map(|d| parse_record_id("user", d))
+    let doc_rec = data
+        .doctor_user_id
+        .as_deref()
+        .map(|d| parse_record_id("user", d))
         .or_else(|| Some(parse_record_id("user", &auth.id)));
-    let appt_rec = data.appointment_id.as_deref().map(|a| parse_record_id("appointment", a));
+    let appt_rec = data
+        .appointment_id
+        .as_deref()
+        .map(|a| parse_record_id("appointment", a));
 
     let is_static = data.document_type == "static_upload";
-    let initial_status = if is_static { "signed" } else { "pending_signatures" };
+    let initial_status = if is_static {
+        "signed"
+    } else {
+        "pending_signatures"
+    };
 
     let mut res = db
-        .query("CREATE patient_document CONTENT {
+        .query(
+            "CREATE patient_document CONTENT {
             clinic_id: $cid,
             patient_id: $pid,
             template_id: $tid,
@@ -298,11 +320,12 @@ pub async fn create_patient_document(
             document_type: $dtype,
             original_pdf_url: $pdf_url,
             status: $st,
-            signing_token: $token,
+            signing_token: $stoken,
             patient_otp_verified: false,
             created_at: time::now(),
             updated_at: time::now()
-        };")
+        };",
+        )
         .bind(("cid", clinic_rec))
         .bind(("pid", pat_rec))
         .bind(("tid", tpl_rec))
@@ -312,13 +335,16 @@ pub async fn create_patient_document(
         .bind(("dtype", data.document_type))
         .bind(("pdf_url", pdf_url))
         .bind(("st", initial_status))
-        .bind(("token", doc_token))
+        .bind(("stoken", doc_token))
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao emitir documento: {}", e)))?;
 
-    let created: Option<DbPatientDocumentRow> = res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
+    let created: Option<DbPatientDocumentRow> =
+        res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
     let Some(row) = created else {
-        return Err(ApiError::Database("Erro ao recuperar documento emitido.".into()));
+        return Err(ApiError::Database(
+            "Erro ao recuperar documento emitido.".into(),
+        ));
     };
 
     Ok(HttpResponse::Created().json(map_patient_document(row)))
@@ -368,7 +394,9 @@ pub async fn list_templates(
         .await
         .unwrap_or(false)
     {
-        return Err(ApiError::Forbidden("Sem permissão para listar modelos.".into()));
+        return Err(ApiError::Forbidden(
+            "Sem permissão para listar modelos.".into(),
+        ));
     }
 
     let clinic_rec = parse_record_id("clinic", &query.clinic_id);
@@ -398,7 +426,9 @@ pub async fn create_template(
         .await
         .unwrap_or(false)
     {
-        return Err(ApiError::Forbidden("Sem permissão para criar modelos.".into()));
+        return Err(ApiError::Forbidden(
+            "Sem permissão para criar modelos.".into(),
+        ));
     }
 
     let clinic_rec = parse_record_id("clinic", &data.clinic_id);
@@ -406,7 +436,8 @@ pub async fn create_template(
     let fields_json = serde_json::to_value(&data.signature_fields).unwrap_or_default();
 
     let mut res = db
-        .query("CREATE contract_template CONTENT {
+        .query(
+            "CREATE contract_template CONTENT {
             clinic_id: $cid,
             title: $title,
             category: $cat,
@@ -415,7 +446,8 @@ pub async fn create_template(
             signature_fields: $fields,
             created_at: time::now(),
             updated_at: time::now()
-        };")
+        };",
+        )
         .bind(("cid", clinic_rec))
         .bind(("title", data.title.trim().to_string()))
         .bind(("cat", data.category))
@@ -425,9 +457,12 @@ pub async fn create_template(
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao criar modelo de contrato: {}", e)))?;
 
-    let created: Option<DbContractTemplateRow> = res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
+    let created: Option<DbContractTemplateRow> =
+        res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
     let Some(row) = created else {
-        return Err(ApiError::Database("Falha ao retornar modelo criado.".into()));
+        return Err(ApiError::Database(
+            "Falha ao retornar modelo criado.".into(),
+        ));
     };
 
     Ok(HttpResponse::Created().json(map_template(row)))
@@ -448,19 +483,23 @@ pub async fn update_template(
         .await
         .unwrap_or(false)
     {
-        return Err(ApiError::Forbidden("Sem permissão para atualizar modelos.".into()));
+        return Err(ApiError::Forbidden(
+            "Sem permissão para atualizar modelos.".into(),
+        ));
     }
 
     let fields_json = serde_json::to_value(&data.signature_fields).unwrap_or_default();
 
     let mut res = db
-        .query("UPDATE type::record($id) SET
+        .query(
+            "UPDATE type::record($id) SET
             title = $title,
             category = $cat,
             description = $desc,
             pdf_url = $pdf_url,
             signature_fields = $fields,
-            updated_at = time::now();")
+            updated_at = time::now();",
+        )
         .bind(("id", tpl_rec))
         .bind(("title", data.title.trim().to_string()))
         .bind(("cat", data.category))
@@ -470,7 +509,8 @@ pub async fn update_template(
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao atualizar modelo: {}", e)))?;
 
-    let updated: Option<DbContractTemplateRow> = res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
+    let updated: Option<DbContractTemplateRow> =
+        res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
     let Some(row) = updated else {
         return Err(ApiError::NotFound("Modelo não encontrado.".into()));
     };
@@ -492,7 +532,9 @@ pub async fn delete_template(
         .await
         .unwrap_or(false)
     {
-        return Err(ApiError::Forbidden("Sem permissão para excluir modelo.".into()));
+        return Err(ApiError::Forbidden(
+            "Sem permissão para excluir modelo.".into(),
+        ));
     }
 
     db.query("DELETE type::record($id)")
@@ -534,19 +576,23 @@ pub async fn get_public_signing_document(
     let token = path.into_inner();
 
     let mut res = db
-        .query("SELECT * FROM patient_document WHERE signing_token = $token LIMIT 1;")
-        .bind(("token", token.clone()))
+        .query("SELECT * FROM patient_document WHERE signing_token = $stoken LIMIT 1;")
+        .bind(("stoken", token.clone()))
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao consultar documento: {}", e)))?;
 
     let doc_row: Option<DbPatientDocumentRow> = res.take(0).unwrap_or(None);
     let Some(doc) = doc_row else {
-        return Err(ApiError::NotFound("Documento de assinatura não encontrado ou expirado.".into()));
+        return Err(ApiError::NotFound(
+            "Documento de assinatura não encontrado ou expirado.".into(),
+        ));
     };
 
     let mut clinic_res = db
-        .query("SELECT * FROM type::record($cid);
-                SELECT * FROM type::record($pid);")
+        .query(
+            "SELECT * FROM type::record($cid);
+                SELECT * FROM type::record($pid);",
+        )
         .bind(("cid", doc.clinic_id.clone()))
         .bind(("pid", doc.patient_id.clone()))
         .await
@@ -556,7 +602,8 @@ pub async fn get_public_signing_document(
     let patient_auth_row: Option<DbPatientAuthRow> = clinic_res.take(1).unwrap_or(None);
 
     let template = if let Some(ref tid) = doc.template_id {
-        let mut t_res = db.query("SELECT * FROM type::record($tid)")
+        let mut t_res = db
+            .query("SELECT * FROM type::record($tid)")
             .bind(("tid", tid.clone()))
             .await
             .map_err(|e| ApiError::Database(e.to_string()))?;
@@ -566,12 +613,24 @@ pub async fn get_public_signing_document(
         None
     };
 
-    let clinic_name = clinic_row.as_ref().map(|c| c.trading_name.clone()).unwrap_or_else(|| "Clínica Odontológica".into());
-    let clinic_theme = clinic_row.as_ref().and_then(|c| c.theme_color.clone()).unwrap_or_else(|| "#0052cc".into());
+    let clinic_name = clinic_row
+        .as_ref()
+        .map(|c| c.trading_name.clone())
+        .unwrap_or_else(|| "Clínica Odontológica".into());
+    let clinic_theme = clinic_row
+        .as_ref()
+        .and_then(|c| c.theme_color.clone())
+        .unwrap_or_else(|| "#0052cc".into());
     let clinic_logo = clinic_row.as_ref().and_then(|c| c.logo_url.clone());
-    let require_otp = clinic_row.as_ref().and_then(|c| c.require_esign).unwrap_or(false);
+    let require_otp = clinic_row
+        .as_ref()
+        .and_then(|c| c.require_esign)
+        .unwrap_or(false);
 
-    let phone_raw = patient_auth_row.as_ref().map(|p| p.phone.clone()).unwrap_or_default();
+    let phone_raw = patient_auth_row
+        .as_ref()
+        .map(|p| p.phone.clone())
+        .unwrap_or_default();
     let phone_masked = if phone_raw.len() >= 6 {
         format!("(XX) XXXXX-{}", &phone_raw[phone_raw.len() - 4..])
     } else {
@@ -599,8 +658,8 @@ pub async fn auth_patient_signing(
     let data = req.into_inner();
 
     let mut res = db
-        .query("SELECT * FROM patient_document WHERE signing_token = $token LIMIT 1;")
-        .bind(("token", token))
+        .query("SELECT * FROM patient_document WHERE signing_token = $stoken LIMIT 1;")
+        .bind(("stoken", token))
         .await
         .map_err(|e| ApiError::Database(e.to_string()))?;
 
@@ -622,12 +681,16 @@ pub async fn auth_patient_signing(
 
     let cpf_input_hash = hash_blind_index(&data.cpf);
     if cpf_input_hash != pat.document_cpf_hash {
-        return Err(ApiError::Unauthorized("CPF informado não confere com o paciente deste contrato.".into()));
+        return Err(ApiError::Unauthorized(
+            "CPF informado não confere com o paciente deste contrato.".into(),
+        ));
     }
 
     if let Some(ref saved_hash) = pat.password_hash {
         if !verify_password(saved_hash, data.password.trim()) {
-            return Err(ApiError::Unauthorized("Senha de assinatura incorreta.".into()));
+            return Err(ApiError::Unauthorized(
+                "Senha de assinatura incorreta.".into(),
+            ));
         }
     }
 
@@ -648,8 +711,8 @@ pub async fn auth_doctor_signing(
     let data = req.into_inner();
 
     let mut res = db
-        .query("SELECT * FROM patient_document WHERE signing_token = $token LIMIT 1;")
-        .bind(("token", token))
+        .query("SELECT * FROM patient_document WHERE signing_token = $stoken LIMIT 1;")
+        .bind(("stoken", token))
         .await
         .map_err(|e| ApiError::Database(e.to_string()))?;
 
@@ -684,13 +747,13 @@ pub async fn auth_doctor_signing(
 pub async fn request_signing_otp(
     path: web::Path<String>,
     db: web::Data<Db>,
-    evolution: web::Data<Arc<EvolutionClient>>,
+    evolution: web::Data<EvolutionClient>,
 ) -> Result<HttpResponse, ApiError> {
     let token = path.into_inner();
 
     let mut res = db
-        .query("SELECT * FROM patient_document WHERE signing_token = $token LIMIT 1;")
-        .bind(("token", token))
+        .query("SELECT * FROM patient_document WHERE signing_token = $stoken LIMIT 1;")
+        .bind(("stoken", token))
         .await
         .map_err(|e| ApiError::Database(e.to_string()))?;
 
@@ -700,8 +763,10 @@ pub async fn request_signing_otp(
     };
 
     let mut clinic_res = db
-        .query("SELECT * FROM type::record($cid);
-                SELECT * FROM type::record($pid);")
+        .query(
+            "SELECT * FROM type::record($cid);
+                SELECT * FROM type::record($pid);",
+        )
         .bind(("cid", doc.clinic_id))
         .bind(("pid", doc.patient_id))
         .await
@@ -710,12 +775,33 @@ pub async fn request_signing_otp(
     let clinic_row: Option<DbClinicInfo> = clinic_res.take(0).unwrap_or(None);
     let patient_row: Option<DbPatientAuthRow> = clinic_res.take(1).unwrap_or(None);
 
-    let otp_code = "123456";
+    let otp_code = generate_otp_code();
+    let otp_hash = hash_otp(&otp_code);
+    let doc_id = doc.id.clone();
+
+    let _ = db
+        .query("UPDATE type::record($id) SET otp_code_hash = $hash, otp_expires_at = time::now() + 5m;")
+        .bind(("id", doc_id))
+        .bind(("hash", otp_hash))
+        .await;
 
     if let (Some(c), Some(p)) = (clinic_row, patient_row) {
         if let Some(ref inst) = c.whatsapp_instance {
-            let msg = format!("Olá {}, seu código de confirmação para assinatura digital no Tooth Plus é: *{}*", p.full_name, otp_code);
-            let _ = evolution.send_whatsapp_text(inst, "tooth_plus_api_key", &p.phone, &msg).await;
+            let api_key = env::var("EVOLUTION_API_KEY").unwrap_or_default();
+            let msg = format!(
+                "🦷 *Tooth Plus — Assinatura Digital*\n\nOlá *{}*, seu código de verificação é:\n\n*{}*\n\nEsse código expira em 5 minutos. Não compartilhe com ninguém.",
+                p.full_name, otp_code
+            );
+            if let Ok(message_id) = evolution
+                .send_whatsapp_text(inst, &api_key, &p.phone, &msg)
+                .await
+            {
+                if !message_id.is_empty() {
+                    let _ = evolution
+                        .delete_whatsapp_message(inst, &api_key, &p.phone, &message_id)
+                        .await;
+                }
+            }
         }
     }
 
@@ -736,8 +822,8 @@ pub async fn submit_digital_signature(
     let data = req.into_inner();
 
     let mut res = db
-        .query("SELECT * FROM patient_document WHERE signing_token = $token LIMIT 1;")
-        .bind(("token", token.clone()))
+        .query("SELECT * FROM patient_document WHERE signing_token = $stoken LIMIT 1;")
+        .bind(("stoken", token.clone()))
         .await
         .map_err(|e| ApiError::Database(e.to_string()))?;
 
@@ -750,14 +836,51 @@ pub async fn submit_digital_signature(
         return Ok(HttpResponse::Ok().json(map_patient_document(doc)));
     }
 
+    if data.signer_type == "patient" {
+        if let Some(ref otp_input) = data.otp_code {
+            let saved_hash = doc.otp_code_hash.as_deref().unwrap_or("");
+            let expires_at = doc.otp_expires_at;
+
+            if saved_hash.is_empty() {
+                return Err(ApiError::BadRequest(
+                    "Nenhum código OTP foi solicitado. Clique em 'Enviar código' primeiro.".into(),
+                ));
+            }
+
+            if !verify_otp(otp_input, saved_hash) {
+                return Err(ApiError::Unauthorized(
+                    "Código de verificação inválido. Tente novamente.".into(),
+                ));
+            }
+
+            if let Some(exp) = expires_at {
+                if chrono::Utc::now() > exp {
+                    return Err(ApiError::BadRequest(
+                        "Código expirado. Solicite um novo código OTP.".into(),
+                    ));
+                }
+            }
+        } else if doc.otp_code_hash.is_some() {
+            return Err(ApiError::BadRequest(
+                "Código de verificação OTP é obrigatório para assinar como paciente.".into(),
+            ));
+        }
+    }
+
     let mut is_completed = false;
     let mut checksum_val = doc.checksum_sha256.clone();
 
     if data.signer_type == "patient" {
-        let doctor_has_signed = doc.doctor_signed_at.is_some() || doc.doctor_signature_data.is_some();
+        let doctor_has_signed =
+            doc.doctor_signed_at.is_some() || doc.doctor_signature_data.is_some();
         if doctor_has_signed {
             is_completed = true;
-            let combined = format!("{}:{}:{}", doc.signing_token, data.signature_base64, doc.doctor_signature_data.as_deref().unwrap_or(""));
+            let combined = format!(
+                "{}:{}:{}",
+                doc.signing_token,
+                data.signature_base64,
+                doc.doctor_signature_data.as_deref().unwrap_or("")
+            );
             checksum_val = Some(calculate_sha256_checksum(combined.as_bytes()));
         }
 
@@ -769,7 +892,11 @@ pub async fn submit_digital_signature(
             checksum_sha256 = $checksum,
             updated_at = time::now();";
 
-        let new_st = if is_completed { "signed" } else { "pending_signatures" };
+        let new_st = if is_completed {
+            "signed"
+        } else {
+            "pending_signatures"
+        };
 
         let mut upd = db
             .query(query)
@@ -780,17 +907,26 @@ pub async fn submit_digital_signature(
             .await
             .map_err(|e| ApiError::Database(e.to_string()))?;
 
-        let updated_row: Option<DbPatientDocumentRow> = upd.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
+        let updated_row: Option<DbPatientDocumentRow> =
+            upd.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
         let Some(r) = updated_row else {
-            return Err(ApiError::Database("Falha ao salvar assinatura do paciente.".into()));
+            return Err(ApiError::Database(
+                "Falha ao salvar assinatura do paciente.".into(),
+            ));
         };
 
         return Ok(HttpResponse::Ok().json(map_patient_document(r)));
     } else {
-        let patient_has_signed = doc.patient_signed_at.is_some() || doc.patient_signature_data.is_some();
+        let patient_has_signed =
+            doc.patient_signed_at.is_some() || doc.patient_signature_data.is_some();
         if patient_has_signed {
             is_completed = true;
-            let combined = format!("{}:{}:{}", doc.signing_token, doc.patient_signature_data.as_deref().unwrap_or(""), data.signature_base64);
+            let combined = format!(
+                "{}:{}:{}",
+                doc.signing_token,
+                doc.patient_signature_data.as_deref().unwrap_or(""),
+                data.signature_base64
+            );
             checksum_val = Some(calculate_sha256_checksum(combined.as_bytes()));
         }
 
@@ -801,7 +937,11 @@ pub async fn submit_digital_signature(
             checksum_sha256 = $checksum,
             updated_at = time::now();";
 
-        let new_st = if is_completed { "signed" } else { "pending_signatures" };
+        let new_st = if is_completed {
+            "signed"
+        } else {
+            "pending_signatures"
+        };
 
         let mut upd = db
             .query(query)
@@ -812,9 +952,12 @@ pub async fn submit_digital_signature(
             .await
             .map_err(|e| ApiError::Database(e.to_string()))?;
 
-        let updated_row: Option<DbPatientDocumentRow> = upd.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
+        let updated_row: Option<DbPatientDocumentRow> =
+            upd.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
         let Some(r) = updated_row else {
-            return Err(ApiError::Database("Falha ao salvar assinatura do doutor.".into()));
+            return Err(ApiError::Database(
+                "Falha ao salvar assinatura do doutor.".into(),
+            ));
         };
 
         return Ok(HttpResponse::Ok().json(map_patient_document(r)));

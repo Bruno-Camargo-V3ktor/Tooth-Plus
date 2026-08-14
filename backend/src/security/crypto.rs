@@ -115,7 +115,11 @@ pub fn decrypt_deterministic(encrypted_b64: &str) -> Result<String, String> {
 }
 
 pub fn hash_blind_index(data: &str) -> String {
-    let cleaned: String = data.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
+    let cleaned: String = data
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect::<String>()
+        .to_lowercase();
     let mut hasher = Sha256::new();
     hasher.update(cleaned.as_bytes());
     let result = hasher.finalize();
@@ -154,6 +158,7 @@ mod tests {
             println!("HASH: {}", hash);
         }
     }
+
+
+
 }
-
-

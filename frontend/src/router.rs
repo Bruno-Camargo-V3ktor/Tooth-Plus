@@ -4,7 +4,6 @@ use crate::pages::sign_portal::SignPortal;
 use crate::pages::views::*;
 use dioxus::prelude::*;
 
-
 #[derive(Routable, Clone, PartialEq, Debug)]
 pub enum Route {
     #[route("/")]

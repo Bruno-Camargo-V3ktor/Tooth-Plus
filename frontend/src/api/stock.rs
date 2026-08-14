@@ -105,11 +105,7 @@ pub async fn update_stock_item(
     }
 }
 
-pub async fn delete_stock_item(
-    token: &str,
-    clinic_id: &str,
-    id: &str,
-) -> Result<(), String> {
+pub async fn delete_stock_item(token: &str, clinic_id: &str, id: &str) -> Result<(), String> {
     let url = format!("{}/stock/{}?clinic_id={}", API_BASE, id, clinic_id);
 
     let res = get_client()

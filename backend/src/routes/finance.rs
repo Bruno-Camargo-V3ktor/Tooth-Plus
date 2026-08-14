@@ -5,8 +5,8 @@ use actix_web::{HttpResponse, delete, get, patch, post, web};
 use chrono::{DateTime, Datelike, TimeZone, Utc};
 use serde::Deserialize;
 use shared::finance::{
-    CreateTransactionRequest, FinanceQuery, FinanceResponse, FinanceSummary,
-    Transaction, TransactionDirection, TransactionStatus, UpdateTransactionStatusRequest,
+    CreateTransactionRequest, FinanceQuery, FinanceResponse, FinanceSummary, Transaction,
+    TransactionDirection, TransactionStatus, UpdateTransactionStatusRequest,
 };
 use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
@@ -112,7 +112,12 @@ pub async fn get_finance_data(
         .await
         .unwrap_or(false);
 
-    if !has_read_all && !has_read_income && !has_read_expense && !has_read_pending && !has_general_read {
+    if !has_read_all
+        && !has_read_income
+        && !has_read_expense
+        && !has_read_pending
+        && !has_general_read
+    {
         return Err(ApiError::Forbidden(
             "Sem privilégios para visualizar dados financeiros desta unidade.".into(),
         ));
@@ -121,11 +126,17 @@ pub async fn get_finance_data(
     let (start_dt, end_dt) = if let (Some(s), Some(e)) = (&query.start_date, &query.end_date) {
         let s_dt = DateTime::parse_from_rfc3339(s)
             .map(|d| d.with_timezone(&Utc))
-            .or_else(|_| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").map(|d| d.and_hms_opt(0, 0, 0).unwrap().and_utc()))
+            .or_else(|_| {
+                chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                    .map(|d| d.and_hms_opt(0, 0, 0).unwrap().and_utc())
+            })
             .unwrap_or_else(|_| Utc::now());
         let e_dt = DateTime::parse_from_rfc3339(e)
             .map(|d| d.with_timezone(&Utc))
-            .or_else(|_| chrono::NaiveDate::parse_from_str(e, "%Y-%m-%d").map(|d| d.and_hms_opt(23, 59, 59).unwrap().and_utc()))
+            .or_else(|_| {
+                chrono::NaiveDate::parse_from_str(e, "%Y-%m-%d")
+                    .map(|d| d.and_hms_opt(23, 59, 59).unwrap().and_utc())
+            })
             .unwrap_or_else(|_| Utc::now());
         (s_dt, e_dt)
     } else {
@@ -310,15 +321,16 @@ pub async fn get_finance_data(
 
     transactions.sort_by(|a, b| b.due_date.cmp(&a.due_date));
 
-    let net_balance_cents = if (has_read_income || has_read_all) && (has_read_expense || has_read_all) {
-        total_income_cents - total_expense_cents
-    } else if has_read_income || has_read_all {
-        total_income_cents
-    } else if has_read_expense || has_read_all {
-        -total_expense_cents
-    } else {
-        0
-    };
+    let net_balance_cents =
+        if (has_read_income || has_read_all) && (has_read_expense || has_read_all) {
+            total_income_cents - total_expense_cents
+        } else if has_read_income || has_read_all {
+            total_income_cents
+        } else if has_read_expense || has_read_all {
+            -total_expense_cents
+        } else {
+            0
+        };
     let total_transactions_count = transactions.len();
 
     let summary = FinanceSummary {
@@ -372,10 +384,7 @@ pub async fn create_transaction(
         .patient_id
         .as_ref()
         .map(|id| parse_record_id("patient", id));
-    let user_rec_id = data
-        .user_id
-        .as_ref()
-        .map(|id| parse_record_id("user", id));
+    let user_rec_id = data.user_id.as_ref().map(|id| parse_record_id("user", id));
 
     let dir_str = match data.direction {
         TransactionDirection::Income => "income",
@@ -393,10 +402,11 @@ pub async fn create_transaction(
         .map(|dt| dt.with_timezone(&Utc))
         .unwrap_or_else(|_| Utc::now());
 
-    let paid_date_dt = data
-        .paid_date
-        .as_ref()
-        .and_then(|p| DateTime::parse_from_rfc3339(p).ok().map(|dt| dt.with_timezone(&Utc)));
+    let paid_date_dt = data.paid_date.as_ref().and_then(|p| {
+        DateTime::parse_from_rfc3339(p)
+            .ok()
+            .map(|dt| dt.with_timezone(&Utc))
+    });
 
     let mut response = db
         .query(
@@ -485,7 +495,11 @@ pub async fn update_transaction_status(
     let paid_date_dt = if data.status == TransactionStatus::Paid {
         data.paid_date
             .as_ref()
-            .and_then(|p| DateTime::parse_from_rfc3339(p).ok().map(|dt| dt.with_timezone(&Utc)))
+            .and_then(|p| {
+                DateTime::parse_from_rfc3339(p)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            })
             .or_else(|| Some(Utc::now()))
     } else {
         None

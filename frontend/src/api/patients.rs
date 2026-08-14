@@ -1,9 +1,9 @@
 use super::API_BASE;
 use reqwest::Client;
 use shared::patients::{
-    CreatePatientExamRequest, CreatePatientRequest, CreatePatientTreatmentRequest,
-    Patient, PatientAnamnesis, PatientDetailsResponse, PatientExam, PatientListResponse,
-    PatientTreatment, SaveAnamnesisRequest, UpdatePatientRequest,
+    CreatePatientExamRequest, CreatePatientRequest, CreatePatientTreatmentRequest, Patient,
+    PatientAnamnesis, PatientDetailsResponse, PatientExam, PatientListResponse, PatientTreatment,
+    SaveAnamnesisRequest, UpdatePatientRequest,
 };
 
 fn get_client() -> Client {
@@ -35,14 +35,15 @@ pub async fn fetch_patients(
             .map_err(|_| "Erro ao processar lista de pacientes.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao buscar pacientes.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao buscar pacientes.".into()
+        } else {
+            err
+        })
     }
 }
 
-pub async fn create_patient(
-    token: &str,
-    req: CreatePatientRequest,
-) -> Result<Patient, String> {
+pub async fn create_patient(token: &str, req: CreatePatientRequest) -> Result<Patient, String> {
     let url = format!("{}/patients", API_BASE);
 
     let res = get_client()
@@ -59,7 +60,11 @@ pub async fn create_patient(
             .map_err(|_| "Erro ao processar dados do paciente criado.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao cadastrar paciente.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao cadastrar paciente.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -84,7 +89,11 @@ pub async fn fetch_patient_details(
             .map_err(|_| "Erro ao processar prontuário do paciente.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao buscar prontuário do paciente.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao buscar prontuário do paciente.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -110,15 +119,15 @@ pub async fn update_patient(
             .map_err(|_| "Erro ao processar paciente atualizado.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao atualizar paciente.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao atualizar paciente.".into()
+        } else {
+            err
+        })
     }
 }
 
-pub async fn delete_patient(
-    token: &str,
-    patient_id: &str,
-    clinic_id: &str,
-) -> Result<(), String> {
+pub async fn delete_patient(token: &str, patient_id: &str, clinic_id: &str) -> Result<(), String> {
     let clean_id = patient_id.strip_prefix("patient:").unwrap_or(patient_id);
     let url = format!("{}/patients/{}?clinic_id={}", API_BASE, clean_id, clinic_id);
 
@@ -133,7 +142,11 @@ pub async fn delete_patient(
         Ok(())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao excluir paciente.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao excluir paciente.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -159,7 +172,11 @@ pub async fn save_patient_anamnesis(
             .map_err(|_| "Erro ao processar ficha de anamnese.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao salvar anamnese.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao salvar anamnese.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -185,7 +202,11 @@ pub async fn create_patient_exam(
             .map_err(|_| "Erro ao processar exame adicionado.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao adicionar exame.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao adicionar exame.".into()
+        } else {
+            err
+        })
     }
 }
 
@@ -211,6 +232,10 @@ pub async fn create_patient_treatment(
             .map_err(|_| "Erro ao processar procedimento adicionado.".into())
     } else {
         let err = res.text().await.unwrap_or_default();
-        Err(if err.is_empty() { "Erro ao registrar procedimento.".into() } else { err })
+        Err(if err.is_empty() {
+            "Erro ao registrar procedimento.".into()
+        } else {
+            err
+        })
     }
 }

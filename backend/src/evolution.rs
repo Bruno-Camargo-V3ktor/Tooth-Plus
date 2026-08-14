@@ -88,7 +88,8 @@ impl EvolutionClient {
                 return Err(err);
             }
 
-            Ok("Message sent successfully".into())
+            let message_id = data.key.map(|k| k.id).unwrap_or_default();
+            Ok(message_id)
         } else {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();

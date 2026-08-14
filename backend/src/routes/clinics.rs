@@ -2,8 +2,8 @@ use actix_web::{HttpResponse, delete, get, post, put, web};
 use serde::Deserialize;
 use shared::clinics::{ClinicAddress, ClinicResponse, UpdateClinicRequest};
 use shared::files::FileUploadRequest;
-use surrealdb::types::{RecordId, SurrealValue, ToSql};
 use std::sync::Arc;
+use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
 use crate::db::Db;
 use crate::error::ApiError;

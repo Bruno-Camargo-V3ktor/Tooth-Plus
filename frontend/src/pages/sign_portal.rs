@@ -94,7 +94,15 @@ pub fn SignPortal(token: String) -> Element {
 
         spawn(async move {
             error_msg.set(None);
-            match auth_doctor_signing(&t, DoctorSignAuthRequest { username, password: pwd }).await {
+            match auth_doctor_signing(
+                &t,
+                DoctorSignAuthRequest {
+                    username,
+                    password: pwd,
+                },
+            )
+            .await
+            {
                 Ok(auth) => {
                     auth_session.set(Some(auth));
                     success_msg.set(Some("Identificação médica confirmada com sucesso.".into()));
@@ -137,7 +145,9 @@ pub fn SignPortal(token: String) -> Element {
         };
 
         if sig.trim().is_empty() {
-            error_msg.set(Some("Por favor, desenhe sua assinatura no quadro abaixo.".into()));
+            error_msg.set(Some(
+                "Por favor, desenhe sua assinatura no quadro abaixo.".into(),
+            ));
             return;
         }
 
@@ -160,7 +170,9 @@ pub fn SignPortal(token: String) -> Element {
             match submit_digital_signature(&t, req).await {
                 Ok(doc) => {
                     is_completed.set(doc.status == "signed" || doc.status == "completed");
-                    success_msg.set(Some("Assinatura digital registrada e protegida com sucesso!".into()));
+                    success_msg.set(Some(
+                        "Assinatura digital registrada e protegida com sucesso!".into(),
+                    ));
                     if let Some(ref mut d) = *doc_info.write() {
                         d.document = doc;
                     }

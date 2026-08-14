@@ -1,8 +1,6 @@
 use super::API_BASE;
 use reqwest::Client;
-use shared::finance::{
-    CreateTransactionRequest, FinanceResponse, UpdateTransactionStatusRequest,
-};
+use shared::finance::{CreateTransactionRequest, FinanceResponse, UpdateTransactionStatusRequest};
 
 fn get_client() -> Client {
     Client::new()
@@ -105,11 +103,7 @@ pub async fn update_transaction_status(
     }
 }
 
-pub async fn delete_transaction(
-    token: &str,
-    clinic_id: &str,
-    id: &str,
-) -> Result<(), String> {
+pub async fn delete_transaction(token: &str, clinic_id: &str, id: &str) -> Result<(), String> {
     let url = format!("{}/finance/{}?clinic_id={}", API_BASE, id, clinic_id);
 
     let res = get_client()

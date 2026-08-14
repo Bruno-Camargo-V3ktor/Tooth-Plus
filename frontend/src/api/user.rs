@@ -45,7 +45,10 @@ pub async fn create_user(token: &str, req: CreateUserRequest) -> Result<(), Stri
                 return Err(err.to_string());
             }
         }
-        Err("Não foi possível criar o usuário. Verifique as permissões e dados informados.".to_string())
+        Err(
+            "Não foi possível criar o usuário. Verifique as permissões e dados informados."
+                .to_string(),
+        )
     }
 }
 
@@ -78,7 +81,10 @@ pub async fn toggle_user_status(
     clinic_id: &str,
     req: ToggleStatusRequest,
 ) -> Result<(), String> {
-    let url = format!("{}/users/{}/status?clinic_id={}", API_BASE, target_id, clinic_id);
+    let url = format!(
+        "{}/users/{}/status?clinic_id={}",
+        API_BASE, target_id, clinic_id
+    );
 
     let res = get_client()
         .patch(&url)

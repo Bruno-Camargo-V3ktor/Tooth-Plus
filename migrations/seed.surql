@@ -83,6 +83,23 @@ RELATE user:administrador->works_at->clinic:smile_plus CONTENT {
         "documents:read", "documents:write", "documents:delete"
     ]
 };
+RELATE user:administrador->works_at->clinic:luria_odonto CONTENT {
+    role: "admin",
+    permissions: [
+        "clinics:read", "clinics:write", "clinics:delete",
+        "whatsapp:read", "whatsapp:write",
+        "advanced:read", "advanced:write",
+        "users:read", "users:write", "users:manage_status",
+        "patients:read", "patients:write", "patients:delete",
+        "agenda:read", "agenda:write", "agenda:delete", "agenda:finance",
+        "appointments:read", "appointments:write", "appointments:delete", "appointments:finance",
+        "finance:read", "finance:read_all", "finance:read_income", "finance:read_expense", "finance:read_pending",
+        "finance:write", "finance:write_income", "finance:write_expense", "finance:update_status", "finance:delete",
+        "stock:read", "stock:write", "stock:delete", "stock:movement",
+        "documents:read", "documents:write", "documents:delete"
+    ]
+};
+
 
 CREATE user:dr_andre CONTENT {
     username: "dr.andre",
