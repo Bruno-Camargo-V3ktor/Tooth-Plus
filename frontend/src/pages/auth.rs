@@ -18,7 +18,8 @@ pub fn LoginScreen() -> Element {
     let error_msg_val = error_msg();
     let loading_val = is_loading();
 
-    let handle_login = move |_e: Event<FormData>| {
+    let handle_login = move |mut e: Event<FormData>| {
+        e.prevent_default();
         spawn(async move {
             is_loading.set(true);
             error_msg.set(String::new());
@@ -31,6 +32,7 @@ pub fn LoginScreen() -> Element {
             match authenticate(req).await {
                 Ok(response) => {
                     is_loading.set(false);
+                    crate::utils::save_session(&response);
                     session.set(Some(response));
                     navigator.push(Route::ContextSelector {});
                 }
@@ -180,6 +182,7 @@ pub fn ContextSelector() -> Element {
                             key: "{clinic.clinic_id}",
                             clinic: clinic.clone(),
                             on_select: move |_| {
+                                crate::utils::save_active_clinic(&clinic);
                                 active_clinic.set(Some(clinic.clone()));
                                 navigator.push(Route::AgendaView {});
                             }
@@ -193,6 +196,7 @@ pub fn ContextSelector() -> Element {
                     button {
                         class: "context-logout-link",
                         onclick: move |_| {
+                            crate::utils::clear_session();
                             let mut session_sig = consume_context::<Signal<SessionState>>();
                             session_sig.set(None);
                             navigator.push(Route::LoginScreen {});

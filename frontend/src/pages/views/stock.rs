@@ -840,6 +840,7 @@ fn InventoryItemModal(
                         filename: fname,
                         mime_type: mime,
                         base64_content,
+                        ..Default::default()
                     };
 
                     match api::upload_stock_document(&t, &c, req).await {
@@ -1315,6 +1316,7 @@ fn StockMovementModal(
                         filename: fname,
                         mime_type: mime,
                         base64_content,
+                        ..Default::default()
                     };
 
                     match api::upload_stock_document(&t, &c, req).await {

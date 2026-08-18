@@ -129,7 +129,8 @@ struct DbDocumentRow {
     doctor_signed_at: Option<DateTime<Utc>>,
     doctor_signature_data: Option<String>,
     patient_otp_verified: Option<bool>,
-    checksum_sha256: Option<String>,
+    final_checksum_sha256: Option<String>,
+    audit_trail: Option<serde_json::Value>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -520,7 +521,8 @@ pub async fn get_patient_details(
             doctor_signed_at: d.doctor_signed_at.map(|dt| dt.to_rfc3339()),
             doctor_signature_data: d.doctor_signature_data,
             patient_otp_verified: d.patient_otp_verified.unwrap_or(false),
-            checksum_sha256: d.checksum_sha256,
+            checksum_sha256: d.final_checksum_sha256,
+            audit_trail: d.audit_trail.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default(),
             created_at: d.created_at.to_rfc3339(),
             updated_at: d.updated_at.to_rfc3339(),
         })

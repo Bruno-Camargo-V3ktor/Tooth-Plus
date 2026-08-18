@@ -1,7 +1,7 @@
 use super::API_BASE;
 use reqwest::Client;
 use shared::documents::{
-    ContractTemplate, CreateContractTemplateRequest, CreatePatientDocumentRequest,
+    ContractTemplate, CreateContractTemplateRequest, PatientCheckRequest, PatientCheckResponse, PatientRegisterPasswordRequest, CreatePatientDocumentRequest,
     DoctorSignAuthRequest, DocumentsListResponse, PatientDocument, PatientSignAuthRequest,
     PublicSigningDocumentResponse, SignAuthResponse, SubmitSignatureRequest,
     UpdateContractTemplateRequest,
@@ -230,6 +230,7 @@ pub async fn upload_document_pdf(
         filename: filename.to_string(),
         mime_type: "application/pdf".to_string(),
         base64_content: base64_content.to_string(),
+        ..Default::default()
     };
 
     let res = get_client()
@@ -289,6 +290,65 @@ pub async fn fetch_public_signing_document(
     }
 }
 
+pub async fn check_patient_signing(
+    signing_token: &str,
+    cpf: &str,
+) -> Result<PatientCheckResponse, String> {
+    let url = format!("{}/public/sign/{}/check-patient", API_BASE, signing_token);
+    let req = PatientCheckRequest { cpf: cpf.to_string() };
+
+    let res = get_client()
+        .post(&url)
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão com portal de assinatura.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<PatientCheckResponse>()
+            .await
+            .map_err(|_| "Erro ao processar verificação do paciente.".into())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&err) {
+            if let Some(msg) = v.get("error").and_then(|e| e.as_str()) {
+                return Err(msg.to_string());
+            }
+        }
+        Err("CPF não localizado para este documento.".into())
+    }
+}
+
+pub async fn register_patient_password(
+    signing_token: &str,
+    cpf: &str,
+    password: &str,
+) -> Result<SignAuthResponse, String> {
+    let url = format!("{}/public/sign/{}/register-patient-password", API_BASE, signing_token);
+    let req = PatientRegisterPasswordRequest { cpf: cpf.to_string(), password: password.to_string() };
+
+    let res = get_client()
+        .post(&url)
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao cadastrar senha.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<SignAuthResponse>()
+            .await
+            .map_err(|_| "Erro ao autenticar após criar senha.".into())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&err) {
+            if let Some(msg) = v.get("error").and_then(|e| e.as_str()) {
+                return Err(msg.to_string());
+            }
+        }
+        Err("Falha ao registrar senha de assinatura.".into())
+    }
+}
+
 pub async fn auth_patient_signing(
     signing_token: &str,
     req: PatientSignAuthRequest,
@@ -343,21 +403,28 @@ pub async fn auth_doctor_signing(
     }
 }
 
-pub async fn request_signing_otp(signing_token: &str) -> Result<String, String> {
+pub async fn request_signing_otp(signing_token: &str, channel: &str) -> Result<String, String> {
     let url = format!("{}/public/sign/{}/request-otp", API_BASE, signing_token);
+
+    let payload = shared::documents::RequestOtpRequest {
+        channel: Some(channel.to_string()),
+    };
 
     let res = get_client()
         .post(&url)
+        .json(&payload)
         .send()
         .await
-        .map_err(|_| "Falha ao solicitar código via WhatsApp.".to_string())?;
+        .map_err(|_| "Falha ao solicitar código de validação.".to_string())?;
 
     if res.status().is_success() {
-        Ok("Código OTP enviado via WhatsApp com sucesso.".into())
+        let json_body: serde_json::Value = res.json().await.unwrap_or_default();
+        let msg = json_body.get("message").and_then(|v| v.as_str()).unwrap_or("Código enviado com sucesso.");
+        Ok(msg.to_string())
     } else {
         let err = res.text().await.unwrap_or_default();
         Err(if err.is_empty() {
-            "Erro ao disparar código WhatsApp.".into()
+            "Erro ao disparar código de validação.".into()
         } else {
             err
         })

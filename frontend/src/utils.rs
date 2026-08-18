@@ -137,3 +137,62 @@ pub fn replace_template_variables(
 
     result
 }
+
+#[cfg(target_arch = "wasm32")]
+pub fn get_storage_item(key: &str) -> Option<String> {
+    web_sys::window()
+        .and_then(|w| w.local_storage().ok())
+        .flatten()
+        .and_then(|s| s.get_item(key).ok())
+        .flatten()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn set_storage_item(key: &str, value: &str) {
+    if let Some(storage) = web_sys::window().and_then(|w| w.local_storage().ok()).flatten() {
+        let _ = storage.set_item(key, value);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn remove_storage_item(key: &str) {
+    if let Some(storage) = web_sys::window().and_then(|w| w.local_storage().ok()).flatten() {
+        let _ = storage.remove_item(key);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_storage_item(_key: &str) -> Option<String> { None }
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_storage_item(_key: &str, _value: &str) {}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn remove_storage_item(_key: &str) {}
+
+pub fn save_session(session: &shared::auth::LoginResponse) {
+    if let Ok(json) = serde_json::to_string(session) {
+        set_storage_item("toothplus_session", &json);
+    }
+}
+
+pub fn load_session() -> Option<shared::auth::LoginResponse> {
+    get_storage_item("toothplus_session")
+        .and_then(|json| serde_json::from_str(&json).ok())
+}
+
+pub fn save_active_clinic(clinic: &shared::models::ClinicAccess) {
+    if let Ok(json) = serde_json::to_string(clinic) {
+        set_storage_item("toothplus_active_clinic", &json);
+    }
+}
+
+pub fn load_active_clinic() -> Option<shared::models::ClinicAccess> {
+    get_storage_item("toothplus_active_clinic")
+        .and_then(|json| serde_json::from_str(&json).ok())
+}
+
+pub fn clear_session() {
+    remove_storage_item("toothplus_session");
+    remove_storage_item("toothplus_active_clinic");
+}

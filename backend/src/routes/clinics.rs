@@ -28,6 +28,11 @@ struct DbClinic {
     zip_code: String,
     auto_reminders: Option<bool>,
     require_esign: Option<bool>,
+    smtp_host: Option<String>,
+    smtp_port: Option<u16>,
+    smtp_user: Option<String>,
+    smtp_from: Option<String>,
+    smtp_tls: Option<bool>,
 }
 
 fn record_key(id: &RecordId) -> String {
@@ -70,6 +75,11 @@ pub async fn get_clinic(
             whatsapp_instance: c.whatsapp_instance,
             auto_reminders: c.auto_reminders.unwrap_or(true),
             require_esign: c.require_esign.unwrap_or(true),
+            smtp_host: c.smtp_host,
+            smtp_port: c.smtp_port,
+            smtp_user: c.smtp_user,
+            smtp_from: c.smtp_from,
+            smtp_tls: c.smtp_tls,
             address: ClinicAddress {
                 street: c.street,
                 number: c.number,
@@ -122,6 +132,24 @@ pub async fn update_clinic(
     }
     if let Some(v) = data.require_esign {
         patch.insert("require_esign".into(), serde_json::Value::Bool(v));
+    }
+    if let Some(v) = data.smtp_host {
+        patch.insert("smtp_host".into(), serde_json::Value::String(v));
+    }
+    if let Some(v) = data.smtp_port {
+        patch.insert("smtp_port".into(), serde_json::Value::Number(v.into()));
+    }
+    if let Some(v) = data.smtp_user {
+        patch.insert("smtp_user".into(), serde_json::Value::String(v));
+    }
+    if let Some(v) = data.smtp_pass {
+        patch.insert("smtp_pass".into(), serde_json::Value::String(v));
+    }
+    if let Some(v) = data.smtp_from {
+        patch.insert("smtp_from".into(), serde_json::Value::String(v));
+    }
+    if let Some(v) = data.smtp_tls {
+        patch.insert("smtp_tls".into(), serde_json::Value::Bool(v));
     }
 
     if patch.is_empty() {
@@ -184,7 +212,7 @@ pub async fn upload_logo(
 
     let ext = data.filename.rsplit('.').next().unwrap_or("png");
     let file_url = storage
-        .upload_file("clinics/logos", ext, &data.base64_content)
+        .upload_file(&format!("clinics/{}/logos", clinic_id.replace("clinic:", "")), ext, &data.base64_content)
         .await
         .map_err(|e| ApiError::Internal(format!("Erro no upload: {}", e)))?;
 

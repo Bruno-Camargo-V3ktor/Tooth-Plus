@@ -9,10 +9,12 @@ use crate::components::icons::{
 use crate::permissions;
 use crate::{ActiveClinicState, SessionState};
 use dioxus::prelude::*;
+use base64::{Engine as _, engine::general_purpose};
+use crate::components::icons::IconUpload;
 use qrcode::QrCode;
 use qrcode::render::svg;
 use shared::documents::{
-    ContractTemplate, CreateContractTemplateRequest, CreatePatientDocumentRequest, DocumentsKpis,
+    CreateContractTemplateRequest, CreatePatientDocumentRequest, DocumentsKpis,
     PatientDocument, SignatureField, UpdateContractTemplateRequest,
 };
 use shared::patients::Patient;
@@ -68,17 +70,58 @@ pub fn DocumentsView() -> Element {
     }
 
     let mut active_main_tab = use_signal(|| "emitted".to_string()); // "emitted" | "templates"
-    let mut documents_list = use_signal(Vec::<PatientDocument>::new);
-    let mut templates_list = use_signal(Vec::<ContractTemplate>::new);
-    let mut patients_list = use_signal(Vec::<Patient>::new);
-    let mut kpis = use_signal(DocumentsKpis::default);
-
-    let mut is_loading = use_signal(|| true);
     let mut search_query = use_signal(String::new);
-    let mut status_filter = use_signal(|| "all".to_string());
+    let status_filter = use_signal(|| "all".to_string());
+    let mut reload_trigger = use_signal(|| 0usize);
 
     let mut toast_msg = use_signal(|| None::<String>);
     let mut error_toast = use_signal(|| None::<String>);
+
+    let tok_res = token.clone();
+    let cid_res = clinic_id.clone();
+    let documents_resource = use_resource(move || {
+        let t = tok_res.clone();
+        let cid = cid_res.clone();
+        let st = status_filter();
+        let _ = reload_trigger();
+        let st_opt = if st == "all" { None } else { Some(st) };
+
+        async move {
+            if t.is_empty() || cid.is_empty() || !can_read {
+                return Ok(shared::documents::DocumentsListResponse {
+                    documents: vec![],
+                    templates: vec![],
+                    kpis: DocumentsKpis::default(),
+                });
+            }
+            let st_ref = st_opt.as_deref();
+            fetch_documents(&t, &cid, None, st_ref).await
+        }
+    });
+
+    let tok_pat = token.clone();
+    let cid_pat = clinic_id.clone();
+    let patients_resource = use_resource(move || {
+        let t = tok_pat.clone();
+        let cid = cid_pat.clone();
+        async move {
+            if t.is_empty() || cid.is_empty() || !can_read {
+                return Ok(shared::patients::PatientListResponse { items: vec![], kpis: shared::patients::PatientKpis::default(), total: 0 });
+            }
+            fetch_patients(&t, &cid, None).await
+        }
+    });
+
+    let (documents_list, templates_list, kpis, is_loading) = match &*documents_resource.read() {
+        Some(Ok(resp)) => (resp.documents.clone(), resp.templates.clone(), resp.kpis.clone(), false),
+        Some(Err(_)) => (vec![], vec![], DocumentsKpis::default(), false),
+        None => (vec![], vec![], DocumentsKpis::default(), true),
+    };
+
+    let patients_list = match &*patients_resource.read() {
+        Some(Ok(resp)) => resp.items.clone(),
+        _ => vec![],
+    };
 
     // Modals
     let mut is_emit_modal_open = use_signal(|| false);
@@ -94,6 +137,10 @@ pub fn DocumentsView() -> Element {
     let mut emit_doc_title = use_signal(String::new);
     let mut emit_doc_type = use_signal(|| "contract".to_string());
     let mut emit_pdf_url = use_signal(String::new);
+    let mut is_uploading_doc_pdf = use_signal(|| false);
+    let mut uploaded_doc_pdf_name = use_signal(String::new);
+    let mut is_uploading_tpl_pdf = use_signal(|| false);
+    let mut uploaded_tpl_pdf_name = use_signal(String::new);
 
     // Form inputs: Template Editor
     let mut tpl_title = use_signal(String::new);
@@ -106,60 +153,14 @@ pub fn DocumentsView() -> Element {
 
     // New Signature Tag Form
     let mut new_tag_signer = use_signal(|| "patient".to_string());
-    let mut new_tag_page = use_signal(|| 1u32);
+    let new_tag_page = use_signal(|| 1u32);
     let mut new_tag_x = use_signal(|| 15.0f32);
     let mut new_tag_y = use_signal(|| 80.0f32);
     let mut new_tag_label = use_signal(|| "Assinatura do Paciente".to_string());
 
-    let load_documents_data = {
-        let token = token.clone();
-        let clinic_id = clinic_id.clone();
-        move || {
-            let t = token.clone();
-            let cid = clinic_id.clone();
-            let st = status_filter();
-            let st_opt = if st == "all" { None } else { Some(st) };
-
-            spawn(async move {
-                is_loading.set(true);
-                let st_ref = st_opt.as_deref();
-                match fetch_documents(&t, &cid, None, st_ref).await {
-                    Ok(resp) => {
-                        documents_list.set(resp.documents);
-                        templates_list.set(resp.templates);
-                        kpis.set(resp.kpis);
-                    }
-                    Err(e) => {
-                        error_toast.set(Some(e));
-                    }
-                }
-                is_loading.set(false);
-            });
-        }
+    let _refresh_data = move || {
+        reload_trigger.set(reload_trigger() + 1);
     };
-
-    let load_patients_dropdown = {
-        let token = token.clone();
-        let clinic_id = clinic_id.clone();
-        move || {
-            let t = token.clone();
-            let cid = clinic_id.clone();
-            spawn(async move {
-                if let Ok(resp) = fetch_patients(&t, &cid, None).await {
-                    patients_list.set(resp.items);
-                }
-            });
-        }
-    };
-
-    use_effect({
-        let ld = load_documents_data.clone();
-        let lp = load_patients_dropdown.clone();
-        move || {
-            ld();
-            lp();
-        }
-    });
 
     let open_create_template_modal = move |_| {
         editing_template_id.set(None);
@@ -200,11 +201,11 @@ pub fn DocumentsView() -> Element {
     let on_submit_template = {
         let token = token.clone();
         let clinic_id = clinic_id.clone();
-        let ld = load_documents_data.clone();
+        let mut reload_doc = reload_trigger;
         move |_| {
             let t = token.clone();
             let cid = clinic_id.clone();
-            let ld_call = ld.clone();
+            let mut reload_doc = reload_trigger;
             let edit_id = editing_template_id();
 
             if tpl_title().trim().is_empty() {
@@ -229,7 +230,7 @@ pub fn DocumentsView() -> Element {
                     if let Ok(_) = update_template(&t, &id, req).await {
                         toast_msg.set(Some("Modelo de contrato atualizado!".into()));
                         is_template_modal_open.set(false);
-                        ld_call();
+                        reload_doc.set(reload_doc() + 1);
                     }
                 } else {
                     let req = CreateContractTemplateRequest {
@@ -247,7 +248,7 @@ pub fn DocumentsView() -> Element {
                     if let Ok(_) = create_template(&t, req).await {
                         toast_msg.set(Some("Modelo de contrato criado com sucesso!".into()));
                         is_template_modal_open.set(false);
-                        ld_call();
+                        reload_doc.set(reload_doc() + 1);
                     }
                 }
             });
@@ -257,11 +258,11 @@ pub fn DocumentsView() -> Element {
     let on_submit_emit_doc = {
         let token = token.clone();
         let clinic_id = clinic_id.clone();
-        let ld = load_documents_data.clone();
+        let mut reload_doc = reload_trigger;
         move |_| {
             let t = token.clone();
             let cid = clinic_id.clone();
-            let ld_call = ld.clone();
+            let mut reload_doc = reload_trigger;
 
             if emit_patient_id().trim().is_empty() {
                 error_toast.set(Some("Selecione o paciente para emissão.".into()));
@@ -300,7 +301,7 @@ pub fn DocumentsView() -> Element {
                         toast_msg.set(Some("Documento emitido com sucesso!".into()));
                         is_emit_modal_open.set(false);
                         qr_modal_doc.set(Some(doc));
-                        ld_call();
+                        reload_doc.set(reload_doc() + 1);
                     }
                     Err(e) => {
                         error_toast.set(Some(e));
@@ -310,7 +311,7 @@ pub fn DocumentsView() -> Element {
         }
     };
 
-    let ld_refresh = load_documents_data.clone();
+    
 
     rsx! {
         div { class: "documents-view-container",
@@ -335,7 +336,7 @@ pub fn DocumentsView() -> Element {
                     }
                     div { class: "kpi-content",
                         span { class: "kpi-label", "Total de Documentos" }
-                        h3 { class: "kpi-value", "{kpis().total_documents}" }
+                        h3 { class: "kpi-value", "{kpis.total_documents}" }
                     }
                 }
                 div { class: "kpi-card",
@@ -344,7 +345,7 @@ pub fn DocumentsView() -> Element {
                     }
                     div { class: "kpi-content",
                         span { class: "kpi-label", "Pendentes de Assinatura" }
-                        h3 { class: "kpi-value", "{kpis().pending_signatures}" }
+                        h3 { class: "kpi-value", "{kpis.pending_signatures}" }
                     }
                 }
                 div { class: "kpi-card",
@@ -353,7 +354,7 @@ pub fn DocumentsView() -> Element {
                     }
                     div { class: "kpi-content",
                         span { class: "kpi-label", "100% Assinados e Validados" }
-                        h3 { class: "kpi-value", "{kpis().completed_signed}" }
+                        h3 { class: "kpi-value", "{kpis.completed_signed}" }
                     }
                 }
                 div { class: "kpi-card",
@@ -362,7 +363,7 @@ pub fn DocumentsView() -> Element {
                     }
                     div { class: "kpi-content",
                         span { class: "kpi-label", "Modelos de Contrato" }
-                        h3 { class: "kpi-value", "{kpis().templates_count}" }
+                        h3 { class: "kpi-value", "{kpis.templates_count}" }
                     }
                 }
             }
@@ -373,13 +374,13 @@ pub fn DocumentsView() -> Element {
                     class: if active_main_tab() == "emitted" { "doc-main-tab active" } else { "doc-main-tab" },
                     onclick: move |_| active_main_tab.set("emitted".to_string()),
                     IconFile { size: 16, color: "currentColor".to_string() }
-                    " Documentos & Contratos Emitidos ({documents_list().len()})"
+                    " Documentos & Contratos Emitidos ({documents_list.len()})"
                 }
                 button {
                     class: if active_main_tab() == "templates" { "doc-main-tab active" } else { "doc-main-tab" },
                     onclick: move |_| active_main_tab.set("templates".to_string()),
                     IconSignature { size: 16, color: "currentColor".to_string() }
-                    " Modelos de Contratos & E-Sign ({templates_list().len()})"
+                    " Modelos de Contratos & E-Sign ({templates_list.len()})"
                 }
             }
 
@@ -401,7 +402,7 @@ pub fn DocumentsView() -> Element {
                         div { class: "toolbar-actions",
                             button {
                                 class: "btn-refresh",
-                                onclick: move |_| ld_refresh(),
+                                onclick: move |_| reload_trigger.set(reload_trigger() + 1),
                                 IconRefresh { size: 16, color: "#475569".to_string() }
                             }
                             if can_write {
@@ -422,16 +423,18 @@ pub fn DocumentsView() -> Element {
                         }
                     }
 
-                    if is_loading() {
+                    if is_loading {
                         div { class: "loading-card",
                             div { class: "loading-spinner" }
                             p { "Carregando documentos emitidos..." }
                         }
-                    } else if documents_list().is_empty() {
+                    } else if documents_list.is_empty() {
                         div { class: "empty-state-card",
-                            IconFile { size: 48, color: "#94a3b8".to_string() }
+                            div { class: "empty-state-icon-box",
+                                IconFile { size: 32, color: "currentColor".to_string() }
+                            }
                             h3 { "Nenhum documento emitido" }
-                            p { "Emita contratos e termos para assinatura digital imediata de pacientes e doutores." }
+                            p { "Emita contratos e termos para assinatura digital imediata de pacientes e profissionais." }
                         }
                     } else {
                         div { class: "table-container",
@@ -448,7 +451,7 @@ pub fn DocumentsView() -> Element {
                                     }
                                 }
                                 tbody {
-                                    for doc in documents_list().iter() {
+                                    for doc in documents_list.iter() {
                                         tr {
                                             td {
                                                 div { class: "doc-title-cell",
@@ -516,16 +519,16 @@ pub fn DocumentsView() -> Element {
                                                                 let did = doc.id.clone();
                                                                 let t = token.clone();
                                                                 let cid = clinic_id.clone();
-                                                                let ld = load_documents_data.clone();
+                                                                let mut reload_doc = reload_trigger;
                                                                 move |_| {
                                                                     let t_call = t.clone();
                                                                     let cid_call = cid.clone();
                                                                     let did_call = did.clone();
-                                                                    let ld_call = ld.clone();
+                                                                    let mut reload_doc = reload_trigger;
                                                                     spawn(async move {
                                                                         if delete_patient_document(&t_call, &did_call, &cid_call).await.is_ok() {
                                                                             toast_msg.set(Some("Documento excluído.".into()));
-                                                                            ld_call();
+                                                                            reload_doc.set(reload_doc() + 1);
                                                                         }
                                                                     });
                                                                 }
@@ -562,15 +565,17 @@ pub fn DocumentsView() -> Element {
                         }
                     }
 
-                    if templates_list().is_empty() {
+                    if templates_list.is_empty() {
                         div { class: "empty-state-card",
-                            IconSignature { size: 48, color: "#94a3b8".to_string() }
+                            div { class: "empty-state-icon-box",
+                                IconSignature { size: 32, color: "currentColor".to_string() }
+                            }
                             h3 { "Nenhum modelo de contrato cadastrado" }
                             p { "Crie modelos como Termo TCLE, Contrato de Ortodontia ou Implante com tags de assinatura." }
                         }
                     } else {
                         div { class: "templates-grid",
-                            for tpl in templates_list().iter() {
+                            for tpl in templates_list.iter() {
                                 div { class: "template-card",
                                     div { class: "template-card-header",
                                         div {
@@ -614,16 +619,16 @@ pub fn DocumentsView() -> Element {
                                                     let tid = tpl.id.clone();
                                                     let t = token.clone();
                                                     let cid = clinic_id.clone();
-                                                    let ld = load_documents_data.clone();
+                                                    let mut reload_doc = reload_trigger;
                                                     move |_| {
                                                         let t_call = t.clone();
                                                         let cid_call = cid.clone();
                                                         let tid_call = tid.clone();
-                                                        let ld_call = ld.clone();
+                                                        let mut reload_doc = reload_trigger;
                                                         spawn(async move {
                                                             if delete_template(&t_call, &tid_call, &cid_call).await.is_ok() {
                                                                 toast_msg.set(Some("Modelo excluído.".into()));
-                                                                ld_call();
+                                                                reload_doc.set(reload_doc() + 1);
                                                             }
                                                         });
                                                     }
@@ -663,7 +668,7 @@ pub fn DocumentsView() -> Element {
                                         onchange: move |e| {
                                             let val = e.value();
                                             emit_patient_id.set(val.clone());
-                                            if let Some(p) = patients_list().iter().find(|p| p.id == val).cloned() {
+                                            if let Some(p) = patients_list.iter().find(|p| p.id == val).cloned() {
                                                 emit_doc_title.set(format!("Contrato de Prestação de Serviços - {}", p.full_name));
                                                 selected_patient_obj.set(Some(p));
                                             } else {
@@ -671,7 +676,7 @@ pub fn DocumentsView() -> Element {
                                             }
                                         },
                                         option { value: "", "Selecione o paciente..." }
-                                        for p in patients_list().iter() {
+                                        for p in patients_list.iter() {
                                             option { value: "{p.id}", "{p.full_name} ({p.document_cpf})" }
                                         }
                                     }
@@ -684,7 +689,7 @@ pub fn DocumentsView() -> Element {
                                         onchange: move |e| {
                                             let val = e.value();
                                             emit_template_id.set(val.clone());
-                                            if let Some(t) = templates_list().iter().find(|t| t.id == val) {
+                                            if let Some(t) = templates_list.iter().find(|t| t.id == val) {
                                                 if emit_doc_title().is_empty() || emit_doc_title().starts_with("Contrato") {
                                                     if let Some(ref p) = selected_patient_obj() {
                                                         emit_doc_title.set(format!("{} - {}", t.title, p.full_name));
@@ -695,7 +700,7 @@ pub fn DocumentsView() -> Element {
                                             }
                                         },
                                         option { value: "", "Documento em Branco / Padrão" }
-                                        for tpl in templates_list().iter() {
+                                        for tpl in templates_list.iter() {
                                             option { value: "{tpl.id}", "{tpl.title}" }
                                         }
                                     }
@@ -749,13 +754,44 @@ pub fn DocumentsView() -> Element {
                                     }
                                 }
                                 div { class: "form-group",
-                                    label { class: "form-label", "URL do PDF (Opcional)" }
-                                    input {
-                                        r#type: "text",
-                                        class: "input-field",
-                                        placeholder: "https://... (ou deixe vazio para usar o PDF do modelo)",
-                                        value: "{emit_pdf_url}",
-                                        oninput: move |e| emit_pdf_url.set(e.value()),
+                                    label { class: "form-label", "Arquivo PDF (Opcional se usar modelo)" }
+                                    label { class: "attachment-dropzone mini-dropzone",
+                                        input {
+                                            r#type: "file",
+                                            accept: ".pdf,application/pdf",
+                                            onchange: {
+                                                let t = token.clone();
+                                                move |evt: FormEvent| {
+                                                    for file in evt.files() {
+                                                        let fname = file.name();
+                                                        uploaded_doc_pdf_name.set(fname.clone());
+                                                        is_uploading_doc_pdf.set(true);
+                                                        let t_c = t.clone();
+                                                        spawn(async move {
+                                                            if let Ok(bytes) = file.read_bytes().await {
+                                                                let b64 = general_purpose::STANDARD.encode(&bytes);
+                                                                if let Ok(url) = crate::api::upload_document_pdf(&t_c, &fname, &b64).await {
+                                                                    emit_pdf_url.set(url);
+                                                                }
+                                                            }
+                                                            is_uploading_doc_pdf.set(false);
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        div { class: "dropzone-label",
+                                            IconUpload { size: 16, color: "#0052cc".to_string() }
+                                            span {
+                                                if is_uploading_doc_pdf() {
+                                                    "Enviando PDF..."
+                                                } else if !emit_pdf_url().is_empty() {
+                                                    "✓ Documento PDF Carregado"
+                                                } else {
+                                                    "Fazer Upload do PDF"
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -916,13 +952,44 @@ pub fn DocumentsView() -> Element {
                                             }
                                         }
                                         div { class: "form-group",
-                                            label { class: "form-label", "URL do PDF Base" }
-                                            input {
-                                                r#type: "text",
-                                                class: "input-field",
-                                                placeholder: "https://... (URL do PDF)",
-                                                value: "{tpl_pdf_url}",
-                                                oninput: move |e| tpl_pdf_url.set(e.value()),
+                                            label { class: "form-label", "Arquivo PDF Base do Modelo" }
+                                            label { class: "attachment-dropzone mini-dropzone",
+                                                input {
+                                                    r#type: "file",
+                                                    accept: ".pdf,application/pdf",
+                                                    onchange: {
+                                                        let t = token.clone();
+                                                        move |evt: FormEvent| {
+                                                            for file in evt.files() {
+                                                                let fname = file.name();
+                                                                uploaded_tpl_pdf_name.set(fname.clone());
+                                                                is_uploading_tpl_pdf.set(true);
+                                                                let t_c = t.clone();
+                                                                spawn(async move {
+                                                                    if let Ok(bytes) = file.read_bytes().await {
+                                                                        let b64 = general_purpose::STANDARD.encode(&bytes);
+                                                                        if let Ok(url) = crate::api::upload_document_pdf(&t_c, &fname, &b64).await {
+                                                                            tpl_pdf_url.set(url);
+                                                                        }
+                                                                    }
+                                                                    is_uploading_tpl_pdf.set(false);
+                                                                });
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                div { class: "dropzone-label",
+                                                    IconUpload { size: 16, color: "#0052cc".to_string() }
+                                                    span {
+                                                        if is_uploading_tpl_pdf() {
+                                                            "Enviando PDF do Modelo..."
+                                                        } else if !tpl_pdf_url().is_empty() {
+                                                            "✓ PDF do Modelo Carregado"
+                                                        } else {
+                                                            "Fazer Upload do PDF do Modelo"
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -1211,8 +1278,7 @@ pub fn DocumentsView() -> Element {
             }
 
             // =========================================================================
-            // MODAL: VISUALIZADOR DE PDF / DOCUMENTO
-            // No Dioxus Desktop, iframes nativos não funcionam — usamos painel de link externo.
+            // MODAL: VISUALIZADOR DE PDF / DOCUMENTO (WEB NATIVO)
             // =========================================================================
             if let Some((ref url, ref title)) = pdf_preview_target() {
                 div { class: "modal-overlay",
@@ -1222,37 +1288,33 @@ pub fn DocumentsView() -> Element {
                         div { class: "modal-header",
                             div {
                                 h2 { class: "modal-title", "{title}" }
-                                p { class: "modal-subtitle", "Documento PDF" }
+                                p { class: "modal-subtitle", "Documento PDF Clínico" }
                             }
-                            button {
-                                class: "modal-close",
-                                onclick: move |_| pdf_preview_target.set(None),
-                                "×"
-                            }
-                        }
-                        div { class: "modal-body",
-                            div { class: "pdf-desktop-viewer",
-                                div { class: "pdf-desktop-icon",
-                                    IconFile { size: 56, color: "#0052cc".to_string() }
-                                }
-                                p { class: "pdf-desktop-title", "{title}" }
-                                p { class: "pdf-desktop-hint",
-                                    "O visualizador de PDF inline está disponível apenas na versão web. Clique abaixo para abrir o documento no seu navegador."
-                                }
+                            div { class: "modal-header-actions",
                                 a {
                                     href: "{url}",
                                     target: "_blank",
-                                    class: "btn-primary pdf-open-btn",
-                                    IconExternalLink { size: 16, color: "white".to_string() }
-                                    " Abrir PDF no Navegador"
+                                    rel: "noopener noreferrer",
+                                    class: "btn-secondary btn-sm",
+                                    IconExternalLink { size: 14, color: "#0052cc".to_string() }
+                                    " Abrir em Nova Aba"
                                 }
-                                div { class: "pdf-link-copy-row",
-                                    input {
-                                        r#type: "text",
-                                        readonly: true,
-                                        class: "modern-input-field",
-                                        value: "{url}",
-                                    }
+                                button {
+                                    class: "modal-close",
+                                    onclick: move |_| pdf_preview_target.set(None),
+                                    "×"
+                                }
+                            }
+                        }
+                        div { class: "modal-body pdf-viewer-modal-body",
+                            object {
+                                data: "{url}#toolbar=1&view=FitH",
+                                r#type: "application/pdf",
+                                class: "pdf-modal-embed",
+                                iframe {
+                                    src: "{url}",
+                                    class: "pdf-modal-embed",
+                                    title: "{title}",
                                 }
                             }
                         }

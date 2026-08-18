@@ -1,21 +1,17 @@
 [application]
+name = "frontend"
+default_platform = "web"
 
 [web.app]
-
-# HTML title tag content
 title = "Tooth Plus"
 
-# include `assets` in web platform
+[web.watcher]
+reload_html = true
+watch_path = ["src", "assets"]
+
 [web.resource]
-
-# Additional CSS style files
 style = []
-
-# Additional JavaScript files
 script = []
 
 [web.resource.dev]
-
-# Javascript code file
-# serve: [dev-server] only
 script = []

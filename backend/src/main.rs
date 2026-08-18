@@ -1,9 +1,12 @@
-use crate::{evolution::EvolutionClient, storage::StorageConfig};
 use actix_cors::Cors;
-use actix_web::{App, HttpServer, http::header, web};
+use actix_web::http::header;
+use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer};
 use std::env;
+use std::sync::Arc;
 
 mod db;
+pub mod documents_pdf;
+pub mod email;
 mod error;
 mod evolution;
 mod migrations;
@@ -11,17 +14,84 @@ mod routes;
 mod security;
 mod storage;
 
+use db::Db;
+use evolution::EvolutionClient;
+use storage::{build_storage_provider, StorageConfig, StorageProvider};
+
+pub fn resolve_uploads_dir() -> String {
+    if let Ok(bucket) = env::var("STORAGE_BUCKET") {
+        if std::path::Path::new(&bucket).is_dir() {
+            return bucket;
+        }
+        let alt = format!("../{}", bucket.trim_start_matches("./"));
+        if std::path::Path::new(&alt).is_dir() {
+            return alt;
+        }
+    }
+    if std::path::Path::new("uploads").is_dir() {
+        return "uploads".to_string();
+    }
+    if std::path::Path::new("../uploads").is_dir() {
+        return "../uploads".to_string();
+    }
+    "uploads".to_string()
+}
+
+#[get("/uploads/{filename:.*}")]
+pub async fn serve_uploads(
+    req: HttpRequest,
+    path: web::Path<String>,
+) -> Result<HttpResponse, actix_web::Error> {
+    let raw_path = path.into_inner();
+    let upload_dir = resolve_uploads_dir();
+    let sanitized = raw_path.replace("..", "");
+    let full_path = std::path::Path::new(&upload_dir).join(&sanitized);
+
+    if !full_path.exists() || !full_path.is_file() {
+        return Ok(HttpResponse::NotFound().body("Arquivo não encontrado."));
+    }
+
+    let named_file = actix_files::NamedFile::open_async(&full_path).await?;
+    let mut response = named_file.into_response(&req);
+
+    let mime_str = if sanitized.ends_with(".pdf") {
+        "application/pdf"
+    } else if sanitized.ends_with(".png") {
+        "image/png"
+    } else if sanitized.ends_with(".jpg") || sanitized.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if sanitized.ends_with(".svg") {
+        "image/svg+xml"
+    } else {
+        "application/octet-stream"
+    };
+
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static(mime_str),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        header::HeaderValue::from_static("inline"),
+    );
+
+    Ok(response)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenvy::dotenv().ok();
 
-    println!("Database connection initiated...");
-    let db_client = db::init_db().await.expect("Failed to connect to SurrealDB");
-    migrations::run_migrations(&db_client).await;
+    let db_instance = db::init_db().await.expect("Failed to connect to DB");
+    let db_data = web::Data::new(db_instance);
 
+    migrations::run_migrations(&db_data).await;
+
+    let upload_dir = resolve_uploads_dir();
+    let _ = std::fs::create_dir_all(&upload_dir);
     let storage_config = StorageConfig {
         provider_type: env::var("STORAGE_PROVIDER").unwrap_or_else(|_| "local".into()),
-        bucket_name: env::var("STORAGE_BUCKET").unwrap_or_else(|_| "./uploads".into()),
+        bucket_name: upload_dir.clone(),
         region: env::var("STORAGE_REGION").unwrap_or_else(|_| "us-east-1".into()),
         endpoint_url: env::var("STORAGE_ENDPOINT").unwrap_or_default(),
         access_key: env::var("STORAGE_ACCESS_KEY").unwrap_or_default(),
@@ -29,17 +99,19 @@ async fn main() -> std::io::Result<()> {
         public_url: env::var("STORAGE_PUBLIC_URL")
             .unwrap_or_else(|_| "http://localhost:4000/uploads".into()),
     };
-    let storage_provider = storage::build_storage_provider(storage_config).await;
 
-    let evolution_url =
-        env::var("EVOLUTION_API_URL").unwrap_or_else(|_| "http://localhost:8081".into());
-    let evolution_client = EvolutionClient::new(evolution_url);
+    let storage_provider = build_storage_provider(storage_config).await;
+    let storage_data = web::Data::new(storage_provider);
 
-    let db_data = web::Data::new(db_client.clone());
-    let storage_data = web::Data::from(storage_provider);
+    let evo_base = env::var("EVOLUTION_API_URL").unwrap_or_else(|_| "http://localhost:8080".into());
+    let evolution_client = EvolutionClient::new(evo_base);
     let evolution_data = web::Data::new(evolution_client);
 
-    let port = env::var("SERVER_PORT").unwrap_or_else(|_| "4000".to_string());
+    let port: u16 = env::var("PORT")
+        .unwrap_or_else(|_| "4000".into())
+        .parse()
+        .unwrap_or(4000);
+
     let frontend_url_env = env::var("FRONTEND_URL").unwrap_or_else(|_| "*".to_string());
 
     let allowed_origins: Vec<String> = frontend_url_env
@@ -72,6 +144,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(db_data.clone())
             .app_data(storage_data.clone())
             .app_data(evolution_data.clone())
+            .service(serve_uploads)
             .service(
                 web::scope("/api")
                     .service(routes::auth::login)
@@ -118,13 +191,15 @@ async fn main() -> std::io::Result<()> {
                     .service(routes::documents::delete_template)
                     .service(routes::documents::upload_document_pdf)
                     .service(routes::documents::get_public_signing_document)
+                    .service(routes::documents::check_patient_signing)
+                    .service(routes::documents::register_patient_password)
                     .service(routes::documents::auth_patient_signing)
                     .service(routes::documents::auth_doctor_signing)
                     .service(routes::documents::request_signing_otp)
-                    .service(routes::documents::submit_digital_signature),
+                    .service(routes::documents::submit_digital_signature)
             )
     })
-    .bind(("127.0.0.1", port.parse::<u16>().unwrap_or(4000)))?
+    .bind(("127.0.0.1", port))?
     .run()
     .await
 }

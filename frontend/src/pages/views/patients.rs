@@ -10,11 +10,13 @@ use crate::components::icons::{
 use crate::permissions;
 use crate::{ActiveClinicState, SessionState};
 use dioxus::prelude::*;
+use base64::{Engine as _, engine::general_purpose};
+use crate::api::upload_document_pdf;
 use qrcode::QrCode;
 use qrcode::render::svg;
-use shared::documents::{ContractTemplate, CreatePatientDocumentRequest, PatientDocument};
+use shared::documents::{ CreatePatientDocumentRequest, PatientDocument};
 use shared::patients::{
-    CreatePatientExamRequest, CreatePatientRequest, CreatePatientTreatmentRequest, Patient,
+    CreatePatientExamRequest, CreatePatientRequest, CreatePatientTreatmentRequest, 
     PatientDetailsResponse, PatientKpis, SaveAnamnesisRequest,
 };
 
@@ -57,7 +59,7 @@ pub fn PatientsView() -> Element {
         .as_ref()
         .map(|c| c.clinic_id.clone())
         .unwrap_or_default();
-    let clinic_name = clinic
+    let _clinic_name = clinic
         .as_ref()
         .map(|c| c.trading_name.clone())
         .unwrap_or_default();
@@ -72,13 +74,59 @@ pub fn PatientsView() -> Element {
         };
     }
 
-    let mut patients_list = use_signal(Vec::<Patient>::new);
-    let mut kpis = use_signal(PatientKpis::default);
-    let mut is_loading = use_signal(|| true);
     let mut search_query = use_signal(String::new);
+    let mut reload_trigger = use_signal(|| 0usize);
     let mut active_filter = use_signal(|| "all".to_string());
     let mut toast_msg = use_signal(|| None::<String>);
     let mut error_toast = use_signal(|| None::<String>);
+
+    let tok_res = token.clone();
+    let cid_res = clinic_id.clone();
+    let patients_resource = use_resource(move || {
+        let t = tok_res.clone();
+        let cid = cid_res.clone();
+        let search = search_query();
+        let _ = reload_trigger();
+        async move {
+            if t.is_empty() || cid.is_empty() || !can_read {
+                return Ok(shared::patients::PatientListResponse { items: vec![], kpis: PatientKpis::default(), total: 0 });
+            }
+            fetch_patients(
+                &t,
+                &cid,
+                if search.is_empty() {
+                    None
+                } else {
+                    Some(&search)
+                },
+            )
+            .await
+        }
+    });
+
+    let tok_tpl = token.clone();
+    let cid_tpl = clinic_id.clone();
+    let templates_resource = use_resource(move || {
+        let t = tok_tpl.clone();
+        let cid = cid_tpl.clone();
+        async move {
+            if t.is_empty() || cid.is_empty() || !can_read {
+                return Ok(vec![]);
+            }
+            fetch_templates(&t, &cid).await
+        }
+    });
+
+    let (patients_list, kpis, is_loading) = match &*patients_resource.read() {
+        Some(Ok(resp)) => (resp.items.clone(), resp.kpis.clone(), false),
+        Some(Err(_e)) => (vec![], PatientKpis::default(), false),
+        None => (vec![], PatientKpis::default(), true),
+    };
+
+    let templates_list = match &*templates_resource.read() {
+        Some(Ok(tpls)) => tpls.clone(),
+        _ => vec![],
+    };
 
     // Dedicated Full-Page Patient View State
     let mut selected_patient_id = use_signal(|| None::<String>);
@@ -88,15 +136,16 @@ pub fn PatientsView() -> Element {
 
     // Modals
     let mut is_create_patient_open = use_signal(|| false);
-    let mut is_edit_patient_open = use_signal(|| false);
+    let is_edit_patient_open = use_signal(|| false);
     let mut is_add_exam_open = use_signal(|| false);
     let mut is_add_treatment_open = use_signal(|| false);
     let mut is_emit_contract_open = use_signal(|| false);
     let mut qr_modal_doc = use_signal(|| None::<PatientDocument>);
     let mut pdf_preview_target = use_signal(|| None::<(String, String)>);
-
-    // Contract templates list
-    let mut templates_list = use_signal(Vec::<ContractTemplate>::new);
+    let mut is_uploading_static_pdf = use_signal(|| false);
+    let mut uploaded_static_pdf_name = use_signal(String::new);
+    let mut is_uploading_exam = use_signal(|| false);
+    let mut uploaded_exam_name = use_signal(String::new);
 
     // Form inputs: Patient Create/Edit
     let mut form_full_name = use_signal(String::new);
@@ -154,39 +203,6 @@ pub fn PatientsView() -> Element {
     let mut anam_bruxism = use_signal(|| false);
     let mut anam_complaint = use_signal(String::new);
     let mut anam_clinical_notes = use_signal(String::new);
-
-    let load_patients_data = {
-        let token = token.clone();
-        let clinic_id = clinic_id.clone();
-        move || {
-            let t = token.clone();
-            let cid = clinic_id.clone();
-            let search = search_query();
-            spawn(async move {
-                is_loading.set(true);
-                match fetch_patients(
-                    &t,
-                    &cid,
-                    if search.is_empty() {
-                        None
-                    } else {
-                        Some(&search)
-                    },
-                )
-                .await
-                {
-                    Ok(resp) => {
-                        patients_list.set(resp.items);
-                        kpis.set(resp.kpis);
-                    }
-                    Err(e) => {
-                        error_toast.set(Some(e));
-                    }
-                }
-                is_loading.set(false);
-            });
-        }
-    };
 
     let load_patient_details = {
         let token = token.clone();
@@ -248,28 +264,9 @@ pub fn PatientsView() -> Element {
         }
     };
 
-    let load_templates = {
-        let token = token.clone();
-        let clinic_id = clinic_id.clone();
-        move || {
-            let t = token.clone();
-            let cid = clinic_id.clone();
-            spawn(async move {
-                if let Ok(tpls) = fetch_templates(&t, &cid).await {
-                    templates_list.set(tpls);
-                }
-            });
-        }
+    let _refresh_data = move || {
+        reload_trigger.set(reload_trigger() + 1);
     };
-
-    use_effect({
-        let lp = load_patients_data.clone();
-        let lt = load_templates.clone();
-        move || {
-            lp();
-            lt();
-        }
-    });
 
     let open_create_modal = move |_| {
         form_full_name.set(String::new());
@@ -298,11 +295,11 @@ pub fn PatientsView() -> Element {
     let on_submit_create_patient = {
         let token = token.clone();
         let clinic_id = clinic_id.clone();
-        let lp = load_patients_data.clone();
+        let mut reload_pat = reload_trigger;
         move |_| {
             let t = token.clone();
             let cid = clinic_id.clone();
-            let lp_call = lp.clone();
+            let mut reload_pat = reload_trigger;
 
             let req = CreatePatientRequest {
                 clinic_id: cid,
@@ -392,7 +389,7 @@ pub fn PatientsView() -> Element {
                             p.full_name
                         )));
                         is_create_patient_open.set(false);
-                        lp_call();
+                        reload_pat.set(reload_pat() + 1);
                     }
                     Err(e) => {
                         error_toast.set(Some(e));
@@ -578,12 +575,12 @@ pub fn PatientsView() -> Element {
         let token = token.clone();
         let clinic_id = clinic_id.clone();
         let lpd = load_patient_details.clone();
-        let lp = load_patients_data.clone();
+        let mut reload_pat = reload_trigger;
         move |_| {
             let t = token.clone();
             let cid = clinic_id.clone();
             let lpd_call = lpd.clone();
-            let lp_call = lp.clone();
+            let mut reload_pat = reload_trigger;
             let pid = selected_patient_id().unwrap_or_default();
 
             let tpl_id = if emit_template_id().is_empty() {
@@ -615,7 +612,7 @@ pub fn PatientsView() -> Element {
                         is_emit_contract_open.set(false);
                         qr_modal_doc.set(Some(doc));
                         lpd_call(pid);
-                        lp_call();
+                        reload_pat.set(reload_pat() + 1);
                     }
                     Err(e) => {
                         error_toast.set(Some(e));
@@ -625,8 +622,8 @@ pub fn PatientsView() -> Element {
         }
     };
 
-    let ld_input = load_patients_data.clone();
-    let ld_refresh = load_patients_data.clone();
+    
+    
 
     rsx! {
         div { class: "patients-view-container",
@@ -643,7 +640,7 @@ pub fn PatientsView() -> Element {
                 }
             }
 
-            if let Some(ref pid) = selected_patient_id() {
+            if let Some(ref _pid) = selected_patient_id() {
                 // =========================================================================
                 // FULL DEDICATED PATIENT PROFILE / PRONTUÁRIO SCREEN
                 // =========================================================================
@@ -1004,8 +1001,11 @@ pub fn PatientsView() -> Element {
 
                                 if det.exams.is_empty() {
                                     div { class: "empty-state-card",
-                                        IconEye { size: 40, color: "#94a3b8".to_string() }
-                                        p { "Nenhum exame cadastrado para este paciente." }
+                                        div { class: "empty-state-icon-box",
+                                            IconEye { size: 32, color: "currentColor".to_string() }
+                                        }
+                                        h3 { "Nenhum exame ou laudo anexado" }
+                                        p { "Adicione radiografias panorâmicas, periapicais, fotos intraorais ou tomografias ao prontuário deste paciente." }
                                     }
                                 } else {
                                     div { class: "exams-gallery-grid",
@@ -1070,8 +1070,11 @@ pub fn PatientsView() -> Element {
 
                                 if det.treatments.is_empty() {
                                     div { class: "empty-state-card",
-                                        IconTooth { size: 40, color: "#94a3b8".to_string() }
-                                        p { "Nenhum procedimento registrado no histórico." }
+                                        div { class: "empty-state-icon-box",
+                                            IconTooth { size: 32, color: "currentColor".to_string() }
+                                        }
+                                        h3 { "Nenhum procedimento registrado" }
+                                        p { "Registre restaurações, procedimentos cirúrgicos, manutenções ortodônticas ou evoluções clínicas." }
                                     }
                                 } else {
                                     div { class: "treatments-timeline",
@@ -1131,8 +1134,11 @@ pub fn PatientsView() -> Element {
 
                                 if det.documents.is_empty() {
                                     div { class: "empty-state-card",
-                                        IconSignature { size: 40, color: "#94a3b8".to_string() }
-                                        p { "Nenhum documento emitido para este paciente." }
+                                        div { class: "empty-state-icon-box",
+                                            IconSignature { size: 32, color: "currentColor".to_string() }
+                                        }
+                                        h3 { "Nenhum contrato ou termo emitido" }
+                                        p { "Emita contratos de prestação de serviços ou termos de consentimento para coleta de assinatura digital." }
                                     }
                                 } else {
                                     div { class: "patient-docs-table-wrapper",
@@ -1218,7 +1224,7 @@ pub fn PatientsView() -> Element {
                             }
                             div { class: "kpi-content",
                                 span { class: "kpi-label", "Total de Pacientes" }
-                                h3 { class: "kpi-value", "{kpis().total_patients}" }
+                                h3 { class: "kpi-value", "{kpis.total_patients}" }
                             }
                         }
                         div { class: "kpi-card",
@@ -1227,7 +1233,7 @@ pub fn PatientsView() -> Element {
                             }
                             div { class: "kpi-content",
                                 span { class: "kpi-label", "Novos no Mês" }
-                                h3 { class: "kpi-value", "{kpis().new_this_month}" }
+                                h3 { class: "kpi-value", "{kpis.new_this_month}" }
                             }
                         }
                         div { class: "kpi-card",
@@ -1236,7 +1242,7 @@ pub fn PatientsView() -> Element {
                             }
                             div { class: "kpi-content",
                                 span { class: "kpi-label", "Docs. Pendentes de Assinatura" }
-                                h3 { class: "kpi-value", "{kpis().pending_documents_count}" }
+                                h3 { class: "kpi-value", "{kpis.pending_documents_count}" }
                             }
                         }
                         div { class: "kpi-card",
@@ -1245,7 +1251,7 @@ pub fn PatientsView() -> Element {
                             }
                             div { class: "kpi-content",
                                 span { class: "kpi-label", "Em Tratamento Ativo" }
-                                h3 { class: "kpi-value", "{kpis().active_treatments_count}" }
+                                h3 { class: "kpi-value", "{kpis.active_treatments_count}" }
                             }
                         }
                     }
@@ -1261,7 +1267,7 @@ pub fn PatientsView() -> Element {
                                 value: "{search_query}",
                                 oninput: move |e| {
                                     search_query.set(e.value());
-                                    ld_input();
+                                    reload_trigger.set(reload_trigger() + 1);
                                 },
                             }
                         }
@@ -1270,7 +1276,7 @@ pub fn PatientsView() -> Element {
                             button {
                                 class: "btn-refresh",
                                 title: "Recarregar Lista",
-                                onclick: move |_| ld_refresh(),
+                                onclick: move |_| reload_trigger.set(reload_trigger() + 1),
                                 IconRefresh { size: 16, color: "#475569".to_string() }
                             }
                             if can_write {
@@ -1289,7 +1295,7 @@ pub fn PatientsView() -> Element {
                         button {
                             class: if active_filter() == "all" { "filter-pill active" } else { "filter-pill" },
                             onclick: move |_| active_filter.set("all".to_string()),
-                            "Todos os Pacientes ({patients_list().len()})"
+                            "Todos os Pacientes ({patients_list.len()})"
                         }
                         button {
                             class: if active_filter() == "particular" { "filter-pill active" } else { "filter-pill" },
@@ -1304,16 +1310,18 @@ pub fn PatientsView() -> Element {
                     }
 
                     // Patients Table
-                    if is_loading() {
+                    if is_loading {
                         div { class: "loading-card",
                             div { class: "loading-spinner" }
                             p { "Carregando pacientes..." }
                         }
-                    } else if patients_list().is_empty() {
+                    } else if patients_list.is_empty() {
                         div { class: "empty-state-card",
-                            IconUsers { size: 48, color: "#94a3b8".to_string() }
+                            div { class: "empty-state-icon-box",
+                                IconUsers { size: 32, color: "currentColor".to_string() }
+                            }
                             h3 { "Nenhum paciente cadastrado" }
-                            p { "Cadastre pacientes para gerenciar prontuários, exames e termos de consentimento." }
+                            p { "Cadastre pacientes para gerenciar prontuários, exames, histórico de procedimentos e termos de consentimento." }
                         }
                     } else {
                         div { class: "table-container",
@@ -1329,7 +1337,7 @@ pub fn PatientsView() -> Element {
                                     }
                                 }
                                 tbody {
-                                    for p in patients_list().iter().filter(|pat| {
+                                    for p in patients_list.iter().filter(|pat| {
                                         let filter = active_filter();
                                         if filter == "particular" {
                                             pat.insurance_plan.as_deref().unwrap_or("Particular").to_lowercase().contains("particular")
@@ -1421,16 +1429,16 @@ pub fn PatientsView() -> Element {
                                                                         let pid = p.id.clone();
                                                                         let t = token.clone();
                                                                         let cid = clinic_id.clone();
-                                                                        let lp = load_patients_data.clone();
+                                                                        let mut reload_pat = reload_trigger;
                                                                         move |_| {
                                                                             let t_call = t.clone();
                                                                             let cid_call = cid.clone();
                                                                             let pid_call = pid.clone();
-                                                                            let lp_call = lp.clone();
+                                                                            let mut reload_pat = reload_trigger;
                                                                             spawn(async move {
                                                                                 if delete_patient(&t_call, &pid_call, &cid_call).await.is_ok() {
                                                                                     toast_msg.set(Some("Paciente excluído com sucesso.".into()));
-                                                                                    lp_call();
+                                                                                    reload_pat.set(reload_pat() + 1);
                                                                                 }
                                                                             });
                                                                         }
@@ -1662,7 +1670,7 @@ pub fn PatientsView() -> Element {
                                         onchange: move |e| {
                                             let val = e.value();
                                             emit_template_id.set(val.clone());
-                                            if let Some(t) = templates_list().iter().find(|t| t.id == val) {
+                                            if let Some(t) = templates_list.iter().find(|t| t.id == val) {
                                                 if let Some(ref det) = patient_details() {
                                                     emit_doc_title.set(format!("{} - {}", t.title, det.patient.full_name));
                                                 } else {
@@ -1671,7 +1679,7 @@ pub fn PatientsView() -> Element {
                                             }
                                         },
                                         option { value: "", "Documento em Branco / Padrão" }
-                                        for tpl in templates_list().iter() {
+                                        for tpl in templates_list.iter() {
                                             option { value: "{tpl.id}", "{tpl.title}" }
                                         }
                                     }
@@ -1679,13 +1687,44 @@ pub fn PatientsView() -> Element {
                             }
 
                             div { class: "form-group",
-                                label { class: "form-label", "URL do PDF do Documento (ou Anexo)" }
-                                input {
-                                    r#type: "text",
-                                    class: "input-field",
-                                    placeholder: "https://... (ou deixe vazio para usar o PDF do modelo)",
-                                    value: "{emit_static_pdf_url}",
-                                    oninput: move |e| emit_static_pdf_url.set(e.value()),
+                                label { class: "form-label", "Arquivo PDF do Documento (Opcional se usar modelo)" }
+                                label { class: "attachment-dropzone mini-dropzone",
+                                    input {
+                                        r#type: "file",
+                                        accept: ".pdf,application/pdf",
+                                        onchange: {
+                                            let t = token.clone();
+                                            move |evt: FormEvent| {
+                                                for file in evt.files() {
+                                                    let fname = file.name();
+                                                    uploaded_static_pdf_name.set(fname.clone());
+                                                    is_uploading_static_pdf.set(true);
+                                                    let t_c = t.clone();
+                                                    spawn(async move {
+                                                        if let Ok(bytes) = file.read_bytes().await {
+                                                            let b64 = general_purpose::STANDARD.encode(&bytes);
+                                                            if let Ok(url) = upload_document_pdf(&t_c, &fname, &b64).await {
+                                                                emit_static_pdf_url.set(url);
+                                                            }
+                                                        }
+                                                        is_uploading_static_pdf.set(false);
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                    div { class: "dropzone-label",
+                                        IconUpload { size: 16, color: "#0052cc".to_string() }
+                                        span {
+                                            if is_uploading_static_pdf() {
+                                                "Enviando PDF..."
+                                            } else if !emit_static_pdf_url().is_empty() {
+                                                "✓ Documento PDF Carregado"
+                                            } else {
+                                                "Fazer Upload do PDF"
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1764,29 +1803,33 @@ pub fn PatientsView() -> Element {
                         div { class: "modal-header",
                             div {
                                 h2 { class: "modal-title", "{title}" }
-                                p { class: "modal-subtitle", "Documento PDF" }
+                                p { class: "modal-subtitle", "Documento PDF Oficial" }
                             }
-                            button {
-                                class: "modal-close",
-                                onclick: move |_| pdf_preview_target.set(None),
-                                "×"
-                            }
-                        }
-                        div { class: "modal-body",
-                            div { class: "pdf-desktop-viewer",
-                                div { class: "pdf-desktop-icon",
-                                    IconFile { size: 56, color: "#0052cc".to_string() }
-                                }
-                                p { class: "pdf-desktop-title", "{title}" }
-                                p { class: "pdf-desktop-hint",
-                                    "Clique abaixo para abrir o documento no navegador."
-                                }
+                            div { class: "modal-header-actions",
                                 a {
                                     href: "{url}",
                                     target: "_blank",
-                                    class: "btn-primary pdf-open-btn",
-                                    IconExternalLink { size: 16, color: "white".to_string() }
-                                    " Abrir PDF no Navegador"
+                                    rel: "noopener noreferrer",
+                                    class: "btn-secondary btn-sm",
+                                    IconExternalLink { size: 14, color: "#0052cc".to_string() }
+                                    " Abrir em Nova Aba"
+                                }
+                                button {
+                                    class: "modal-close",
+                                    onclick: move |_| pdf_preview_target.set(None),
+                                    "×"
+                                }
+                            }
+                        }
+                        div { class: "modal-body pdf-viewer-modal-body",
+                            object {
+                                data: "{url}#toolbar=1&view=FitH",
+                                r#type: "application/pdf",
+                                class: "pdf-modal-embed",
+                                iframe {
+                                    src: "{url}",
+                                    title: "{title}",
+                                    class: "pdf-modal-embed",
                                 }
                             }
                         }
@@ -1837,13 +1880,44 @@ pub fn PatientsView() -> Element {
                             }
 
                             div { class: "form-group",
-                                label { class: "form-label", "URL da Imagem / Arquivo" }
-                                input {
-                                    r#type: "text",
-                                    class: "input-field",
-                                    placeholder: "https://placehold.co/... ou link do arquivo",
-                                    value: "{exam_file_url}",
-                                    oninput: move |e| exam_file_url.set(e.value()),
+                                label { class: "form-label", "Arquivo do Exame / Imagem / Laudo" }
+                                label { class: "attachment-dropzone mini-dropzone",
+                                    input {
+                                        r#type: "file",
+                                        accept: "image/*,.pdf,.dicom",
+                                        onchange: {
+                                            let t = token.clone();
+                                            move |evt: FormEvent| {
+                                                for file in evt.files() {
+                                                    let fname = file.name();
+                                                    uploaded_exam_name.set(fname.clone());
+                                                    is_uploading_exam.set(true);
+                                                    let t_c = t.clone();
+                                                    spawn(async move {
+                                                        if let Ok(bytes) = file.read_bytes().await {
+                                                            let b64 = general_purpose::STANDARD.encode(&bytes);
+                                                            if let Ok(url) = upload_document_pdf(&t_c, &fname, &b64).await {
+                                                                exam_file_url.set(url);
+                                                            }
+                                                        }
+                                                        is_uploading_exam.set(false);
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                    div { class: "dropzone-label",
+                                        IconUpload { size: 16, color: "#0052cc".to_string() }
+                                        span {
+                                            if is_uploading_exam() {
+                                                "Enviando arquivo do exame..."
+                                            } else if !exam_file_url().is_empty() {
+                                                "✓ Arquivo do Exame Carregado"
+                                            } else {
+                                                "Clique para selecionar Imagem ou Laudo PDF"
+                                            }
+                                        }
+                                    }
                                 }
                             }
 

@@ -542,9 +542,12 @@ pub fn FinanceView() -> Element {
                         }
 
                         if filtered_txs.is_empty() {
-                            div { class: "agenda-empty-state",
-                                p { class: "empty-title", "Nenhuma movimentação encontrada para o período." }
-                                p { class: "empty-subtitle", "Altere o filtro de mês ou adicione um novo lançamento." }
+                            div { class: "empty-state-card",
+                                div { class: "empty-state-icon-box",
+                                    IconFinance { size: 32, color: "currentColor".to_string() }
+                                }
+                                h3 { "Nenhuma movimentação encontrada" }
+                                p { "Não há lançamentos financeiros registrados para este período. Altere os filtros de data ou registre uma nova entrada/saída." }
                             }
                         } else {
                             div { class: "finance-list-container",

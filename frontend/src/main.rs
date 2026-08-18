@@ -20,8 +20,11 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-    use_context_provider(|| Signal::new(None::<LoginResponse>));
-    use_context_provider(|| Signal::new(None::<ClinicAccess>));
+    let initial_session = utils::load_session();
+    let initial_clinic = utils::load_active_clinic();
+
+    use_context_provider(|| Signal::new(initial_session));
+    use_context_provider(|| Signal::new(initial_clinic));
 
     rsx! {
         document::Stylesheet { href: MAIN_CSS }

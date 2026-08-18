@@ -51,12 +51,11 @@ pub fn AgendaView() -> Element {
 
     let tok_res = token.clone();
     let cid_res = clinic_id.clone();
-    let sel_date_val = selected_date();
 
     let mut appointments_resource = use_resource(move || {
         let t = tok_res.clone();
         let cid = cid_res.clone();
-        let d = sel_date_val.clone();
+        let d = selected_date();
         async move {
             if t.is_empty() || cid.is_empty() || !can_read {
                 vec![]
@@ -233,57 +232,42 @@ pub fn AgendaView() -> Element {
                 }
             }
 
-            if can_write {
-                div { class: "agenda-top-actions-bar",
-                    button {
-                        class: "btn-primary",
-                        onclick: move |_| {
-                            selected_appointment.set(None);
-                            selected_time.set("09:00".to_string());
-                            is_form_modal_open.set(true);
-                        },
-                        IconPlus { size: 18, color: "currentColor".to_string() }
-                        "Novo Agendamento"
-                    }
-                }
-            }
-
             div { class: "agenda-kpi-row",
                 div { class: "agenda-kpi-card",
-                    div { class: "agenda-kpi-top-bar",
-                        div { class: "agenda-kpi-icon-wrapper kpi-icon-total",
-                            IconCalendar { size: 18, color: "currentColor".to_string() }
-                        }
-                        div { class: "agenda-kpi-val", "{total_count}" }
+                    div { class: "agenda-kpi-icon-wrapper kpi-icon-total",
+                        IconCalendar { size: 16, color: "currentColor".to_string() }
                     }
-                    div { class: "agenda-kpi-lbl", "Total no Dia" }
+                    div { class: "agenda-kpi-text-col",
+                        span { class: "agenda-kpi-lbl", "Total no Dia" }
+                    }
+                    div { class: "agenda-kpi-val", "{total_count}" }
                 }
                 div { class: "agenda-kpi-card",
-                    div { class: "agenda-kpi-top-bar",
-                        div { class: "agenda-kpi-icon-wrapper kpi-icon-pending",
-                            IconClock { size: 18, color: "currentColor".to_string() }
-                        }
-                        div { class: "agenda-kpi-val kpi-pending", "{pending_count}" }
+                    div { class: "agenda-kpi-icon-wrapper kpi-icon-pending",
+                        IconClock { size: 16, color: "currentColor".to_string() }
                     }
-                    div { class: "agenda-kpi-lbl", "Pendentes / Confirmados" }
+                    div { class: "agenda-kpi-text-col",
+                        span { class: "agenda-kpi-lbl", "Pendentes" }
+                    }
+                    div { class: "agenda-kpi-val kpi-pending", "{pending_count}" }
                 }
                 div { class: "agenda-kpi-card",
-                    div { class: "agenda-kpi-top-bar",
-                        div { class: "agenda-kpi-icon-wrapper kpi-icon-progress",
-                            IconUsers { size: 18, color: "currentColor".to_string() }
-                        }
-                        div { class: "agenda-kpi-val kpi-progress", "{in_progress_count}" }
+                    div { class: "agenda-kpi-icon-wrapper kpi-icon-progress",
+                        IconUsers { size: 16, color: "currentColor".to_string() }
                     }
-                    div { class: "agenda-kpi-lbl", "Em Atendimento" }
+                    div { class: "agenda-kpi-text-col",
+                        span { class: "agenda-kpi-lbl", "Em Atendimento" }
+                    }
+                    div { class: "agenda-kpi-val kpi-progress", "{in_progress_count}" }
                 }
                 div { class: "agenda-kpi-card",
-                    div { class: "agenda-kpi-top-bar",
-                        div { class: "agenda-kpi-icon-wrapper kpi-icon-completed",
-                            IconCheck { size: 18, color: "currentColor".to_string() }
-                        }
-                        div { class: "agenda-kpi-val kpi-completed", "{completed_count}" }
+                    div { class: "agenda-kpi-icon-wrapper kpi-icon-completed",
+                        IconCheck { size: 16, color: "currentColor".to_string() }
                     }
-                    div { class: "agenda-kpi-lbl", "Concluídos" }
+                    div { class: "agenda-kpi-text-col",
+                        span { class: "agenda-kpi-lbl", "Concluídos" }
+                    }
+                    div { class: "agenda-kpi-val kpi-completed", "{completed_count}" }
                 }
             }
 
@@ -353,6 +337,19 @@ pub fn AgendaView() -> Element {
                         option { value: "return", "Retorno" }
                         option { value: "meeting", "Reunião" }
                         option { value: "other", "Outro" }
+                    }
+
+                    if can_write {
+                        button {
+                            class: "btn-primary btn-novo-agendamento",
+                            onclick: move |_| {
+                                selected_appointment.set(None);
+                                selected_time.set("09:00".to_string());
+                                is_form_modal_open.set(true);
+                            },
+                            IconPlus { size: 16, color: "currentColor".to_string() }
+                            "Novo Agendamento"
+                        }
                     }
                 }
             }
@@ -577,83 +574,54 @@ fn AppointmentCard(
 
     rsx! {
         div { class: "appointment-item-card {appointment.status.color_class()}",
-            div { class: "app-card-header",
+            div { class: "app-card-left-col",
                 div { class: "app-time-badge",
-                    IconClock { size: 14, color: "currentColor".to_string() }
+                    IconClock { size: 13, color: "currentColor".to_string() }
                     span { "{time_str}" }
                 }
-                div { class: "app-badges-row",
-                    span { class: "{appointment.appointment_type.badge_class()}", "{appointment.appointment_type.label()}" }
-                    button {
-                        class: "app-status-badge {appointment.status.color_class()}",
-                        onclick: move |_| on_change_status.call(app_status.clone()),
-                        title: "Clique para alterar status",
-                        "{appointment.status.label()}"
-                    }
-                }
-            }
-
-            div { class: "app-card-body",
-                h4 { class: "app-card-title", "{appointment.title}" }
+                span { class: "app-card-title", "{appointment.title}" }
 
                 if let Some(ref p_name) = appointment.patient_name {
-                    div { class: "app-card-meta-line",
-                        IconUsers { size: 14, color: "#64748b".to_string() }
-                        span { class: "app-patient-name", "Paciente: {p_name}" }
-                    }
+                    span { class: "app-patient-chip", "👤 {p_name}" }
                 }
 
                 if !appointment.assigned_users.is_empty() {
-                    div { class: "app-card-meta-line",
-                        div { class: "app-team-chips-group",
-                            for user in &appointment.assigned_users {
-                                span { class: "app-team-chip",
-                                    "{user.user_name.as_deref().unwrap_or(&user.role_in_appointment)}"
-                                    if can_finance && user.split_percentage > 0 {
-                                        span { class: "app-split-pill", "({user.split_percentage}%)" }
-                                    }
-                                }
-                            }
+                    for user in &appointment.assigned_users {
+                        span { class: "app-team-chip",
+                            "👨‍⚕️ {user.user_name.as_deref().unwrap_or(&user.role_in_appointment)}"
                         }
                     }
                 }
 
-                if !appointment.consumed_items.is_empty() {
-                    div { class: "app-card-meta-line",
-                        IconBox { size: 14, color: "#64748b".to_string() }
-                        span { class: "app-stock-text", "{appointment.consumed_items.len()} item(ns) de estoque associado(s)" }
-                    }
-                }
-
                 if let Some((fin_text, fin_cls)) = fin_badge {
-                    div { class: "app-card-meta-line",
-                        IconFinance { size: 14, color: "currentColor".to_string() }
-                        span { class: "app-fin-pill {fin_cls}", "{fin_text}" }
-                    }
-                }
-
-                if let Some(ref reason) = appointment.cancellation_reason {
-                    div { class: "app-card-meta-line app-cancel-reason-line",
-                        span { "Motivo: {reason}" }
-                    }
+                    span { class: "app-fin-pill {fin_cls}", "{fin_text}" }
                 }
             }
 
-            div { class: "app-card-actions",
-                if can_write {
-                    button {
-                        class: "icon-action-btn edit-btn-row",
-                        onclick: move |_| on_edit.call(app_edit.clone()),
-                        title: "Editar Agendamento",
-                        IconEdit { size: 16, color: "currentColor".to_string() }
-                    }
+            div { class: "app-card-right-col",
+                span { class: "{appointment.appointment_type.badge_class()}", "{appointment.appointment_type.label()}" }
+                button {
+                    class: "app-status-badge {appointment.status.color_class()}",
+                    onclick: move |_| on_change_status.call(app_status.clone()),
+                    title: "Clique para alterar status",
+                    "{appointment.status.label()}"
                 }
-                if can_delete {
-                    button {
-                        class: "icon-action-btn delete-btn-row",
-                        onclick: move |_| on_delete.call(app_del.clone()),
-                        title: "Excluir Agendamento",
-                        IconTrash { size: 16, color: "currentColor".to_string() }
+                div { class: "app-card-actions",
+                    if can_write {
+                        button {
+                            class: "item-action-icon-btn",
+                            onclick: move |_| on_edit.call(app_edit.clone()),
+                            title: "Editar Agendamento",
+                            IconEdit { size: 14, color: "currentColor".to_string() }
+                        }
+                    }
+                    if can_delete {
+                        button {
+                            class: "item-action-icon-btn btn-danger-icon",
+                            onclick: move |_| on_delete.call(app_del.clone()),
+                            title: "Excluir Agendamento",
+                            IconTrash { size: 14, color: "currentColor".to_string() }
+                        }
                     }
                 }
             }

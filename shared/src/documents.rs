@@ -69,6 +69,8 @@ pub struct PatientDocument {
     pub doctor_signature_data: Option<String>,
     pub patient_otp_verified: bool,
     pub checksum_sha256: Option<String>,
+    #[serde(default)]
+    pub audit_trail: Vec<serde_json::Value>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -93,7 +95,9 @@ pub struct PublicSigningDocumentResponse {
     pub clinic_logo_url: Option<String>,
     pub template: Option<ContractTemplate>,
     pub patient_phone_masked: String,
+    pub patient_email_masked: Option<String>,
     pub require_whatsapp_otp: bool,
+    pub has_email_channel: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -115,9 +119,9 @@ pub struct SignAuthResponse {
     pub signer_name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct RequestOtpRequest {
-    pub phone: Option<String>,
+    pub channel: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -140,4 +144,22 @@ pub struct DocumentsListResponse {
     pub documents: Vec<PatientDocument>,
     pub templates: Vec<ContractTemplate>,
     pub kpis: DocumentsKpis,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PatientCheckRequest {
+    pub cpf: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PatientCheckResponse {
+    pub patient_name: String,
+    pub has_password: bool,
+    pub phone_masked: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PatientRegisterPasswordRequest {
+    pub cpf: String,
+    pub password: String,
 }

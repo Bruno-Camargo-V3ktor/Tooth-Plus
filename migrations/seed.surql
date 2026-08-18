@@ -1,3 +1,4 @@
+USE NS saas DB toothplus;
 BEGIN TRANSACTION;
 
 DELETE patient_document;
@@ -19,7 +20,7 @@ DELETE clinic;
 -- =========================================================================
 -- CLINICS
 -- =========================================================================
-CREATE clinic:smile_plus CONTENT {
+UPSERT clinic:smile_plus CONTENT {
     corporate_name: "Smile Plus Odontologia LTDA",
     trading_name: "Smile Plus",
     document_cnpj: "11.111.111/0001-11",
@@ -37,7 +38,7 @@ CREATE clinic:smile_plus CONTENT {
     require_esign: true
 };
 
-CREATE clinic:luria_odonto CONTENT {
+UPSERT clinic:luria_odonto CONTENT {
     corporate_name: "Luria Clínica Odontológica LTDA",
     trading_name: "Luria Odonto",
     document_cnpj: "22.222.222/0001-22",
@@ -58,9 +59,9 @@ CREATE clinic:luria_odonto CONTENT {
 -- =========================================================================
 -- USERS & ACCESS
 -- =========================================================================
-CREATE user:administrador CONTENT {
+UPSERT user:administrador CONTENT {
     username: "admin",
-    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$qvKgAYt6Mjuvveqb72VDRg$lQSuMHI7Fv4EcpvQyp3/r9mQjx0JE5TskDnv0B6A7AU",
+    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
     full_name: "Administrador do Sistema",
     document_cpf: "000.000.000-00",
     professional_registry: NONE,
@@ -101,9 +102,9 @@ RELATE user:administrador->works_at->clinic:luria_odonto CONTENT {
 };
 
 
-CREATE user:dr_andre CONTENT {
+UPSERT user:dr_andre CONTENT {
     username: "dr.andre",
-    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$qvKgAYt6Mjuvveqb72VDRg$lQSuMHI7Fv4EcpvQyp3/r9mQjx0JE5TskDnv0B6A7AU",
+    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
     full_name: "Dr. André Martins",
     document_cpf: "111.222.333-44",
     professional_registry: "CRO/SP 123456",
@@ -120,9 +121,9 @@ RELATE user:dr_andre->works_at->clinic:smile_plus CONTENT {
     ]
 };
 
-CREATE user:dra_camila CONTENT {
+UPSERT user:dra_camila CONTENT {
     username: "dra.camila",
-    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$qvKgAYt6Mjuvveqb72VDRg$lQSuMHI7Fv4EcpvQyp3/r9mQjx0JE5TskDnv0B6A7AU",
+    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
     full_name: "Dra. Camila Toledo",
     document_cpf: "555.666.777-88",
     professional_registry: "CRO/SP 987654",
@@ -142,7 +143,7 @@ RELATE user:dra_camila->works_at->clinic:smile_plus CONTENT {
 -- =========================================================================
 -- PATIENTS (WITH ENCRYPTED CPF & BLIND INDEX)
 -- =========================================================================
-CREATE patient:ana_silva CONTENT {
+UPSERT patient:ana_silva CONTENT {
     clinic_id: clinic:smile_plus,
     full_name: "Ana Clara Silva",
     document_cpf: "123.456.789-00",
@@ -165,10 +166,10 @@ CREATE patient:ana_silva CONTENT {
     address_zip: "01304-001",
     insurance_plan: "Amil Dental Premium",
     insurance_number: "98745612300",
-    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$qvKgAYt6Mjuvveqb72VDRg$lQSuMHI7Fv4EcpvQyp3/r9mQjx0JE5TskDnv0B6A7AU"
+    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
 };
 
-CREATE patient:carlos_souza CONTENT {
+UPSERT patient:carlos_souza CONTENT {
     clinic_id: clinic:smile_plus,
     full_name: "Carlos Eduardo Souza",
     document_cpf: "234.567.890-11",
@@ -191,10 +192,10 @@ CREATE patient:carlos_souza CONTENT {
     address_zip: "01402-000",
     insurance_plan: "SulAmérica Odonto Mais",
     insurance_number: "45678912301",
-    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$qvKgAYt6Mjuvveqb72VDRg$lQSuMHI7Fv4EcpvQyp3/r9mQjx0JE5TskDnv0B6A7AU"
+    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
 };
 
-CREATE patient:juliana_prado CONTENT {
+UPSERT patient:juliana_prado CONTENT {
     clinic_id: clinic:smile_plus,
     full_name: "Juliana Mendes Prado",
     document_cpf: "345.678.901-22",
@@ -214,10 +215,10 @@ CREATE patient:juliana_prado CONTENT {
     address_zip: "01426-001",
     insurance_plan: "Particular",
     insurance_number: NONE,
-    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$qvKgAYt6Mjuvveqb72VDRg$lQSuMHI7Fv4EcpvQyp3/r9mQjx0JE5TskDnv0B6A7AU"
+    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
 };
 
-CREATE patient:roberto_neto CONTENT {
+UPSERT patient:roberto_neto CONTENT {
     clinic_id: clinic:smile_plus,
     full_name: "Roberto Albuquerque Neto",
     document_cpf: "456.789.012-33",
@@ -237,10 +238,10 @@ CREATE patient:roberto_neto CONTENT {
     address_zip: "01418-102",
     insurance_plan: "Porto Seguro Odonto Ouro",
     insurance_number: "78912345600",
-    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$qvKgAYt6Mjuvveqb72VDRg$lQSuMHI7Fv4EcpvQyp3/r9mQjx0JE5TskDnv0B6A7AU"
+    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
 };
 
-CREATE patient:mariana_castro CONTENT {
+UPSERT patient:mariana_castro CONTENT {
     clinic_id: clinic:smile_plus,
     full_name: "Mariana Castro Fernandes",
     document_cpf: "567.890.123-44",
@@ -260,13 +261,13 @@ CREATE patient:mariana_castro CONTENT {
     address_zip: "01414-001",
     insurance_plan: "Bradesco Dental Top",
     insurance_number: "32165498700",
-    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$qvKgAYt6Mjuvveqb72VDRg$lQSuMHI7Fv4EcpvQyp3/r9mQjx0JE5TskDnv0B6A7AU"
+    password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
 };
 
 -- =========================================================================
 -- ANAMNESES
 -- =========================================================================
-CREATE patient_anamnesis:ana_anamnesis CONTENT {
+UPSERT patient_anamnesis:ana_anamnesis CONTENT {
     patient_id: patient:ana_silva,
     clinic_id: clinic:smile_plus,
     allergies: ["Penicilina", "Dipirona"],
@@ -280,7 +281,7 @@ CREATE patient_anamnesis:ana_anamnesis CONTENT {
     clinical_notes: "Paciente com sensibilidade leve em incisivos inferiores. Bruxismo noturno moderado."
 };
 
-CREATE patient_anamnesis:carlos_anamnesis CONTENT {
+UPSERT patient_anamnesis:carlos_anamnesis CONTENT {
     patient_id: patient:carlos_souza,
     clinic_id: clinic:smile_plus,
     allergies: ["Sulfa"],
@@ -297,7 +298,7 @@ CREATE patient_anamnesis:carlos_anamnesis CONTENT {
 -- =========================================================================
 -- EXAMS
 -- =========================================================================
-CREATE patient_exam:exam_panoramica_ana CONTENT {
+UPSERT patient_exam:exam_panoramica_ana CONTENT {
     patient_id: patient:ana_silva,
     clinic_id: clinic:smile_plus,
     title: "Radiografia Panorâmica Digital",
@@ -310,7 +311,7 @@ CREATE patient_exam:exam_panoramica_ana CONTENT {
     clinical_interpretation: "Presença dos 4 terceiros molares inclusos sem lesões periapicais visíveis."
 };
 
-CREATE patient_exam:exam_tomografia_carlos CONTENT {
+UPSERT patient_exam:exam_tomografia_carlos CONTENT {
     patient_id: patient:carlos_souza,
     clinic_id: clinic:smile_plus,
     title: "Tomografia Cone Beam Mandibular Elemento 36",
@@ -326,7 +327,7 @@ CREATE patient_exam:exam_tomografia_carlos CONTENT {
 -- =========================================================================
 -- TREATMENTS
 -- =========================================================================
-CREATE patient_treatment:treat_clareamento_ana CONTENT {
+UPSERT patient_treatment:treat_clareamento_ana CONTENT {
     patient_id: patient:ana_silva,
     clinic_id: clinic:smile_plus,
     dentist_user_id: user:dr_andre,
@@ -337,7 +338,7 @@ CREATE patient_treatment:treat_clareamento_ana CONTENT {
     clinical_notes: "Sessão realizada com gel de Peróxido de Hidrogênio 35% e barreira gengival."
 };
 
-CREATE patient_treatment:treat_alinhador_ana CONTENT {
+UPSERT patient_treatment:treat_alinhador_ana CONTENT {
     patient_id: patient:ana_silva,
     clinic_id: clinic:smile_plus,
     dentist_user_id: user:dr_andre,
@@ -348,7 +349,7 @@ CREATE patient_treatment:treat_alinhador_ana CONTENT {
     clinical_notes: "Setup virtual aprovado. Aguardando entrega dos alinhadores."
 };
 
-CREATE patient_treatment:treat_endo_carlos CONTENT {
+UPSERT patient_treatment:treat_endo_carlos CONTENT {
     patient_id: patient:carlos_souza,
     clinic_id: clinic:smile_plus,
     dentist_user_id: user:dr_andre,
@@ -362,12 +363,12 @@ CREATE patient_treatment:treat_endo_carlos CONTENT {
 -- =========================================================================
 -- CONTRACT TEMPLATES & DIGITAL DOCUMENTS
 -- =========================================================================
-CREATE contract_template:tcle_geral CONTENT {
+UPSERT contract_template:tcle_geral CONTENT {
     clinic_id: clinic:smile_plus,
     title: "Termo de Consentimento Livre e Esclarecido (TCLE Geral)",
     category: "consent",
     description: "Termo padrão de esclarecimento de riscos, benefícios e responsabilidades para tratamentos clínicos e cirúrgicos.",
-    pdf_url: "https://placehold.co/800x1100/ffffff/0f172a?text=Termo+TCLE+Odontologico",
+    pdf_url: "http://localhost:4000/uploads/clinics/smile_plus/templates/a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6.pdf",
     signature_fields: [
         {
             id: "sig_pat_1",
@@ -394,12 +395,12 @@ CREATE contract_template:tcle_geral CONTENT {
     ]
 };
 
-CREATE contract_template:contrato_orto CONTENT {
+UPSERT contract_template:contrato_orto CONTENT {
     clinic_id: clinic:smile_plus,
     title: "Contrato de Prestação de Serviços Ortodônticos / Alinhadores",
     category: "orthodontics",
     description: "Contrato detalhado para planejamento, manutenção e fornecimento de alinhadores estéticos ou aparelhos fixos.",
-    pdf_url: "https://placehold.co/800x1100/ffffff/0f172a?text=Contrato+de+Prestação+de+Servicos+Ortodonticos",
+    pdf_url: "http://localhost:4000/uploads/clinics/smile_plus/templates/a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6.pdf",
     signature_fields: [
         {
             id: "sig_pat_orto",
@@ -426,14 +427,14 @@ CREATE contract_template:contrato_orto CONTENT {
     ]
 };
 
-CREATE patient_document:doc_ana_tcle CONTENT {
+UPSERT patient_document:doc_ana_tcle CONTENT {
     clinic_id: clinic:smile_plus,
     patient_id: patient:ana_silva,
     template_id: contract_template:tcle_geral,
     doctor_user_id: user:dr_andre,
     title: "TCLE - Clareamento Dental e Estética",
     document_type: "consent",
-    original_pdf_url: "https://placehold.co/800x1100/ffffff/0f172a?text=Termo+TCLE+Clareamento+-+Ana+Clara",
+    original_pdf_url: "http://localhost:4000/uploads/clinics/smile_plus/templates/a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6.pdf",
     status: "signed",
     signing_token: "tok_ana_tcle_2026_sample_ok",
     patient_signed_at: time::now() - 4d,
@@ -464,14 +465,14 @@ CREATE patient_document:doc_ana_tcle CONTENT {
     ]
 };
 
-CREATE patient_document:doc_carlos_endo CONTENT {
+UPSERT patient_document:doc_carlos_endo CONTENT {
     clinic_id: clinic:smile_plus,
     patient_id: patient:carlos_souza,
     template_id: contract_template:tcle_geral,
     doctor_user_id: user:dr_andre,
     title: "TCLE - Tratamento Endodôntico Elemento 36",
     document_type: "consent",
-    original_pdf_url: "https://placehold.co/800x1100/ffffff/0f172a?text=Termo+TCLE+Endodontia+-+Carlos+Souza",
+    original_pdf_url: "http://localhost:4000/uploads/clinics/smile_plus/templates/a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6.pdf",
     status: "pending_signatures",
     signing_token: "tok_carlos_endo_2026_pending",
     require_whatsapp_otp: true,
@@ -488,7 +489,7 @@ CREATE patient_document:doc_carlos_endo CONTENT {
 -- =========================================================================
 -- STOCK & INVENTORY
 -- =========================================================================
-CREATE inventory_item:luvas CONTENT {
+UPSERT inventory_item:luvas CONTENT {
     clinic_id: clinic:smile_plus,
     item_type: "material",
     name: "Par de Luvas Cirúrgicas Estéreis (M)",
@@ -500,7 +501,7 @@ CREATE inventory_item:luvas CONTENT {
     attachments: []
 };
 
-CREATE inventory_item:resina CONTENT {
+UPSERT inventory_item:resina CONTENT {
     clinic_id: clinic:smile_plus,
     item_type: "material",
     name: "Resina Composta Z350 XT (Tubo A2)",
@@ -512,7 +513,7 @@ CREATE inventory_item:resina CONTENT {
     attachments: []
 };
 
-CREATE inventory_item:anestesico CONTENT {
+UPSERT inventory_item:anestesico CONTENT {
     clinic_id: clinic:smile_plus,
     item_type: "chemical",
     name: "Anestésico Articaína 4% c/ Epinefrina",
@@ -526,7 +527,7 @@ CREATE inventory_item:anestesico CONTENT {
     attachments: []
 };
 
-CREATE inventory_item:hipoclorito CONTENT {
+UPSERT inventory_item:hipoclorito CONTENT {
     clinic_id: clinic:smile_plus,
     item_type: "chemical",
     name: "Hipoclorito de Sódio 2.5% (Endodontia)",
@@ -540,7 +541,7 @@ CREATE inventory_item:hipoclorito CONTENT {
     attachments: []
 };
 
-CREATE inventory_item:autoclave CONTENT {
+UPSERT inventory_item:autoclave CONTENT {
     clinic_id: clinic:smile_plus,
     item_type: "equipment",
     name: "Autoclave Digital Vitale 12L",
@@ -559,7 +560,7 @@ CREATE inventory_item:autoclave CONTENT {
 -- =========================================================================
 -- APPOINTMENTS & FINANCIAL TRANSACTIONS
 -- =========================================================================
-CREATE appointment:apt_ana CONTENT {
+UPSERT appointment:apt_ana CONTENT {
     clinic_id: clinic:smile_plus,
     patient_id: patient:ana_silva,
     patient_name: "Ana Clara Silva",
@@ -577,7 +578,7 @@ RELATE appointment:apt_ana->assigned_to->user:dr_andre CONTENT {
     split_percentage: 40
 };
 
-CREATE appointment:apt_carlos CONTENT {
+UPSERT appointment:apt_carlos CONTENT {
     clinic_id: clinic:smile_plus,
     patient_id: patient:carlos_souza,
     patient_name: "Carlos Eduardo Souza",
@@ -595,7 +596,7 @@ RELATE appointment:apt_carlos->assigned_to->user:dr_andre CONTENT {
     split_percentage: 50
 };
 
-CREATE financial_transaction:tx_1 CONTENT {
+UPSERT financial_transaction:tx_1 CONTENT {
     clinic_id: clinic:smile_plus,
     appointment_id: appointment:apt_ana,
     user_id: user:dr_andre,
@@ -607,7 +608,7 @@ CREATE financial_transaction:tx_1 CONTENT {
     created_at: time::now() - 3h
 };
 
-CREATE financial_transaction:tx_2 CONTENT {
+UPSERT financial_transaction:tx_2 CONTENT {
     clinic_id: clinic:smile_plus,
     amount_cents: 45000,
     direction: "expense",
@@ -617,7 +618,7 @@ CREATE financial_transaction:tx_2 CONTENT {
     created_at: time::now() - 1d
 };
 
-CREATE financial_transaction:tx_3 CONTENT {
+UPSERT financial_transaction:tx_3 CONTENT {
     clinic_id: clinic:smile_plus,
     appointment_id: appointment:apt_carlos,
     user_id: user:dr_andre,

@@ -1,7 +1,7 @@
 mod appointments;
 mod auth;
 mod clinic;
-mod documents;
+pub mod documents;
 mod finance;
 mod patients;
 mod stock;

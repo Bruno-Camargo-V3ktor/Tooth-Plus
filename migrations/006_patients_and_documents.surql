@@ -105,6 +105,7 @@ DEFINE FIELD OVERWRITE patient_signature_data ON TABLE patient_document TYPE opt
 DEFINE FIELD OVERWRITE doctor_signed_at ON TABLE patient_document TYPE option<datetime>;
 DEFINE FIELD OVERWRITE doctor_signature_data ON TABLE patient_document TYPE option<string>;
 DEFINE FIELD OVERWRITE require_whatsapp_otp ON TABLE patient_document TYPE bool DEFAULT false;
+DEFINE FIELD OVERWRITE patient_otp_verified ON TABLE patient_document TYPE bool DEFAULT false;
 DEFINE FIELD OVERWRITE otp_code_hash ON TABLE patient_document TYPE option<string>;
 DEFINE FIELD OVERWRITE otp_expires_at ON TABLE patient_document TYPE option<datetime>;
 DEFINE FIELD OVERWRITE final_checksum_sha256 ON TABLE patient_document TYPE option<string>;

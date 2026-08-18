@@ -4,22 +4,19 @@ use std::fs;
 use std::path::Path;
 
 pub async fn run_migrations(db: &Db) {
-    let migrations_dir = match env::var("MIGRATIONS_DIR") {
-        Ok(dir) => dir,
-        Err(_) => {
-            println!("MIGRATIONS_DIR not set. Skipping automatic migrations.");
-            return;
-        }
+    let raw_dir = env::var("MIGRATIONS_DIR").unwrap_or_else(|_| "migrations".to_string());
+    let path = if Path::new(&raw_dir).is_dir() {
+        Path::new(&raw_dir)
+    } else if Path::new("migrations").is_dir() {
+        Path::new("migrations")
+    } else if Path::new("../migrations").is_dir() {
+        Path::new("../migrations")
+    } else {
+        println!("Migration directory not found: {}", raw_dir);
+        return;
     };
 
-    let path = Path::new(&migrations_dir);
-
-    if !path.exists() || !path.is_dir() {
-        println!("Migration directory not found: {}", migrations_dir);
-        return;
-    }
-
-    println!("Starting migrations from: {}", migrations_dir);
+    println!("Starting migrations from: {:?}", path);
 
     let mut files: Vec<_> = fs::read_dir(path)
         .unwrap_or_else(|_| panic!("Failed to read migration directory"))

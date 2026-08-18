@@ -12,6 +12,11 @@ pub struct ClinicResponse {
     pub address: ClinicAddress,
     pub auto_reminders: bool,
     pub require_esign: bool,
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub smtp_user: Option<String>,
+    pub smtp_from: Option<String>,
+    pub smtp_tls: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -25,7 +30,7 @@ pub struct ClinicAddress {
     pub zip_code: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct UpdateClinicRequest {
     pub corporate_name: Option<String>,
     pub trading_name: Option<String>,
@@ -34,4 +39,10 @@ pub struct UpdateClinicRequest {
     pub address: Option<ClinicAddress>,
     pub auto_reminders: Option<bool>,
     pub require_esign: Option<bool>,
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub smtp_user: Option<String>,
+    pub smtp_pass: Option<String>,
+    pub smtp_from: Option<String>,
+    pub smtp_tls: Option<bool>,
 }

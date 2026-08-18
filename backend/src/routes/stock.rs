@@ -791,7 +791,7 @@ pub async fn upload_stock_document(
     let data = req.into_inner();
     let ext = data.filename.rsplit('.').next().unwrap_or("pdf");
     let file_url = storage
-        .upload_file("stock/documents", ext, &data.base64_content)
+        .upload_file(&format!("clinics/{}/stock", clinic_id.replace("clinic:", "")), ext, &data.base64_content)
         .await
         .map_err(|e| ApiError::Internal(format!("Erro no upload: {}", e)))?;
 

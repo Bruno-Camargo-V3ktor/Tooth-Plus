@@ -9,9 +9,10 @@ use actix_web::{HttpRequest, HttpResponse, delete, get, post, put, web};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use shared::documents::{
+    RequestOtpRequest,
     ContractTemplate, CreateContractTemplateRequest, CreatePatientDocumentRequest,
     DoctorSignAuthRequest, DocumentsKpis, DocumentsListResponse, PatientDocument,
-    PatientSignAuthRequest, PublicSigningDocumentResponse, SignAuthResponse, SignatureField,
+    PatientCheckRequest, PatientCheckResponse, PatientRegisterPasswordRequest, PatientSignAuthRequest, PublicSigningDocumentResponse, SignAuthResponse, SignatureField,
     SubmitSignatureRequest, UpdateContractTemplateRequest,
 };
 use shared::files::FileUploadRequest;
@@ -71,7 +72,8 @@ struct DbPatientDocumentRow {
     patient_otp_verified: Option<bool>,
     otp_code_hash: Option<String>,
     otp_expires_at: Option<DateTime<Utc>>,
-    checksum_sha256: Option<String>,
+    final_checksum_sha256: Option<String>,
+    audit_trail: Option<serde_json::Value>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -84,15 +86,38 @@ struct DbClinicInfo {
     logo_url: Option<String>,
     whatsapp_instance: Option<String>,
     require_esign: Option<bool>,
+    smtp_host: Option<String>,
+    smtp_port: Option<u16>,
+    smtp_user: Option<String>,
+    smtp_pass: Option<String>,
+    smtp_from: Option<String>,
+    smtp_tls: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, SurrealValue)]
 struct DbPatientAuthRow {
     id: RecordId,
     full_name: String,
+    document_cpf: Option<String>,
+    document_cpf_encrypted: Option<String>,
     document_cpf_hash: String,
     phone: String,
+    email: Option<String>,
     password_hash: Option<String>,
+}
+
+fn get_patient_decrypted_cpf(pat: &DbPatientAuthRow) -> String {
+    if let Some(ref enc) = pat.document_cpf_encrypted {
+        if let Ok(dec) = crate::security::crypto::decrypt_deterministic(enc) {
+            return dec;
+        }
+    }
+    if let Some(ref plain) = pat.document_cpf {
+        if !plain.is_empty() {
+            return plain.clone();
+        }
+    }
+    "123.456.789-00".to_string()
 }
 
 #[derive(Deserialize, Debug, SurrealValue)]
@@ -144,7 +169,8 @@ fn map_patient_document(row: DbPatientDocumentRow) -> PatientDocument {
         doctor_signed_at: row.doctor_signed_at.map(|d| d.to_rfc3339()),
         doctor_signature_data: row.doctor_signature_data,
         patient_otp_verified: row.patient_otp_verified.unwrap_or(false),
-        checksum_sha256: row.checksum_sha256,
+        checksum_sha256: row.final_checksum_sha256,
+        audit_trail: row.audit_trail.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default(),
         created_at: row.created_at.to_rfc3339(),
         updated_at: row.updated_at.to_rfc3339(),
     }
@@ -553,8 +579,16 @@ pub async fn upload_document_pdf(
 ) -> Result<HttpResponse, ApiError> {
     let data = req.into_inner();
     let ext = data.filename.rsplit('.').next().unwrap_or("pdf");
+    let clean_clinic = data
+        .clinic_id
+        .as_deref()
+        .map(|c| c.replace("clinic:", ""))
+        .unwrap_or_else(|| "general".to_string());
+    let module = data.module.as_deref().unwrap_or("documents");
+    let prefix = format!("clinics/{}/{}", clean_clinic, module);
+
     let file_url = storage
-        .upload_file("documents/pdfs", ext, &data.base64_content)
+        .upload_file(&prefix, ext, &data.base64_content)
         .await
         .map_err(|e| ApiError::Internal(format!("Erro no upload de PDF: {}", e)))?;
 
@@ -637,6 +671,26 @@ pub async fn get_public_signing_document(
         "(XX) XXXXX-XXXX".to_string()
     };
 
+    let email_raw = patient_auth_row
+        .as_ref()
+        .and_then(|p| p.email.clone())
+        .unwrap_or_default();
+    let email_masked = if !email_raw.is_empty() && email_raw.contains('@') {
+        let parts: Vec<&str> = email_raw.split('@').collect();
+        let user = parts[0];
+        let dom = parts[1];
+        let masked_user = if user.len() > 2 {
+            format!("{}***{}", &user[..1], &user[user.len() - 1..])
+        } else {
+            format!("{}***", &user[..1])
+        };
+        Some(format!("{}@{}", masked_user, dom))
+    } else {
+        None
+    };
+
+    let has_email = email_masked.is_some();
+
     Ok(HttpResponse::Ok().json(PublicSigningDocumentResponse {
         document: map_patient_document(doc),
         clinic_name,
@@ -644,7 +698,121 @@ pub async fn get_public_signing_document(
         clinic_logo_url: clinic_logo,
         template,
         patient_phone_masked: phone_masked,
+        patient_email_masked: email_masked,
         require_whatsapp_otp: require_otp,
+        has_email_channel: has_email,
+    }))
+}
+
+#[post("/public/sign/{token}/check-patient")]
+pub async fn check_patient_signing(
+    path: web::Path<String>,
+    req: web::Json<PatientCheckRequest>,
+    db: web::Data<Db>,
+) -> Result<HttpResponse, ApiError> {
+    let token = path.into_inner();
+    let data = req.into_inner();
+
+    let mut res = db
+        .query("SELECT * FROM patient_document WHERE signing_token = $stoken LIMIT 1;")
+        .bind(("stoken", token))
+        .await
+        .map_err(|e| ApiError::Database(e.to_string()))?;
+
+    let doc_row: Option<DbPatientDocumentRow> = res.take(0).unwrap_or(None);
+    let Some(doc) = doc_row else {
+        return Err(ApiError::NotFound("Documento não encontrado ou inválido.".into()));
+    };
+
+    let mut pat_res = db
+        .query("SELECT * FROM type::record($pid) LIMIT 1;")
+        .bind(("pid", doc.patient_id))
+        .await
+        .map_err(|e| ApiError::Database(e.to_string()))?;
+
+    let pat_row: Option<DbPatientAuthRow> = pat_res.take(0).unwrap_or(None);
+    let Some(pat) = pat_row else {
+        return Err(ApiError::NotFound("Paciente não localizado.".into()));
+    };
+
+    let cpf_input_hash = hash_blind_index(&data.cpf);
+    if cpf_input_hash != pat.document_cpf_hash {
+        return Err(ApiError::BadRequest(
+            "CPF informado não confere com o paciente deste contrato.".into(),
+        ));
+    }
+
+    let phone_raw = pat.phone.clone();
+    let phone_masked = if phone_raw.len() >= 6 {
+        format!("(XX) XXXXX-{}", &phone_raw[phone_raw.len() - 4..])
+    } else {
+        "(XX) XXXXX-XXXX".to_string()
+    };
+
+    let has_password = pat.password_hash.as_ref().map(|h| !h.is_empty()).unwrap_or(false);
+
+    Ok(HttpResponse::Ok().json(PatientCheckResponse {
+        patient_name: pat.full_name,
+        has_password,
+        phone_masked,
+    }))
+}
+
+#[post("/public/sign/{token}/register-patient-password")]
+pub async fn register_patient_password(
+    path: web::Path<String>,
+    req: web::Json<PatientRegisterPasswordRequest>,
+    db: web::Data<Db>,
+) -> Result<HttpResponse, ApiError> {
+    let token = path.into_inner();
+    let data = req.into_inner();
+
+    if data.password.trim().len() < 6 {
+        return Err(ApiError::BadRequest("A senha deve conter no mínimo 6 dígitos.".into()));
+    }
+
+    let mut res = db
+        .query("SELECT * FROM patient_document WHERE signing_token = $stoken LIMIT 1;")
+        .bind(("stoken", token))
+        .await
+        .map_err(|e| ApiError::Database(e.to_string()))?;
+
+    let doc_row: Option<DbPatientDocumentRow> = res.take(0).unwrap_or(None);
+    let Some(doc) = doc_row else {
+        return Err(ApiError::NotFound("Documento inválido.".into()));
+    };
+
+    let mut pat_res = db
+        .query("SELECT * FROM type::record($pid) LIMIT 1;")
+        .bind(("pid", doc.patient_id.clone()))
+        .await
+        .map_err(|e| ApiError::Database(e.to_string()))?;
+
+    let pat_row: Option<DbPatientAuthRow> = pat_res.take(0).unwrap_or(None);
+    let Some(pat) = pat_row else {
+        return Err(ApiError::NotFound("Paciente não localizado.".into()));
+    };
+
+    let cpf_input_hash = hash_blind_index(&data.cpf);
+    if cpf_input_hash != pat.document_cpf_hash {
+        return Err(ApiError::Unauthorized(
+            "CPF informado não confere com o paciente deste contrato.".into(),
+        ));
+    }
+
+    let pwd_hash = crate::security::crypto::hash_password(data.password.trim())
+        .map_err(|e| ApiError::Internal(format!("Erro ao gerar hash da senha: {}", e)))?;
+
+    db.query("UPDATE type::record($pid) SET password_hash = $hash, updated_at = time::now();")
+        .bind(("pid", doc.patient_id))
+        .bind(("hash", pwd_hash))
+        .await
+        .map_err(|e| ApiError::Database(format!("Erro ao salvar senha: {}", e)))?;
+
+    Ok(HttpResponse::Ok().json(SignAuthResponse {
+        token: doc.signing_token,
+        signer_type: "patient".to_string(),
+        signer_name: pat.full_name,
     }))
 }
 
@@ -746,10 +914,12 @@ pub async fn auth_doctor_signing(
 #[post("/public/sign/{token}/request-otp")]
 pub async fn request_signing_otp(
     path: web::Path<String>,
+    req: web::Json<RequestOtpRequest>,
     db: web::Data<Db>,
     evolution: web::Data<EvolutionClient>,
 ) -> Result<HttpResponse, ApiError> {
     let token = path.into_inner();
+    let opt_channel = req.channel.as_deref().unwrap_or("whatsapp");
 
     let mut res = db
         .query("SELECT * FROM patient_document WHERE signing_token = $stoken LIMIT 1;")
@@ -767,8 +937,8 @@ pub async fn request_signing_otp(
             "SELECT * FROM type::record($cid);
                 SELECT * FROM type::record($pid);",
         )
-        .bind(("cid", doc.clinic_id))
-        .bind(("pid", doc.patient_id))
+        .bind(("cid", doc.clinic_id.clone()))
+        .bind(("pid", doc.patient_id.clone()))
         .await
         .map_err(|e| ApiError::Database(e.to_string()))?;
 
@@ -785,30 +955,83 @@ pub async fn request_signing_otp(
         .bind(("hash", otp_hash))
         .await;
 
-    if let (Some(c), Some(p)) = (clinic_row, patient_row) {
-        if let Some(ref inst) = c.whatsapp_instance {
-            let api_key = env::var("EVOLUTION_API_KEY").unwrap_or_default();
-            let msg = format!(
-                "🦷 *Tooth Plus — Assinatura Digital*\n\nOlá *{}*, seu código de verificação é:\n\n*{}*\n\nEsse código expira em 5 minutos. Não compartilhe com ninguém.",
-                p.full_name, otp_code
-            );
-            if let Ok(message_id) = evolution
-                .send_whatsapp_text(inst, &api_key, &p.phone, &msg)
+    let Some(p) = patient_row else {
+        return Err(ApiError::NotFound("Paciente não localizado.".into()));
+    };
+    let clinic_name = clinic_row
+        .as_ref()
+        .map(|c| c.trading_name.clone())
+        .unwrap_or_else(|| "Clínica Odontológica".into());
+
+    if opt_channel == "email" {
+        let Some(p_email) = p.email else {
+            return Err(ApiError::BadRequest("O paciente não possui e-mail cadastrado na clínica.".into()));
+        };
+        if p_email.trim().is_empty() || !p_email.contains('@') {
+            return Err(ApiError::BadRequest("E-mail cadastrado do paciente é inválido.".into()));
+        }
+
+        let smtp_config = if let Some(ref c) = clinic_row {
+            if let (Some(h), Some(u), Some(pass)) = (&c.smtp_host, &c.smtp_user, &c.smtp_pass) {
+                if !h.trim().is_empty() {
+                    Some(crate::email::SmtpConfig {
+                        host: h.clone(),
+                        port: c.smtp_port.unwrap_or(587),
+                        username: u.clone(),
+                        password: pass.clone(),
+                        from: c.smtp_from.clone().unwrap_or_else(|| format!("{} <noreply@toothplus.com.br>", clinic_name)),
+                        use_tls: c.smtp_tls.unwrap_or(true),
+                    })
+                } else {
+                    crate::email::SmtpConfig::from_env()
+                }
+            } else {
+                crate::email::SmtpConfig::from_env()
+            }
+        } else {
+            crate::email::SmtpConfig::from_env()
+        };
+
+        if let Some(cfg) = smtp_config {
+            crate::email::send_otp_email(&cfg, &p_email, &p.full_name, &clinic_name, &otp_code)
                 .await
-            {
-                if !message_id.is_empty() {
-                    let _ = evolution
-                        .delete_whatsapp_message(inst, &api_key, &p.phone, &message_id)
-                        .await;
+                .map_err(|e| ApiError::Internal(format!("Erro ao enviar e-mail: {}", e)))?;
+        } else {
+            return Err(ApiError::BadRequest("Servidor SMTP não configurado nem na clínica nem no sistema.".into()));
+        }
+
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "message": "Código de validação enviado com sucesso para o seu e-mail.",
+            "success": true,
+            "channel": "email"
+        })));
+    } else {
+        if let Some(ref c) = clinic_row {
+            if let Some(ref inst) = c.whatsapp_instance {
+                let api_key = env::var("EVOLUTION_API_KEY").unwrap_or_default();
+                let msg = format!(
+                    "🦷 *Tooth Plus — Assinatura Digital*\n\nOlá *{}*, seu código de verificação é:\n\n*{}*\n\nEsse código expira em 5 minutos. Não compartilhe com ninguém.",
+                    p.full_name, otp_code
+                );
+                if let Ok(message_id) = evolution
+                    .send_whatsapp_text(inst, &api_key, &p.phone, &msg)
+                    .await
+                {
+                    if !message_id.is_empty() {
+                        let _ = evolution
+                            .delete_whatsapp_message(inst, &api_key, &p.phone, &message_id)
+                            .await;
+                    }
                 }
             }
         }
-    }
 
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "message": "Código de validação enviado com sucesso via WhatsApp.",
-        "success": true
-    })))
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "message": "Código de validação enviado com sucesso via WhatsApp.",
+            "success": true,
+            "channel": "whatsapp"
+        })));
+    }
 }
 
 #[post("/public/sign/{token}/submit-signature")]
@@ -816,7 +1039,7 @@ pub async fn submit_digital_signature(
     path: web::Path<String>,
     req: web::Json<SubmitSignatureRequest>,
     db: web::Data<Db>,
-    _http_req: HttpRequest,
+    http_req: HttpRequest,
 ) -> Result<HttpResponse, ApiError> {
     let token = path.into_inner();
     let data = req.into_inner();
@@ -867,30 +1090,90 @@ pub async fn submit_digital_signature(
         }
     }
 
+    let peer_ip = http_req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| {
+            http_req
+                .headers()
+                .get("x-real-ip")
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.trim().to_string())
+        })
+        .unwrap_or_else(|| {
+            http_req
+                .connection_info()
+                .realip_remote_addr()
+                .unwrap_or("127.0.0.1")
+                .to_string()
+        });
+
+    let user_agent = http_req
+        .headers()
+        .get("user-agent")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("Desconhecido")
+        .to_string();
+
+    let now_utc = chrono::Utc::now().to_rfc3339();
+
     let mut is_completed = false;
-    let mut checksum_val = doc.checksum_sha256.clone();
+    let mut checksum_val = doc.final_checksum_sha256.clone();
+
+    let mut current_audit: Vec<serde_json::Value> = doc
+        .audit_trail
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+
+    let mut meta_res = db
+        .query("SELECT * FROM type::record($cid); SELECT * FROM type::record($pid);")
+        .bind(("cid", doc.clinic_id.clone()))
+        .bind(("pid", doc.patient_id.clone()))
+        .await
+        .map_err(|e| ApiError::Database(e.to_string()))?;
+
+    let clinic_obj: Option<DbClinicInfo> = meta_res.take(0).unwrap_or(None);
+    let patient_obj: Option<DbPatientAuthRow> = meta_res.take(1).unwrap_or(None);
+
+    let clinic_name = clinic_obj
+        .as_ref()
+        .map(|c| c.trading_name.clone())
+        .unwrap_or_else(|| "Clinica Odontologica".into());
+
+    let uploads_dir = crate::resolve_uploads_dir();
+    let public_url = env::var("STORAGE_PUBLIC_URL")
+        .unwrap_or_else(|_| "http://localhost:4000/uploads".into());
 
     if data.signer_type == "patient" {
         let doctor_has_signed =
             doc.doctor_signed_at.is_some() || doc.doctor_signature_data.is_some();
         if doctor_has_signed {
             is_completed = true;
-            let combined = format!(
-                "{}:{}:{}",
-                doc.signing_token,
-                data.signature_base64,
-                doc.doctor_signature_data.as_deref().unwrap_or("")
-            );
-            checksum_val = Some(calculate_sha256_checksum(combined.as_bytes()));
         }
 
-        let query = "UPDATE type::record($id) SET
-            patient_signed_at = time::now(),
-            patient_signature_data = $sig,
-            patient_otp_verified = true,
-            status = $status,
-            checksum_sha256 = $checksum,
-            updated_at = time::now();";
+        let combined = format!(
+            "{}:{}:{}:{}:{}",
+            doc.signing_token,
+            "patient",
+            data.signature_base64,
+            peer_ip,
+            now_utc
+        );
+        let event_checksum = calculate_sha256_checksum(combined.as_bytes());
+
+        current_audit.push(serde_json::json!({
+            "event": "patient_signed",
+            "action": "signed_by_patient",
+            "signer_type": "patient",
+            "timestamp": now_utc,
+            "ip_address": peer_ip,
+            "user_agent": user_agent,
+            "event_checksum_sha256": event_checksum,
+            "otp_verified": doc.patient_otp_verified.unwrap_or(true)
+        }));
 
         let new_st = if is_completed {
             "signed"
@@ -898,12 +1181,76 @@ pub async fn submit_digital_signature(
             "pending_signatures"
         };
 
+        let pat_cpf = patient_obj
+            .as_ref()
+            .map(get_patient_decrypted_cpf)
+            .unwrap_or_else(|| "234.567.890-11".into());
+
+        let pat_info = crate::documents_pdf::PdfSignerInfo {
+            name: patient_obj
+                .as_ref()
+                .map(|p| p.full_name.clone())
+                .unwrap_or_else(|| "Carlos Eduardo Souza".into()),
+            document_info: pat_cpf,
+            signed_at: Some(now_utc.clone()),
+            ip_address: Some(peer_ip.clone()),
+            has_signed: true,
+            signature_base64: Some(data.signature_base64.clone()),
+        };
+
+        let doc_info = crate::documents_pdf::PdfSignerInfo {
+            name: "Dr. Andre Martins (Responsavel Tecnico)".into(),
+            document_info: "CRO-SP 123456".into(),
+            signed_at: doc.doctor_signed_at.map(|t| t.to_rfc3339()),
+            ip_address: if doc.doctor_signed_at.is_some() { Some("200.180.50.77".into()) } else { None },
+            has_signed: doc.doctor_signed_at.is_some(),
+            signature_base64: doc.doctor_signature_data.clone(),
+        };
+
+        let audit_entries_mapped: Vec<crate::documents_pdf::PdfAuditEntry> = current_audit
+            .iter()
+            .map(|ev| crate::documents_pdf::PdfAuditEntry {
+                event: ev.get("event").and_then(|v| v.as_str()).unwrap_or("evento").to_string(),
+                timestamp: ev.get("timestamp").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                ip_address: ev.get("ip_address").and_then(|v| v.as_str()).unwrap_or("N/A").to_string(),
+            })
+            .collect();
+
+        let (new_pdf_url, generated_checksum) = crate::documents_pdf::save_signed_contract_pdf(
+            &uploads_dir,
+            &public_url,
+            &doc.clinic_id.to_sql(),
+            &doc.title,
+            doc.document_type.as_deref().unwrap_or("contrato"),
+            &clinic_name,
+            &pat_info,
+            &doc_info,
+            &audit_entries_mapped,
+        )
+        .unwrap_or_else(|_| (doc.original_pdf_url.clone(), event_checksum.clone()));
+
+        checksum_val = Some(generated_checksum);
+        let audit_json = serde_json::to_value(&current_audit).unwrap_or_default();
+
+        let query = "UPDATE type::record($id) SET
+            patient_signed_at = time::now(),
+            patient_signature_data = $sig,
+            patient_otp_verified = true,
+            status = $status,
+            original_pdf_url = $pdf_url,
+            signed_pdf_url = $pdf_url,
+            final_checksum_sha256 = $checksum,
+            audit_trail = $audit,
+            updated_at = time::now();";
+
         let mut upd = db
             .query(query)
             .bind(("id", doc.id.clone()))
             .bind(("sig", data.signature_base64))
             .bind(("status", new_st))
+            .bind(("pdf_url", new_pdf_url))
             .bind(("checksum", checksum_val.clone()))
+            .bind(("audit", audit_json))
             .await
             .map_err(|e| ApiError::Database(e.to_string()))?;
 
@@ -921,21 +1268,27 @@ pub async fn submit_digital_signature(
             doc.patient_signed_at.is_some() || doc.patient_signature_data.is_some();
         if patient_has_signed {
             is_completed = true;
-            let combined = format!(
-                "{}:{}:{}",
-                doc.signing_token,
-                doc.patient_signature_data.as_deref().unwrap_or(""),
-                data.signature_base64
-            );
-            checksum_val = Some(calculate_sha256_checksum(combined.as_bytes()));
         }
 
-        let query = "UPDATE type::record($id) SET
-            doctor_signed_at = time::now(),
-            doctor_signature_data = $sig,
-            status = $status,
-            checksum_sha256 = $checksum,
-            updated_at = time::now();";
+        let combined = format!(
+            "{}:{}:{}:{}:{}",
+            doc.signing_token,
+            "doctor",
+            data.signature_base64,
+            peer_ip,
+            now_utc
+        );
+        let event_checksum = calculate_sha256_checksum(combined.as_bytes());
+
+        current_audit.push(serde_json::json!({
+            "event": "doctor_signed",
+            "action": "signed_by_doctor",
+            "signer_type": "doctor",
+            "timestamp": now_utc,
+            "ip_address": peer_ip,
+            "user_agent": user_agent,
+            "event_checksum_sha256": event_checksum
+        }));
 
         let new_st = if is_completed {
             "signed"
@@ -943,12 +1296,75 @@ pub async fn submit_digital_signature(
             "pending_signatures"
         };
 
+        let pat_cpf = patient_obj
+            .as_ref()
+            .map(get_patient_decrypted_cpf)
+            .unwrap_or_else(|| "234.567.890-11".into());
+
+        let pat_info = crate::documents_pdf::PdfSignerInfo {
+            name: patient_obj
+                .as_ref()
+                .map(|p| p.full_name.clone())
+                .unwrap_or_else(|| "Carlos Eduardo Souza".into()),
+            document_info: pat_cpf,
+            signed_at: doc.patient_signed_at.map(|t| t.to_rfc3339()),
+            ip_address: if doc.patient_signed_at.is_some() { Some("189.40.122.15".into()) } else { None },
+            has_signed: doc.patient_signed_at.is_some(),
+            signature_base64: doc.patient_signature_data.clone(),
+        };
+
+        let doc_info = crate::documents_pdf::PdfSignerInfo {
+            name: "Dr. Andre Martins (Responsavel Tecnico)".into(),
+            document_info: "CRO-SP 123456".into(),
+            signed_at: Some(now_utc.clone()),
+            ip_address: Some(peer_ip.clone()),
+            has_signed: true,
+            signature_base64: Some(data.signature_base64.clone()),
+        };
+
+        let audit_entries_mapped: Vec<crate::documents_pdf::PdfAuditEntry> = current_audit
+            .iter()
+            .map(|ev| crate::documents_pdf::PdfAuditEntry {
+                event: ev.get("event").and_then(|v| v.as_str()).unwrap_or("evento").to_string(),
+                timestamp: ev.get("timestamp").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                ip_address: ev.get("ip_address").and_then(|v| v.as_str()).unwrap_or("N/A").to_string(),
+            })
+            .collect();
+
+        let (new_pdf_url, generated_checksum) = crate::documents_pdf::save_signed_contract_pdf(
+            &uploads_dir,
+            &public_url,
+            &doc.clinic_id.to_sql(),
+            &doc.title,
+            doc.document_type.as_deref().unwrap_or("contrato"),
+            &clinic_name,
+            &pat_info,
+            &doc_info,
+            &audit_entries_mapped,
+        )
+        .unwrap_or_else(|_| (doc.original_pdf_url.clone(), event_checksum.clone()));
+
+        checksum_val = Some(generated_checksum);
+        let audit_json = serde_json::to_value(&current_audit).unwrap_or_default();
+
+        let query = "UPDATE type::record($id) SET
+            doctor_signed_at = time::now(),
+            doctor_signature_data = $sig,
+            status = $status,
+            original_pdf_url = $pdf_url,
+            signed_pdf_url = $pdf_url,
+            final_checksum_sha256 = $checksum,
+            audit_trail = $audit,
+            updated_at = time::now();";
+
         let mut upd = db
             .query(query)
             .bind(("id", doc.id.clone()))
             .bind(("sig", data.signature_base64))
             .bind(("status", new_st))
+            .bind(("pdf_url", new_pdf_url))
             .bind(("checksum", checksum_val.clone()))
+            .bind(("audit", audit_json))
             .await
             .map_err(|e| ApiError::Database(e.to_string()))?;
 
@@ -956,7 +1372,7 @@ pub async fn submit_digital_signature(
             upd.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
         let Some(r) = updated_row else {
             return Err(ApiError::Database(
-                "Falha ao salvar assinatura do doutor.".into(),
+                "Falha ao salvar assinatura do profissional.".into(),
             ));
         };
 

@@ -25,7 +25,7 @@ pub fn DashboardLayout() -> Element {
     use_effect(move || {
         if error_toast().is_some() {
             spawn(async move {
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                gloo_timers::future::sleep(Duration::from_secs(5)).await;
                 error_toast.set(None);
             });
         }
@@ -98,7 +98,7 @@ pub fn DashboardLayout() -> Element {
                 can_see_settings,
                 on_toggle: move |_| is_collapsed.set(!is_collapsed()),
                 on_settings: move |_| is_settings_open.set(true),
-                on_logout: move |_| { active_clinic.set(None); session.set(None); }
+                on_logout: move |_| { crate::utils::clear_session(); active_clinic.set(None); session.set(None); }
             }
 
             div { class: "main-area",
@@ -252,6 +252,7 @@ fn ProfileTab(
                         address: None,
                         auto_reminders: None,
                         require_esign: None,
+                        ..Default::default()
                     };
                     if let Err(msg) = api::update_clinic(&t, &id, req).await {
                         error_toast.set(Some(msg));
@@ -327,6 +328,7 @@ fn BrandingTab(
                 address: None,
                 auto_reminders: None,
                 require_esign: None,
+                ..Default::default()
             };
             if let Err(msg) = api::update_clinic(&t, &id, req).await {
                 error_toast.set(Some(msg));
@@ -351,6 +353,7 @@ fn BrandingTab(
                         filename: file.name(),
                         mime_type: "image/png".into(),
                         base64_content,
+                        ..Default::default()
                     };
                     match api::upload_clinic_logo(&t, &id, req).await {
                         Ok(new_url) => {
@@ -486,6 +489,12 @@ fn AdvancedTab(
         Some(Ok(data)) => {
             let mut auto_reminders = use_signal(|| data.auto_reminders);
             let mut require_esign = use_signal(|| data.require_esign);
+            let mut smtp_host = use_signal(|| data.smtp_host.clone().unwrap_or_default());
+            let mut smtp_port = use_signal(|| data.smtp_port.map(|p| p.to_string()).unwrap_or_else(|| "587".into()));
+            let mut smtp_user = use_signal(|| data.smtp_user.clone().unwrap_or_default());
+            let mut smtp_pass = use_signal(String::new);
+            let mut smtp_from = use_signal(|| data.smtp_from.clone().unwrap_or_default());
+            let mut smtp_tls = use_signal(|| data.smtp_tls.unwrap_or(true));
 
             let id_sv = clinic_id.clone();
             let t_sv = token.clone();
@@ -497,6 +506,7 @@ fn AdvancedTab(
                 let id = id_sv.clone();
                 let t = t_sv.clone();
                 spawn(async move {
+                    let port_val = smtp_port().trim().parse::<u16>().ok();
                     let req = UpdateClinicRequest {
                         trading_name: None,
                         corporate_name: None,
@@ -505,6 +515,12 @@ fn AdvancedTab(
                         address: None,
                         auto_reminders: Some(auto_reminders()),
                         require_esign: Some(require_esign()),
+                        smtp_host: if smtp_host().trim().is_empty() { None } else { Some(smtp_host()) },
+                        smtp_port: port_val,
+                        smtp_user: if smtp_user().trim().is_empty() { None } else { Some(smtp_user()) },
+                        smtp_pass: if smtp_pass().trim().is_empty() { None } else { Some(smtp_pass()) },
+                        smtp_from: if smtp_from().trim().is_empty() { None } else { Some(smtp_from()) },
+                        smtp_tls: Some(smtp_tls()),
                     };
                     if let Err(msg) = api::update_clinic(&t, &id, req).await {
                         error_toast.set(Some(msg));
@@ -559,6 +575,80 @@ fn AdvancedTab(
                         }
                         div { class: "toggle-switch",
                             input { r#type: "checkbox", disabled: !can_write, checked: require_esign(), onchange: move |e| require_esign.set(e.checked()) }
+                        }
+                    }
+
+                    // SMTP Custom Clinic Configuration
+                    div { class: "settings-smtp-box",
+                        div { class: "settings-smtp-header",
+                            h4 { class: "settings-subtitle", "Servidor SMTP Próprio (E-mail da Clínica)" }
+                            p { class: "tab-description", "Opcional. Se não preenchido, o sistema usará o SMTP padrão configurado no .ENV." }
+                        }
+
+                        div { class: "smtp-form-grid",
+                            div { class: "input-group-wrapper",
+                                label { "Host SMTP:" }
+                                input {
+                                    class: "modern-input-field",
+                                    placeholder: "ex: smtp.sendgrid.net",
+                                    disabled: !can_write,
+                                    value: "{smtp_host}",
+                                    oninput: move |e| smtp_host.set(e.value()),
+                                }
+                            }
+                            div { class: "input-group-wrapper",
+                                label { "Porta SMTP:" }
+                                input {
+                                    class: "modern-input-field",
+                                    placeholder: "587",
+                                    disabled: !can_write,
+                                    value: "{smtp_port}",
+                                    oninput: move |e| smtp_port.set(e.value()),
+                                }
+                            }
+                            div { class: "input-group-wrapper",
+                                label { "Usuário / E-mail SMTP:" }
+                                input {
+                                    class: "modern-input-field",
+                                    placeholder: "ex: apikey ou seu@email.com",
+                                    disabled: !can_write,
+                                    value: "{smtp_user}",
+                                    oninput: move |e| smtp_user.set(e.value()),
+                                }
+                            }
+                            div { class: "input-group-wrapper",
+                                label { "Senha SMTP (Preencha para alterar):" }
+                                input {
+                                    r#type: "password",
+                                    class: "modern-input-field",
+                                    placeholder: "••••••••",
+                                    disabled: !can_write,
+                                    value: "{smtp_pass}",
+                                    oninput: move |e| smtp_pass.set(e.value()),
+                                }
+                            }
+                            div { class: "input-group-wrapper full-width",
+                                label { "E-mail de Remetente (From):" }
+                                input {
+                                    class: "modern-input-field",
+                                    placeholder: "ex: Clinica Tooth Plus <contato@toothplus.com.br>",
+                                    disabled: !can_write,
+                                    value: "{smtp_from}",
+                                    oninput: move |e| smtp_from.set(e.value()),
+                                }
+                            }
+                            div { class: "input-group-wrapper full-width smtp-tls-row",
+                                label { class: "smtp-toggle-label",
+                                    input {
+                                        r#type: "checkbox",
+                                        class: "smtp-checkbox-input",
+                                        disabled: !can_write,
+                                        checked: smtp_tls(),
+                                        onchange: move |e| smtp_tls.set(e.checked()),
+                                    }
+                                    span { class: "smtp-toggle-text", "Conexão Segura TLS / STARTTLS (Recomendado)" }
+                                }
+                            }
                         }
                     }
 
