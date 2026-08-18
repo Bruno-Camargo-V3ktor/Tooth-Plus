@@ -1,19 +1,35 @@
+//! # Modelos de Domínio - Documentos e Contratos Digitais
+//!
+//! Este módulo define os modelos para criação de modelos de contrato, emissão de termos
+//! e contratos clínicos, portal público de assinatura digital, autenticação e validação por OTP.
+
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Campo de assinatura posicionado no PDF do contrato.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct SignatureField {
+    /// Identificador único do campo de assinatura.
     pub id: String,
+    /// Tipo de signatário esperado ("patient" ou "doctor").
     pub signer_type: String,
+    /// Número da página do PDF (base 1).
     pub page_number: u32,
+    /// Posição horizontal relativa em porcentagem (0.0 a 100.0).
     pub x_pct: f32,
+    /// Posição vertical relativa em porcentagem (0.0 a 100.0).
     pub y_pct: f32,
+    /// Largura relativa do box de assinatura em porcentagem.
     pub width_pct: f32,
+    /// Altura relativa do box de assinatura em porcentagem.
     pub height_pct: f32,
+    /// Rótulo descritivo do campo (ex: "Assinatura do Paciente").
     pub label: String,
+    /// Se o preenchimento da assinatura é obrigatório.
     pub is_required: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Modelo/Template de contrato cadastrado na clínica.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ContractTemplate {
     pub id: String,
     pub clinic_id: String,
@@ -26,7 +42,8 @@ pub struct ContractTemplate {
     pub updated_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Requisição para criação de um novo modelo de contrato.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CreateContractTemplateRequest {
     pub clinic_id: String,
     pub title: String,
@@ -36,7 +53,8 @@ pub struct CreateContractTemplateRequest {
     pub signature_fields: Vec<SignatureField>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Requisição para atualização de modelo de contrato existente.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct UpdateContractTemplateRequest {
     pub clinic_id: String,
     pub title: String,
@@ -46,7 +64,8 @@ pub struct UpdateContractTemplateRequest {
     pub signature_fields: Vec<SignatureField>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Documento clínico emitido vinculado a um paciente e opcionalmente a um modelo.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PatientDocument {
     pub id: String,
     pub clinic_id: String,
@@ -75,7 +94,8 @@ pub struct PatientDocument {
     pub updated_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Requisição para emissão de um novo documento/contrato clínico.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CreatePatientDocumentRequest {
     pub clinic_id: String,
     pub patient_id: String,
@@ -85,9 +105,12 @@ pub struct CreatePatientDocumentRequest {
     pub title: String,
     pub document_type: String,
     pub pdf_url: Option<String>,
+    pub signed_pdf_url: Option<String>,
+    pub is_already_signed: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Dados públicos do documento para renderização no portal de assinatura `/sign/:token`.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PublicSigningDocumentResponse {
     pub document: PatientDocument,
     pub clinic_name: String,
@@ -96,42 +119,51 @@ pub struct PublicSigningDocumentResponse {
     pub template: Option<ContractTemplate>,
     pub patient_phone_masked: String,
     pub patient_email_masked: Option<String>,
+    pub doctor_phone_masked: Option<String>,
+    pub doctor_email_masked: Option<String>,
     pub require_whatsapp_otp: bool,
     pub has_email_channel: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Autenticação de paciente no portal de assinatura (CPF + Senha).
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PatientSignAuthRequest {
     pub cpf: String,
     pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Autenticação de dentista no portal de assinatura (Login + Senha).
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct DoctorSignAuthRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Resposta de sucesso na autenticação do portal de assinaturas.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct SignAuthResponse {
     pub token: String,
     pub signer_type: String,
     pub signer_name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+/// Requisição para disparo de código de segurança OTP (WhatsApp ou E-mail).
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct RequestOtpRequest {
     pub channel: Option<String>,
+    pub signer_type: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Requisição para registrar a assinatura digital e validar OTP.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct SubmitSignatureRequest {
     pub signature_base64: String,
     pub signer_type: String,
     pub otp_code: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+/// Indicadores quantitativos de documentos clínicos e contratos.
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct DocumentsKpis {
     pub total_documents: usize,
     pub pending_signatures: usize,
@@ -139,26 +171,30 @@ pub struct DocumentsKpis {
     pub templates_count: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Resposta consolidada com lista de documentos, modelos e KPIs.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct DocumentsListResponse {
     pub documents: Vec<PatientDocument>,
     pub templates: Vec<ContractTemplate>,
     pub kpis: DocumentsKpis,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Verificação de cadastro prévio de paciente por CPF.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PatientCheckRequest {
     pub cpf: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Resposta da checagem de cadastro e existência de senha de assinatura.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PatientCheckResponse {
     pub patient_name: String,
     pub has_password: bool,
     pub phone_masked: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Cadastro inicial de senha de assinatura digital pelo próprio paciente.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PatientRegisterPasswordRequest {
     pub cpf: String,
     pub password: String,

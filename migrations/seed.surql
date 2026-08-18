@@ -1,21 +1,20 @@
-USE NS saas DB toothplus;
 BEGIN TRANSACTION;
 
-DELETE patient_document;
-DELETE contract_template;
-DELETE patient_treatment;
-DELETE patient_exam;
-DELETE patient_anamnesis;
-DELETE consumes;
-DELETE assigned_to;
-DELETE appointment;
-DELETE financial_transaction;
-DELETE stock_movement;
-DELETE inventory_item;
-DELETE patient;
-DELETE works_at;
-DELETE user;
-DELETE clinic;
+DELETE FROM patient_document WHERE true;
+DELETE FROM contract_template WHERE true;
+DELETE FROM patient_treatment WHERE true;
+DELETE FROM patient_exam WHERE true;
+DELETE FROM patient_anamnesis WHERE true;
+DELETE FROM consumes WHERE true;
+DELETE FROM assigned_to WHERE true;
+DELETE FROM appointment WHERE true;
+DELETE FROM financial_transaction WHERE true;
+DELETE FROM stock_movement WHERE true;
+DELETE FROM inventory_item WHERE true;
+DELETE FROM patient WHERE true;
+DELETE FROM works_at WHERE true;
+DELETE FROM user WHERE true;
+DELETE FROM clinic WHERE true;
 
 -- =========================================================================
 -- CLINICS
@@ -63,6 +62,8 @@ UPSERT user:administrador CONTENT {
     username: "admin",
     password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
     full_name: "Administrador do Sistema",
+    email: "admin@smileplus.com.br",
+    phone: "11988887777",
     document_cpf: "000.000.000-00",
     professional_registry: NONE,
     is_active: true
@@ -106,6 +107,8 @@ UPSERT user:dr_andre CONTENT {
     username: "dr.andre",
     password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
     full_name: "Dr. André Martins",
+    email: "andre.martins@smileplus.com.br",
+    phone: "11977776666",
     document_cpf: "111.222.333-44",
     professional_registry: "CRO/SP 123456",
     is_active: true
@@ -125,6 +128,8 @@ UPSERT user:dra_camila CONTENT {
     username: "dra.camila",
     password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zr72Mrv1wrnmx6X2t1tv/w$Slb2EMFJowLY5RdcM3G3dB1AfGG3sWroCTK6aZFw95w",
     full_name: "Dra. Camila Toledo",
+    email: "camila.toledo@smileplus.com.br",
+    phone: "11966665555",
     document_cpf: "555.666.777-88",
     professional_registry: "CRO/SP 987654",
     is_active: true
@@ -434,34 +439,21 @@ UPSERT patient_document:doc_ana_tcle CONTENT {
     doctor_user_id: user:dr_andre,
     title: "TCLE - Clareamento Dental e Estética",
     document_type: "consent",
-    original_pdf_url: "http://localhost:4000/uploads/clinics/smile_plus/templates/a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6.pdf",
+    original_pdf_url: "http://localhost:4000/uploads/clinics/smile_plus/documents/ana_tcle.pdf",
+    signed_pdf_url: "http://localhost:4000/uploads/clinics/smile_plus/documents/ana_tcle.pdf",
     status: "signed",
-    signing_token: "tok_ana_tcle_2026_sample_ok",
+    signing_token: "d3b07384-d113-4660-9c29-58b8d963f6a3",
     patient_signed_at: time::now() - 4d,
     patient_signature_data: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 100'><path d='M10,80 Q90,10 180,60 T290,30' stroke='%230052cc' stroke-width='3' fill='none'/></svg>",
     doctor_signed_at: time::now() - 4d,
     doctor_signature_data: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 100'><path d='M20,60 Q120,20 200,80 T280,40' stroke='%230052cc' stroke-width='3' fill='none'/></svg>",
-    final_checksum_sha256: "8e837f48b3941bfa706ec2efbdcdbfa780d6ae37de898863f64c679905c756b1",
     require_whatsapp_otp: false,
+    patient_otp_verified: true,
+    final_checksum_sha256: "8e837f48b3941bfa706ec2efbdcdbfa780d6ae37de898863f64c679905c756b1",
     audit_trail: [
-        {
-            event: "document_created",
-            timestamp: time::now() - 4d,
-            ip: "127.0.0.1",
-            user: "dr.andre"
-        },
-        {
-            event: "patient_signed",
-            timestamp: time::now() - 4d,
-            ip: "127.0.0.1",
-            signer: "Ana Clara Silva"
-        },
-        {
-            event: "doctor_signed",
-            timestamp: time::now() - 4d,
-            ip: "127.0.0.1",
-            signer: "Dr. André Martins"
-        }
+        { event: "Documento Criado", timestamp: time::now() - 4d, ip: "127.0.0.1" },
+        { event: "Assinado pelo Paciente", timestamp: time::now() - 4d, ip: "177.18.90.12" },
+        { event: "Autenticado pelo Doutor", timestamp: time::now() - 4d, ip: "127.0.0.1" }
     ]
 };
 
@@ -470,11 +462,12 @@ UPSERT patient_document:doc_carlos_endo CONTENT {
     patient_id: patient:carlos_souza,
     template_id: contract_template:tcle_geral,
     doctor_user_id: user:dr_andre,
+    appointment_id: appointment:apt_carlos,
     title: "TCLE - Tratamento Endodôntico Elemento 36",
     document_type: "consent",
-    original_pdf_url: "http://localhost:4000/uploads/clinics/smile_plus/templates/a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6.pdf",
+    original_pdf_url: "http://localhost:4000/uploads/clinics/smile_plus/documents/carlos_endo.pdf",
     status: "pending_signatures",
-    signing_token: "tok_carlos_endo_2026_pending",
+    signing_token: "f47ac10b-58cc-4372-a567-0e02b2c3d479",
     require_whatsapp_otp: true,
     audit_trail: [
         {

@@ -408,3 +408,40 @@ pub fn IconFolder(size: i32, color: String) -> Element {
         }
     }
 }
+
+#[component]
+pub fn IconKey(size: i32, color: String) -> Element {
+    rsx! {
+        svg {
+            width: "{size}",
+            height: "{size}",
+            view_box: "0 0 24 24",
+            fill: "none",
+            stroke: "{color}",
+            stroke_width: "2",
+            stroke_linecap: "round",
+            stroke_linejoin: "round",
+            path { d: "m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4" }
+            path { d: "m21 2-9.6 9.6" }
+            circle { cx: "7.5", cy: "15.5", r: "5.5" }
+        }
+    }
+}
+
+#[component]
+pub fn IconMail(size: i32, color: String) -> Element {
+    rsx! {
+        svg {
+            width: "{size}",
+            height: "{size}",
+            view_box: "0 0 24 24",
+            fill: "none",
+            stroke: "{color}",
+            stroke_width: "2",
+            stroke_linecap: "round",
+            stroke_linejoin: "round",
+            rect { width: "20", height: "16", x: "2", y: "4", rx: "2" }
+            path { d: "m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" }
+        }
+    }
+}

@@ -1,3 +1,8 @@
+//! # Modelos de Domínio - Gestão Financeira
+//!
+//! Este módulo define transações de receitas e despesas, fluxo de caixa,
+//! categorias financeiras e relatórios analíticos da clínica.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

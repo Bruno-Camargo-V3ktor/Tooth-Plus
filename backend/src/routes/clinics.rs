@@ -46,8 +46,14 @@ pub async fn get_clinic(
     db: web::Data<Db>,
 ) -> Result<HttpResponse, ApiError> {
     let clinic_id = path.into_inner();
+    let raw_key = clinic_id
+        .replace("clinics:", "")
+        .replace("clinic:", "")
+        .replace('⟨', "")
+        .replace('⟩', "");
+    let clinic_rec = format!("clinic:{}", raw_key);
 
-    if !check_permission(&db, &auth.id, &clinic_id, "clinics:read")
+    if !check_permission(&db, &auth.id, &clinic_rec, "clinics:read")
         .await
         .unwrap_or(false)
     {
@@ -58,7 +64,7 @@ pub async fn get_clinic(
 
     let mut response = db
         .query("SELECT * FROM type::record($id)")
-        .bind(("id", clinic_id.clone()))
+        .bind(("id", clinic_rec.clone()))
         .await
         .map_err(|_| ApiError::Database("Erro ao buscar clínica no banco.".into()))?;
 
@@ -103,9 +109,15 @@ pub async fn update_clinic(
     db: web::Data<Db>,
 ) -> Result<HttpResponse, ApiError> {
     let clinic_id = path.into_inner();
+    let raw_key = clinic_id
+        .replace("clinics:", "")
+        .replace("clinic:", "")
+        .replace('⟨', "")
+        .replace('⟩', "");
+    let clinic_rec = format!("clinic:{}", raw_key);
     let data = req.into_inner();
 
-    if !check_permission(&db, &auth.id, &clinic_id, "clinics:write")
+    if !check_permission(&db, &auth.id, &clinic_rec, "clinics:write")
         .await
         .unwrap_or(false)
     {
@@ -134,19 +146,35 @@ pub async fn update_clinic(
         patch.insert("require_esign".into(), serde_json::Value::Bool(v));
     }
     if let Some(v) = data.smtp_host {
-        patch.insert("smtp_host".into(), serde_json::Value::String(v));
+        if v.trim().is_empty() {
+            patch.insert("smtp_host".into(), serde_json::Value::Null);
+        } else {
+            patch.insert("smtp_host".into(), serde_json::Value::String(v.trim().to_string()));
+        }
     }
     if let Some(v) = data.smtp_port {
         patch.insert("smtp_port".into(), serde_json::Value::Number(v.into()));
     }
     if let Some(v) = data.smtp_user {
-        patch.insert("smtp_user".into(), serde_json::Value::String(v));
+        if v.trim().is_empty() {
+            patch.insert("smtp_user".into(), serde_json::Value::Null);
+        } else {
+            patch.insert("smtp_user".into(), serde_json::Value::String(v.trim().to_string()));
+        }
     }
     if let Some(v) = data.smtp_pass {
-        patch.insert("smtp_pass".into(), serde_json::Value::String(v));
+        if v.trim().is_empty() {
+            patch.insert("smtp_pass".into(), serde_json::Value::Null);
+        } else {
+            patch.insert("smtp_pass".into(), serde_json::Value::String(v.trim().to_string()));
+        }
     }
     if let Some(v) = data.smtp_from {
-        patch.insert("smtp_from".into(), serde_json::Value::String(v));
+        if v.trim().is_empty() {
+            patch.insert("smtp_from".into(), serde_json::Value::Null);
+        } else {
+            patch.insert("smtp_from".into(), serde_json::Value::String(v.trim().to_string()));
+        }
     }
     if let Some(v) = data.smtp_tls {
         patch.insert("smtp_tls".into(), serde_json::Value::Bool(v));
@@ -157,7 +185,7 @@ pub async fn update_clinic(
     }
 
     db.query("UPDATE type::record($id) MERGE $patch")
-        .bind(("id", clinic_id))
+        .bind(("id", clinic_rec))
         .bind(("patch", serde_json::Value::Object(patch)))
         .await
         .map_err(|_| ApiError::Database("Erro ao atualizar clínica.".into()))?;
@@ -172,8 +200,14 @@ pub async fn delete_clinic(
     db: web::Data<Db>,
 ) -> Result<HttpResponse, ApiError> {
     let clinic_id = path.into_inner();
+    let raw_key = clinic_id
+        .replace("clinics:", "")
+        .replace("clinic:", "")
+        .replace('⟨', "")
+        .replace('⟩', "");
+    let clinic_rec = format!("clinic:{}", raw_key);
 
-    if !check_permission(&db, &auth.id, &clinic_id, "clinics:delete")
+    if !check_permission(&db, &auth.id, &clinic_rec, "clinics:delete")
         .await
         .unwrap_or(false)
     {
@@ -183,7 +217,7 @@ pub async fn delete_clinic(
     }
 
     db.query("DELETE type::record($id)")
-        .bind(("id", clinic_id))
+        .bind(("id", clinic_rec))
         .await
         .map_err(|_| ApiError::Database("Erro ao excluir clínica.".into()))?;
 
@@ -199,9 +233,14 @@ pub async fn upload_logo(
     storage: web::Data<Arc<dyn StorageProvider>>,
 ) -> Result<HttpResponse, ApiError> {
     let clinic_id = path.into_inner();
+    let clinic_rec = if clinic_id.contains(':') {
+        clinic_id.clone()
+    } else {
+        format!("clinics:{}", clinic_id)
+    };
     let data = req.into_inner();
 
-    if !check_permission(&db, &auth.id, &clinic_id, "clinics:write")
+    if !check_permission(&db, &auth.id, &clinic_rec, "clinics:write")
         .await
         .unwrap_or(false)
     {
@@ -212,15 +251,15 @@ pub async fn upload_logo(
 
     let ext = data.filename.rsplit('.').next().unwrap_or("png");
     let file_url = storage
-        .upload_file(&format!("clinics/{}/logos", clinic_id.replace("clinic:", "")), ext, &data.base64_content)
+        .upload_file(&format!("clinics/{}/logos", clinic_id.replace("clinic:", "").replace("clinics:", "")), ext, &data.base64_content)
         .await
         .map_err(|e| ApiError::Internal(format!("Erro no upload: {}", e)))?;
 
     db.query("UPDATE type::record($id) SET logo_url = $logo_url")
-        .bind(("id", clinic_id))
+        .bind(("id", clinic_rec))
         .bind(("logo_url", file_url.clone()))
         .await
-        .map_err(|_| ApiError::Database("Erro ao salvar URL da logo.".into()))?;
+        .map_err(|_| ApiError::Database("Erro ao salvar URL da logo no banco.".into()))?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "logo_url": file_url })))
 }

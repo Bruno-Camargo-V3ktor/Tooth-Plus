@@ -1,160 +1,34 @@
+//! # Agendamento e Gestão de Consultas (Backend)
+//!
+//! Controla a listagem, criação, edição e exclusão de agendamentos odontológicos,
+//! vinculação de profissionais responsáveis e plano de consumo de materiais.
+
+use super::{
+    appointment_record_id, clinic_record_id, parse_record_id, parse_status, parse_type,
+    patient_record_id, type_to_str, ClinicQuery, DbAppointmentRecord, DbAssignedRecord,
+    DbConsumedRecord,
+};
 use crate::db::Db;
 use crate::error::ApiError;
-use crate::security::auth_guard::{AuthenticatedUser, check_permission};
-use actix_web::{HttpResponse, delete, get, patch, post, put, web};
+use crate::security::auth_guard::{check_permission, AuthenticatedUser};
+use actix_web::{delete, get, post, put, web, HttpResponse};
 use serde::Deserialize;
 use shared::appointments::{
-    AgendaResourceOption, AgendaResourcesResponse, AppointmentResponse, AppointmentStatus,
-    AppointmentType, AssignedUserDto, ConsumedItemDto, CreateAppointmentRequest,
-    UpdateAppointmentRequest, UpdateAppointmentStatusRequest,
+    AppointmentResponse, AssignedUserDto, ConsumedItemDto, CreateAppointmentRequest,
+    UpdateAppointmentRequest,
 };
 use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
+/// Query string para filtragem de consultas por clínica, data, profissional ou status.
 #[derive(Deserialize)]
 pub struct AppointmentQuery {
-    clinic_id: String,
-    date: Option<String>,
-    user_id: Option<String>,
-    status: Option<String>,
+    pub clinic_id: String,
+    pub date: Option<String>,
+    pub user_id: Option<String>,
+    pub status: Option<String>,
 }
 
-#[derive(Deserialize)]
-pub struct ClinicQuery {
-    clinic_id: String,
-}
-
-#[derive(Deserialize, Debug, SurrealValue)]
-struct DbAppointmentRecord {
-    id: RecordId,
-    clinic_id: RecordId,
-    patient_id: Option<RecordId>,
-    patient_name: Option<String>,
-    title: String,
-    scheduled_for: chrono::DateTime<chrono::Utc>,
-    duration_minutes: i32,
-    status: String,
-    appointment_type: String,
-    financial_amount_cents: Option<i64>,
-    financial_type: Option<String>,
-    cancellation_reason: Option<String>,
-}
-
-#[derive(Deserialize, Debug, SurrealValue)]
-struct DbAssignedRecord {
-    user_id: RecordId,
-    user_name: Option<String>,
-    role_in_appointment: String,
-    split_percentage: i32,
-}
-
-#[derive(Deserialize, Debug, SurrealValue)]
-struct DbConsumedRecord {
-    item_id: RecordId,
-    item_name: Option<String>,
-    quantity_planned: i32,
-    quantity_used: Option<i32>,
-}
-
-#[derive(Deserialize, Debug, SurrealValue)]
-struct DbResourceRecord {
-    id: RecordId,
-    name: String,
-    extra_info: Option<String>,
-}
-
-fn parse_record_id(table: &str, raw: &str) -> RecordId {
-    let key = if let Some(stripped) = raw.strip_prefix(&format!("{}:", table)) {
-        stripped
-    } else {
-        raw
-    };
-    RecordId::new(table, key)
-}
-
-fn clinic_record_id(id: &str) -> String {
-    if id.starts_with("clinic:") {
-        id.to_string()
-    } else {
-        format!("clinic:{}", id)
-    }
-}
-
-fn user_record_id(id: &str) -> String {
-    if id.starts_with("user:") {
-        id.to_string()
-    } else {
-        format!("user:{}", id)
-    }
-}
-
-fn appointment_record_id(id: &str) -> String {
-    if id.starts_with("appointment:") {
-        id.to_string()
-    } else {
-        format!("appointment:{}", id)
-    }
-}
-
-fn patient_record_id(id: &str) -> String {
-    if id.starts_with("patient:") {
-        id.to_string()
-    } else {
-        format!("patient:{}", id)
-    }
-}
-
-fn inventory_record_id(id: &str) -> String {
-    if id.starts_with("inventory_item:") {
-        id.to_string()
-    } else {
-        format!("inventory_item:{}", id)
-    }
-}
-
-fn parse_status(s: &str) -> AppointmentStatus {
-    match s {
-        "confirmed" => AppointmentStatus::Confirmed,
-        "in_progress" => AppointmentStatus::InProgress,
-        "completed" => AppointmentStatus::Completed,
-        "canceled" => AppointmentStatus::Canceled,
-        "no_show" => AppointmentStatus::NoShow,
-        _ => AppointmentStatus::Pending,
-    }
-}
-
-fn parse_type(s: &str) -> AppointmentType {
-    match s {
-        "treatment" => AppointmentType::Treatment,
-        "surgery" => AppointmentType::Surgery,
-        "return" => AppointmentType::Return,
-        "meeting" => AppointmentType::Meeting,
-        "other" => AppointmentType::Other,
-        _ => AppointmentType::Consultation,
-    }
-}
-
-fn status_to_str(s: &AppointmentStatus) -> &'static str {
-    match s {
-        AppointmentStatus::Pending => "pending",
-        AppointmentStatus::Confirmed => "confirmed",
-        AppointmentStatus::InProgress => "in_progress",
-        AppointmentStatus::Completed => "completed",
-        AppointmentStatus::Canceled => "canceled",
-        AppointmentStatus::NoShow => "no_show",
-    }
-}
-
-fn type_to_str(t: &AppointmentType) -> &'static str {
-    match t {
-        AppointmentType::Consultation => "consultation",
-        AppointmentType::Treatment => "treatment",
-        AppointmentType::Surgery => "surgery",
-        AppointmentType::Return => "return",
-        AppointmentType::Meeting => "meeting",
-        AppointmentType::Other => "other",
-    }
-}
-
+/// Lista os agendamentos da clínica com filtros opcionais por dia, profissional ou status.
 #[get("/appointments")]
 pub async fn list_appointments(
     auth: AuthenticatedUser,
@@ -312,100 +186,7 @@ pub async fn list_appointments(
     Ok(HttpResponse::Ok().json(results))
 }
 
-#[get("/appointments/resources")]
-pub async fn get_agenda_resources(
-    auth: AuthenticatedUser,
-    query: web::Query<ClinicQuery>,
-    db: web::Data<Db>,
-) -> Result<HttpResponse, ApiError> {
-    let clinic_rec = clinic_record_id(&query.clinic_id);
-
-    if !check_permission(&db, &auth.id, &clinic_rec, "appointments:read")
-        .await
-        .unwrap_or(false)
-        && !check_permission(&db, &auth.id, &clinic_rec, "agenda:read")
-            .await
-            .unwrap_or(false)
-    {
-        return Err(ApiError::Forbidden("Sem privilégios de acesso.".into()));
-    }
-
-    let mut team_resp = db
-        .query(
-            "SELECT
-                in           AS id,
-                in.full_name AS name,
-                role         AS extra_info
-            FROM works_at
-            WHERE out = type::record($clinic_id)",
-        )
-        .bind(("clinic_id", clinic_rec.clone()))
-        .await
-        .map_err(|_| ApiError::Database("Falha ao buscar profissionais.".into()))?;
-
-    let team_raw: Vec<DbResourceRecord> = team_resp.take(0).unwrap_or_default();
-    let team_members = team_raw
-        .into_iter()
-        .map(|r| AgendaResourceOption {
-            id: r.id.to_sql(),
-            name: r.name,
-            extra_info: r.extra_info,
-        })
-        .collect();
-
-    let mut patients_resp = db
-        .query(
-            "SELECT
-                id,
-                full_name AS name,
-                phone     AS extra_info
-            FROM patient
-            WHERE clinic_id = type::record($clinic_id)",
-        )
-        .bind(("clinic_id", clinic_rec.clone()))
-        .await
-        .map_err(|_| ApiError::Database("Falha ao buscar pacientes.".into()))?;
-
-    let patients_raw: Vec<DbResourceRecord> = patients_resp.take(0).unwrap_or_default();
-    let patients = patients_raw
-        .into_iter()
-        .map(|r| AgendaResourceOption {
-            id: r.id.to_sql(),
-            name: r.name,
-            extra_info: r.extra_info,
-        })
-        .collect();
-
-    let mut items_resp = db
-        .query(
-            "SELECT
-                id,
-                name,
-                unit AS extra_info
-            FROM inventory_item
-            WHERE clinic_id = type::record($clinic_id)",
-        )
-        .bind(("clinic_id", clinic_rec.clone()))
-        .await
-        .map_err(|_| ApiError::Database("Falha ao buscar itens de estoque.".into()))?;
-
-    let items_raw: Vec<DbResourceRecord> = items_resp.take(0).unwrap_or_default();
-    let inventory_items = items_raw
-        .into_iter()
-        .map(|r| AgendaResourceOption {
-            id: r.id.to_sql(),
-            name: r.name,
-            extra_info: r.extra_info,
-        })
-        .collect();
-
-    Ok(HttpResponse::Ok().json(AgendaResourcesResponse {
-        team_members,
-        patients,
-        inventory_items,
-    }))
-}
-
+/// Cria um novo agendamento com os profissionais e materiais associados.
 #[post("/appointments")]
 pub async fn create_appointment(
     auth: AuthenticatedUser,
@@ -511,6 +292,7 @@ pub async fn create_appointment(
     })))
 }
 
+/// Atualiza as informações de uma consulta existente na agenda.
 #[put("/appointments/{id}")]
 pub async fn update_appointment(
     auth: AuthenticatedUser,
@@ -649,169 +431,7 @@ pub async fn update_appointment(
     Ok(HttpResponse::Ok().json("Agendamento atualizado com sucesso."))
 }
 
-#[patch("/appointments/{id}/status")]
-pub async fn update_appointment_status(
-    auth: AuthenticatedUser,
-    path: web::Path<String>,
-    query: web::Query<ClinicQuery>,
-    req: web::Json<UpdateAppointmentStatusRequest>,
-    db: web::Data<Db>,
-) -> Result<HttpResponse, ApiError> {
-    let app_id = path.into_inner();
-    let data = req.into_inner();
-    let clinic_rec = clinic_record_id(&query.clinic_id);
-    let app_rec = appointment_record_id(&app_id);
-
-    if !check_permission(&db, &auth.id, &clinic_rec, "appointments:write")
-        .await
-        .unwrap_or(false)
-        && !check_permission(&db, &auth.id, &clinic_rec, "agenda:write")
-            .await
-            .unwrap_or(false)
-    {
-        return Err(ApiError::Forbidden(
-            "Sem privilégios para alterar status de agendamentos.".into(),
-        ));
-    }
-
-    let status_str = status_to_str(&data.status);
-
-    db.query(
-        "UPDATE type::record($app_id) SET
-            status              = $status,
-            cancellation_reason = $reason",
-    )
-    .bind(("app_id", app_rec.clone()))
-    .bind(("status", status_str))
-    .bind(("reason", data.cancellation_reason.clone()))
-    .await
-    .map_err(|_| ApiError::Database("Falha ao atualizar status do agendamento.".into()))?;
-
-    if data.status == AppointmentStatus::Completed {
-        if let Some(ref items) = data.consumed_items {
-            for item in items {
-                let item_rec = inventory_record_id(&item.item_id);
-                let qty_to_deduct = item.quantity_used.unwrap_or(item.quantity_planned);
-
-                db.query(
-                    "UPDATE consumes SET quantity_used = $qty
-                    WHERE in = type::record($app_id) AND out = type::record($item_id)",
-                )
-                .bind(("app_id", app_rec.clone()))
-                .bind(("item_id", item_rec.clone()))
-                .bind(("qty", qty_to_deduct))
-                .await
-                .ok();
-
-                if qty_to_deduct > 0 {
-                    db.query(
-                        "UPDATE type::record($item_id) SET current_stock = current_stock - $qty",
-                    )
-                    .bind(("item_id", item_rec.clone()))
-                    .bind(("qty", qty_to_deduct))
-                    .await
-                    .ok();
-
-                    db.query(
-                        "CREATE stock_movement SET
-                            item_id         = type::record($item_id),
-                            quantity_change = -$qty,
-                            movement_type   = 'appointment_consumed'",
-                    )
-                    .bind(("item_id", item_rec))
-                    .bind(("qty", qty_to_deduct))
-                    .await
-                    .ok();
-                }
-            }
-        }
-
-        #[derive(Deserialize, SurrealValue)]
-        struct AppFinanceInfo {
-            financial_amount_cents: Option<i64>,
-            financial_type: Option<String>,
-            title: String,
-        }
-
-        let mut fin_resp = db
-            .query(
-                "SELECT financial_amount_cents, financial_type, title FROM type::record($app_id)",
-            )
-            .bind(("app_id", app_rec.clone()))
-            .await
-            .map_err(|_| ApiError::Database("Falha ao verificar dados financeiros.".into()))?;
-
-        let fin_info: Option<AppFinanceInfo> = fin_resp.take(0).unwrap_or(None);
-
-        if let Some(fi) = fin_info {
-            if let (Some(amount), Some(ft)) = (fi.financial_amount_cents, fi.financial_type) {
-                if amount > 0 && ft == "income" {
-                    db.query(
-                        "CREATE financial_transaction SET
-                            clinic_id      = type::record($clinic_id),
-                            appointment_id = type::record($app_id),
-                            amount_cents   = $amount,
-                            direction      = 'income',
-                            status         = 'completed',
-                            category       = 'appointment_revenue',
-                            description    = $desc",
-                    )
-                    .bind(("clinic_id", clinic_rec.clone()))
-                    .bind(("app_id", app_rec.clone()))
-                    .bind(("amount", amount))
-                    .bind(("desc", format!("Receita de Atendimento: {}", fi.title)))
-                    .await
-                    .ok();
-
-                    let mut assigned_resp = db
-                        .query(
-                            "SELECT
-                                out              AS user_id,
-                                role_in_appointment,
-                                split_percentage
-                            FROM assigned_to
-                            WHERE in = type::record($app_id) AND split_percentage > 0",
-                        )
-                        .bind(("app_id", app_rec.clone()))
-                        .await
-                        .unwrap();
-
-                    let assigned: Vec<DbAssignedRecord> = assigned_resp.take(0).unwrap_or_default();
-
-                    for a in assigned {
-                        let commission_cents = (amount * a.split_percentage as i64) / 100;
-                        if commission_cents > 0 {
-                            db.query(
-                                "CREATE financial_transaction SET
-                                    clinic_id      = type::record($clinic_id),
-                                    appointment_id = type::record($app_id),
-                                    user_id        = type::record($user_id),
-                                    amount_cents   = $amount,
-                                    direction      = 'expense',
-                                    status         = 'pending',
-                                    category       = 'commission',
-                                    description    = $desc",
-                            )
-                            .bind(("clinic_id", clinic_rec.clone()))
-                            .bind(("app_id", app_rec.clone()))
-                            .bind(("user_id", a.user_id.to_sql()))
-                            .bind(("amount", commission_cents))
-                            .bind((
-                                "desc",
-                                format!("Comissão ({}%): {}", a.split_percentage, fi.title),
-                            ))
-                            .await
-                            .ok();
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(HttpResponse::Ok().json("Status atualizado com sucesso."))
-}
-
+/// Exclui o agendamento e remove seus relacionamentos no banco de dados.
 #[delete("/appointments/{id}")]
 pub async fn delete_appointment(
     auth: AuthenticatedUser,

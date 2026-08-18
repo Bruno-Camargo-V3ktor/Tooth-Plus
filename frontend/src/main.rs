@@ -27,6 +27,7 @@ fn App() -> Element {
     use_context_provider(|| Signal::new(initial_clinic));
 
     rsx! {
+        document::Link { rel: "stylesheet", href: "/assets/main.css" }
         document::Stylesheet { href: MAIN_CSS }
         Router::<Route> {}
     }

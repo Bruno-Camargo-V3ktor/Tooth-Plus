@@ -49,13 +49,15 @@ pub fn ActionModal(
             class: "modal-overlay",
             onclick: move |_| on_close.call(()),
             div {
-                class: "action-modal",
+                class: "action-modal modal-large",
                 onclick: move |e| e.stop_propagation(),
-                div { class: "settings-header",
-                    h2 { class: "settings-title", "{title}" }
-                    button { class: "close-btn", onclick: move |_| on_close.call(()), "×" }
+                div { class: "modal-header",
+                    div {
+                        h2 { class: "modal-title", "{title}" }
+                    }
+                    button { class: "modal-close", onclick: move |_| on_close.call(()), "×" }
                 }
-                div { class: "settings-content",
+                div { class: "modal-body scrollable",
                     {children}
                 }
             }

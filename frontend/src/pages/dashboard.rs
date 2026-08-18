@@ -464,6 +464,8 @@ fn AdvancedTab(
     can_delete: bool,
 ) -> Element {
     let mut is_saving = use_signal(|| false);
+    let mut success_msg = use_signal(|| None::<String>);
+    let mut reload_trigger = use_signal(|| 0usize);
 
     let id_res = clinic_id.clone();
     let t_res = token.clone();
@@ -472,6 +474,7 @@ fn AdvancedTab(
     let clinic_resource = use_resource(move || {
         let id = id_res.clone();
         let t = t_res.clone();
+        let _ = reload_trigger();
         async move {
             let res = api::fetch_clinic(&t, &id).await;
             if let Err(ref e) = res {
@@ -498,13 +501,18 @@ fn AdvancedTab(
 
             let id_sv = clinic_id.clone();
             let t_sv = token.clone();
-            let handle_save = move |_| {
+            let mut handle_save = move |_| {
                 if !can_write {
                     return;
                 }
                 is_saving.set(true);
                 let id = id_sv.clone();
                 let t = t_sv.clone();
+                let mut err_sig = error_toast;
+                let mut is_sav = is_saving;
+                let mut succ_sig = success_msg;
+                let mut rel_sig = reload_trigger;
+
                 spawn(async move {
                     let port_val = smtp_port().trim().parse::<u16>().ok();
                     let req = UpdateClinicRequest {
@@ -515,17 +523,23 @@ fn AdvancedTab(
                         address: None,
                         auto_reminders: Some(auto_reminders()),
                         require_esign: Some(require_esign()),
-                        smtp_host: if smtp_host().trim().is_empty() { None } else { Some(smtp_host()) },
+                        smtp_host: if smtp_host().trim().is_empty() { None } else { Some(smtp_host().trim().to_string()) },
                         smtp_port: port_val,
-                        smtp_user: if smtp_user().trim().is_empty() { None } else { Some(smtp_user()) },
-                        smtp_pass: if smtp_pass().trim().is_empty() { None } else { Some(smtp_pass()) },
-                        smtp_from: if smtp_from().trim().is_empty() { None } else { Some(smtp_from()) },
+                        smtp_user: if smtp_user().trim().is_empty() { None } else { Some(smtp_user().trim().to_string()) },
+                        smtp_pass: if smtp_pass().trim().is_empty() { None } else { Some(smtp_pass().trim().to_string()) },
+                        smtp_from: if smtp_from().trim().is_empty() { None } else { Some(smtp_from().trim().to_string()) },
                         smtp_tls: Some(smtp_tls()),
                     };
-                    if let Err(msg) = api::update_clinic(&t, &id, req).await {
-                        error_toast.set(Some(msg));
+                    match api::update_clinic(&t, &id, req).await {
+                        Ok(_) => {
+                            succ_sig.set(Some("Configurações salvas com sucesso!".into()));
+                            rel_sig.set(rel_sig() + 1);
+                        }
+                        Err(msg) => {
+                            err_sig.set(Some(msg));
+                        }
                     }
-                    is_saving.set(false);
+                    is_sav.set(false);
                 });
             };
 
@@ -555,6 +569,13 @@ fn AdvancedTab(
 
             rsx! {
                 div { class: "settings-pane-container",
+                    if let Some(ref msg) = *success_msg.read() {
+                        div { class: "toast toast-success", style: "margin-bottom: 14px;",
+                            span { "{msg}" }
+                            button { class: "toast-close", onclick: move |_| success_msg.set(None), "✕" }
+                        }
+                    }
+
                     h3 { class: "settings-pane-title", "Configurações Avançadas" }
                     p { class: "tab-description", "Gerencie o comportamento global da unidade." }
 
@@ -581,8 +602,8 @@ fn AdvancedTab(
                     // SMTP Custom Clinic Configuration
                     div { class: "settings-smtp-box",
                         div { class: "settings-smtp-header",
-                            h4 { class: "settings-subtitle", "Servidor SMTP Próprio (E-mail da Clínica)" }
-                            p { class: "tab-description", "Opcional. Se não preenchido, o sistema usará o SMTP padrão configurado no .ENV." }
+                            h4 { class: "settings-subtitle", "Servidor SMTP Próprio" }
+                            p { class: "tab-description", "Envio personalizado de e-mails e termos da clínica." }
                         }
 
                         div { class: "smtp-form-grid",
@@ -646,7 +667,7 @@ fn AdvancedTab(
                                         checked: smtp_tls(),
                                         onchange: move |e| smtp_tls.set(e.checked()),
                                     }
-                                    span { class: "smtp-toggle-text", "Conexão Segura TLS / STARTTLS (Recomendado)" }
+                                    span { class: "smtp-toggle-text", "Conexão Segura TLS / STARTTLS" }
                                 }
                             }
                         }

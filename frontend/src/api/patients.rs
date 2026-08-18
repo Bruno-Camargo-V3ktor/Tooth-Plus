@@ -224,7 +224,7 @@ pub async fn create_patient_treatment(
         .json(&req)
         .send()
         .await
-        .map_err(|_| "Falha de conexão ao registrar tratamento.".to_string())?;
+        .map_err(|_| "Falha de conexão ao registrar procedimento.".to_string())?;
 
     if res.status().is_success() {
         res.json::<PatientTreatment>()
@@ -234,6 +234,38 @@ pub async fn create_patient_treatment(
         let err = res.text().await.unwrap_or_default();
         Err(if err.is_empty() {
             "Erro ao registrar procedimento.".into()
+        } else {
+            err
+        })
+    }
+}
+
+pub async fn reset_patient_signature_password(
+    token: &str,
+    patient_id: &str,
+    clinic_id: &str,
+) -> Result<String, String> {
+    let clean_id = patient_id.strip_prefix("patient:").unwrap_or(patient_id);
+    let url = format!("{}/patients/{}/reset-password?clinic_id={}", API_BASE, clean_id, clinic_id);
+
+    let res = get_client()
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao resetar senha do paciente.".to_string())?;
+
+    if res.status().is_success() {
+        #[derive(serde::Deserialize)]
+        struct Resp {
+            message: String,
+        }
+        let body = res.json::<Resp>().await.map_err(|_| "Erro ao processar resposta.".to_string())?;
+        Ok(body.message)
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao resetar senha do paciente.".into()
         } else {
             err
         })

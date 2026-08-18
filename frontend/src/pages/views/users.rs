@@ -199,11 +199,11 @@ fn UserRow(
             }
             div { class: "user-actions-section",
                 if can_write {
-                    button { class: "icon-action-btn edit-btn-row", onclick: move |_| on_edit.call(u_edit.clone()), IconEdit { size: 18, color: "currentColor".to_string() } }
-                    button { class: "icon-action-btn delete-btn-row", onclick: move |_| on_delete.call(u_delete.clone()), IconTrash { size: 18, color: "currentColor".to_string() } }
+                    button { class: "icon-action-btn edit-btn-row", title: "Editar Usuário", onclick: move |_| on_edit.call(u_edit.clone()), IconEdit { size: 18, color: "currentColor".to_string() } }
+                    button { class: "icon-action-btn delete-btn-row", title: "Remover Acesso", onclick: move |_| on_delete.call(u_delete.clone()), IconTrash { size: 18, color: "currentColor".to_string() } }
                 }
                 if can_manage_status {
-                    button { class: "icon-action-btn toggle-btn-row", onclick: move |_| on_toggle.call(u_toggle.clone()), IconPower { size: 18, color: "currentColor".to_string() } }
+                    button { class: "icon-action-btn toggle-btn-row", title: "Alternar Status", onclick: move |_| on_toggle.call(u_toggle.clone()), IconPower { size: 18, color: "currentColor".to_string() } }
                 }
             }
         }
@@ -230,6 +230,8 @@ fn UserFormModal(
 
     let mut full_name = use_signal(|| String::new());
     let mut username = use_signal(|| String::new());
+    let mut email = use_signal(|| String::new());
+    let mut phone = use_signal(|| String::new());
     let mut password = use_signal(|| String::new());
     let mut document_cpf = use_signal(|| String::new());
     let mut professional_registry = use_signal(|| String::new());
@@ -243,6 +245,8 @@ fn UserFormModal(
         if let Some(u) = opt_u {
             full_name.set(u.full_name);
             username.set(u.username);
+            email.set(u.email.unwrap_or_default());
+            phone.set(u.phone.unwrap_or_default());
             password.set(String::new());
             document_cpf.set(u.document_cpf);
             professional_registry.set(u.professional_registry.unwrap_or_default());
@@ -256,6 +260,8 @@ fn UserFormModal(
         } else {
             full_name.set(String::new());
             username.set(String::new());
+            email.set(String::new());
+            phone.set(String::new());
             password.set(String::new());
             document_cpf.set(String::new());
             professional_registry.set(String::new());
@@ -295,6 +301,9 @@ fn UserFormModal(
             if let Some(u) = u_opt {
                 let req = UpdateUserRequest {
                     full_name: Some(full_name()),
+                    email: if email().trim().is_empty() { None } else { Some(email()) },
+                    phone: if phone().trim().is_empty() { None } else { Some(phone()) },
+                    new_password: if password().trim().is_empty() { None } else { Some(password()) },
                     document_cpf: Some(document_cpf()),
                     professional_registry: if professional_registry().trim().is_empty() {
                         None
@@ -314,6 +323,8 @@ fn UserFormModal(
                     username: username(),
                     password_plain: password(),
                     full_name: full_name(),
+                    email: if email().trim().is_empty() { None } else { Some(email()) },
+                    phone: if phone().trim().is_empty() { None } else { Some(phone()) },
                     document_cpf: document_cpf(),
                     professional_registry: if professional_registry().trim().is_empty() {
                         None
@@ -350,6 +361,25 @@ fn UserFormModal(
                     }
                 }
                 div { class: "input-group-wrapper",
+                    label { "E-mail Profissional" }
+                    input {
+                        class: "modern-input-field",
+                        r#type: "email",
+                        placeholder: "ana.lima@clinica.com.br",
+                        value: "{email}",
+                        oninput: move |e| email.set(e.value())
+                    }
+                }
+                div { class: "input-group-wrapper",
+                    label { "Telefone / WhatsApp" }
+                    input {
+                        class: "modern-input-field",
+                        placeholder: "(11) 99999-9999",
+                        value: "{phone}",
+                        oninput: move |e| phone.set(e.value())
+                    }
+                }
+                div { class: "input-group-wrapper",
                     label { "Nome de Usuário (Login)" }
                     input {
                         class: "modern-input-field",
@@ -360,11 +390,11 @@ fn UserFormModal(
                     }
                 }
                 div { class: "input-group-wrapper",
-                    label { if is_edit_mode { "Senha (em branco = manter atual)" } else { "Senha Inicial" } }
+                    label { if is_edit_mode { "Nova Senha (em branco = manter atual)" } else { "Senha Inicial" } }
                     input {
                         class: "modern-input-field",
                         r#type: "password",
-                        placeholder: if is_edit_mode { "••••••••" } else { "Senha de acesso" },
+                        placeholder: if is_edit_mode { "Nova senha ou em branco" } else { "Senha de acesso" },
                         value: "{password}",
                         oninput: move |e| password.set(e.value())
                     }

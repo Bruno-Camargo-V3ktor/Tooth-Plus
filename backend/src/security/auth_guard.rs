@@ -48,13 +48,24 @@ pub async fn check_permission(
     clinic_id: &str,
     required_permission: &str,
 ) -> Result<bool, actix_web::Error> {
+    let uid_rec = if user_id.contains(':') {
+        user_id.to_string()
+    } else {
+        format!("users:{}", user_id)
+    };
+    let cid_rec = if clinic_id.contains(':') {
+        clinic_id.to_string()
+    } else {
+        format!("clinics:{}", clinic_id)
+    };
+
     let mut response = db
         .query(
             "SELECT role, permissions FROM works_at
             WHERE in = type::record($user_id) AND out = type::record($clinic_id)",
         )
-        .bind(("user_id", user_id))
-        .bind(("clinic_id", clinic_id))
+        .bind(("user_id", uid_rec))
+        .bind(("clinic_id", cid_rec))
         .await
         .map_err(|_| actix_web::error::ErrorInternalServerError("Database error"))?;
 

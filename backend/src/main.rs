@@ -2,7 +2,6 @@ use actix_cors::Cors;
 use actix_web::http::header;
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer};
 use std::env;
-use std::sync::Arc;
 
 mod db;
 pub mod documents_pdf;
@@ -14,9 +13,8 @@ mod routes;
 mod security;
 mod storage;
 
-use db::Db;
 use evolution::EvolutionClient;
-use storage::{build_storage_provider, StorageConfig, StorageProvider};
+use storage::{build_storage_provider, StorageConfig};
 
 pub fn resolve_uploads_dir() -> String {
     if let Ok(bucket) = env::var("STORAGE_BUCKET") {
@@ -89,6 +87,7 @@ async fn main() -> std::io::Result<()> {
 
     let upload_dir = resolve_uploads_dir();
     let _ = std::fs::create_dir_all(&upload_dir);
+    documents_pdf::ensure_sample_template_pdf(&upload_dir);
     let storage_config = StorageConfig {
         provider_type: env::var("STORAGE_PROVIDER").unwrap_or_else(|_| "local".into()),
         bucket_name: upload_dir.clone(),
@@ -178,6 +177,7 @@ async fn main() -> std::io::Result<()> {
                     .service(routes::patients::create_patient)
                     .service(routes::patients::get_patient_details)
                     .service(routes::patients::update_patient)
+                    .service(routes::patients::reset_patient_password)
                     .service(routes::patients::delete_patient)
                     .service(routes::patients::save_anamnesis)
                     .service(routes::patients::create_exam)
@@ -190,6 +190,7 @@ async fn main() -> std::io::Result<()> {
                     .service(routes::documents::update_template)
                     .service(routes::documents::delete_template)
                     .service(routes::documents::upload_document_pdf)
+                    .service(routes::documents::get_sample_template_pdf)
                     .service(routes::documents::get_public_signing_document)
                     .service(routes::documents::check_patient_signing)
                     .service(routes::documents::register_patient_password)

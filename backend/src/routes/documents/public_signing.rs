@@ -1,607 +1,31 @@
+//! # Portal Público de Assinatura Digital (Backend)
+//!
+//! Endpoints abertos (autenticados por token criptográfico de URL) para visualização,
+//! autenticação de signatários (paciente/dentista), envio e conferência de OTP e
+//! carimbo de assinaturas eletrônicas com geração de PDF final e checksum SHA-256.
+
+use super::{
+    get_patient_decrypted_cpf, map_patient_document, map_template, DbClinicInfo,
+    DbContractTemplateRow, DbPatientAuthRow, DbPatientDocumentRow, DbUserAuthRow,
+};
 use crate::db::Db;
 use crate::error::ApiError;
 use crate::evolution::EvolutionClient;
-use crate::security::auth_guard::{AuthenticatedUser, check_permission};
-use crate::security::crypto::{calculate_sha256_checksum, hash_blind_index, verify_password};
+use crate::security::crypto::{
+    calculate_sha256_checksum, hash_blind_index, verify_password,
+};
 use crate::security::otp::{generate_otp_code, hash_otp, verify_otp};
-use crate::storage::StorageProvider;
-use actix_web::{HttpRequest, HttpResponse, delete, get, post, put, web};
-use chrono::{DateTime, Utc};
+use actix_web::{get, post, web, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use shared::documents::{
-    RequestOtpRequest,
-    ContractTemplate, CreateContractTemplateRequest, CreatePatientDocumentRequest,
-    DoctorSignAuthRequest, DocumentsKpis, DocumentsListResponse, PatientDocument,
-    PatientCheckRequest, PatientCheckResponse, PatientRegisterPasswordRequest, PatientSignAuthRequest, PublicSigningDocumentResponse, SignAuthResponse, SignatureField,
-    SubmitSignatureRequest, UpdateContractTemplateRequest,
+    DoctorSignAuthRequest, PatientCheckRequest, PatientCheckResponse,
+    PatientRegisterPasswordRequest, PatientSignAuthRequest, PublicSigningDocumentResponse,
+    RequestOtpRequest, SignAuthResponse, SubmitSignatureRequest,
 };
-use shared::files::FileUploadRequest;
 use std::env;
-use std::sync::Arc;
-use surrealdb::types::{RecordId, SurrealValue, ToSql};
-use uuid::Uuid;
+use surrealdb::types::{SurrealValue, ToSql};
 
-fn parse_record_id(table: &str, raw: &str) -> RecordId {
-    let key = if let Some(stripped) = raw.strip_prefix(&format!("{}:", table)) {
-        stripped
-    } else {
-        raw
-    };
-    RecordId::new(table, key)
-}
-
-fn clinic_record_id(clinic_id: &str) -> String {
-    if clinic_id.starts_with("clinic:") {
-        clinic_id.to_string()
-    } else {
-        format!("clinic:{}", clinic_id)
-    }
-}
-
-#[derive(Deserialize, Debug, SurrealValue)]
-struct DbContractTemplateRow {
-    id: RecordId,
-    clinic_id: RecordId,
-    title: String,
-    category: Option<String>,
-    description: Option<String>,
-    pdf_url: String,
-    signature_fields: Option<serde_json::Value>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-#[derive(Deserialize, Debug, SurrealValue)]
-struct DbPatientDocumentRow {
-    id: RecordId,
-    clinic_id: RecordId,
-    patient_id: RecordId,
-    template_id: Option<RecordId>,
-    doctor_user_id: Option<RecordId>,
-    appointment_id: Option<RecordId>,
-    title: String,
-    document_type: Option<String>,
-    original_pdf_url: String,
-    signed_pdf_url: Option<String>,
-    status: Option<String>,
-    signing_token: String,
-    patient_signed_at: Option<DateTime<Utc>>,
-    patient_signature_data: Option<String>,
-    doctor_signed_at: Option<DateTime<Utc>>,
-    doctor_signature_data: Option<String>,
-    patient_otp_verified: Option<bool>,
-    otp_code_hash: Option<String>,
-    otp_expires_at: Option<DateTime<Utc>>,
-    final_checksum_sha256: Option<String>,
-    audit_trail: Option<serde_json::Value>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-#[derive(Deserialize, Debug, SurrealValue)]
-struct DbClinicInfo {
-    id: RecordId,
-    trading_name: String,
-    theme_color: Option<String>,
-    logo_url: Option<String>,
-    whatsapp_instance: Option<String>,
-    require_esign: Option<bool>,
-    smtp_host: Option<String>,
-    smtp_port: Option<u16>,
-    smtp_user: Option<String>,
-    smtp_pass: Option<String>,
-    smtp_from: Option<String>,
-    smtp_tls: Option<bool>,
-}
-
-#[derive(Deserialize, Debug, SurrealValue)]
-struct DbPatientAuthRow {
-    id: RecordId,
-    full_name: String,
-    document_cpf: Option<String>,
-    document_cpf_encrypted: Option<String>,
-    document_cpf_hash: String,
-    phone: String,
-    email: Option<String>,
-    password_hash: Option<String>,
-}
-
-fn get_patient_decrypted_cpf(pat: &DbPatientAuthRow) -> String {
-    if let Some(ref enc) = pat.document_cpf_encrypted {
-        if let Ok(dec) = crate::security::crypto::decrypt_deterministic(enc) {
-            return dec;
-        }
-    }
-    if let Some(ref plain) = pat.document_cpf {
-        if !plain.is_empty() {
-            return plain.clone();
-        }
-    }
-    "123.456.789-00".to_string()
-}
-
-#[derive(Deserialize, Debug, SurrealValue)]
-struct DbUserAuthRow {
-    id: RecordId,
-    username: String,
-    full_name: String,
-    password_hash: String,
-}
-
-fn map_template(row: DbContractTemplateRow) -> ContractTemplate {
-    let fields: Vec<SignatureField> = row
-        .signature_fields
-        .and_then(|v| serde_json::from_value(v).ok())
-        .unwrap_or_default();
-
-    ContractTemplate {
-        id: row.id.to_sql(),
-        clinic_id: row.clinic_id.to_sql(),
-        title: row.title,
-        category: row.category.unwrap_or_else(|| "contract".into()),
-        description: row.description,
-        pdf_url: row.pdf_url,
-        signature_fields: fields,
-        created_at: row.created_at.to_rfc3339(),
-        updated_at: row.updated_at.to_rfc3339(),
-    }
-}
-
-fn map_patient_document(row: DbPatientDocumentRow) -> PatientDocument {
-    PatientDocument {
-        id: row.id.to_sql(),
-        clinic_id: row.clinic_id.to_sql(),
-        patient_id: row.patient_id.to_sql(),
-        patient_name: None,
-        template_id: row.template_id.map(|t| t.to_sql()),
-        template_title: None,
-        doctor_user_id: row.doctor_user_id.map(|u| u.to_sql()),
-        doctor_user_name: None,
-        appointment_id: row.appointment_id.map(|a| a.to_sql()),
-        title: row.title,
-        document_type: row.document_type.unwrap_or_else(|| "contract".into()),
-        original_pdf_url: row.original_pdf_url,
-        signed_pdf_url: row.signed_pdf_url,
-        status: row.status.unwrap_or_else(|| "pending_signatures".into()),
-        signing_token: row.signing_token,
-        patient_signed_at: row.patient_signed_at.map(|d| d.to_rfc3339()),
-        patient_signature_data: row.patient_signature_data,
-        doctor_signed_at: row.doctor_signed_at.map(|d| d.to_rfc3339()),
-        doctor_signature_data: row.doctor_signature_data,
-        patient_otp_verified: row.patient_otp_verified.unwrap_or(false),
-        checksum_sha256: row.final_checksum_sha256,
-        audit_trail: row.audit_trail.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default(),
-        created_at: row.created_at.to_rfc3339(),
-        updated_at: row.updated_at.to_rfc3339(),
-    }
-}
-
-#[derive(Deserialize)]
-pub struct DocumentsQuery {
-    pub clinic_id: String,
-    pub patient_id: Option<String>,
-    pub status: Option<String>,
-}
-
-#[get("/documents")]
-pub async fn list_documents(
-    auth: AuthenticatedUser,
-    query: web::Query<DocumentsQuery>,
-    db: web::Data<Db>,
-) -> Result<HttpResponse, ApiError> {
-    let clinic_str = clinic_record_id(&query.clinic_id);
-
-    if !check_permission(&db, &auth.id, &clinic_str, "documents:read")
-        .await
-        .unwrap_or(false)
-    {
-        return Err(ApiError::Forbidden(
-            "Sem permissão para visualizar documentos desta clínica.".into(),
-        ));
-    }
-
-    let clinic_rec = parse_record_id("clinic", &query.clinic_id);
-
-    let mut res = db
-        .query(
-            "SELECT * FROM patient_document WHERE clinic_id = $cid ORDER BY created_at DESC;
-                SELECT * FROM contract_template WHERE clinic_id = $cid ORDER BY created_at DESC;",
-        )
-        .bind(("cid", clinic_rec))
-        .await
-        .map_err(|e| ApiError::Database(format!("Erro ao consultar documentos: {}", e)))?;
-
-    let raw_docs: Vec<DbPatientDocumentRow> = res.take(0).unwrap_or_default();
-    let raw_templates: Vec<DbContractTemplateRow> = res.take(1).unwrap_or_default();
-
-    let mut docs = Vec::new();
-    let mut pending_cnt = 0;
-    let mut signed_cnt = 0;
-
-    for row in raw_docs {
-        let st = row.status.as_deref().unwrap_or("pending_signatures");
-        if st == "signed" || st == "completed" {
-            signed_cnt += 1;
-        } else if st == "pending_signatures" {
-            pending_cnt += 1;
-        }
-        docs.push(map_patient_document(row));
-    }
-
-    let templates: Vec<ContractTemplate> = raw_templates.into_iter().map(map_template).collect();
-
-    let kpis = DocumentsKpis {
-        total_documents: docs.len(),
-        pending_signatures: pending_cnt,
-        completed_signed: signed_cnt,
-        templates_count: templates.len(),
-    };
-
-    Ok(HttpResponse::Ok().json(DocumentsListResponse {
-        documents: docs,
-        templates,
-        kpis,
-    }))
-}
-
-#[post("/documents")]
-pub async fn create_patient_document(
-    auth: AuthenticatedUser,
-    req: web::Json<CreatePatientDocumentRequest>,
-    db: web::Data<Db>,
-) -> Result<HttpResponse, ApiError> {
-    let data = req.into_inner();
-    let clinic_str = clinic_record_id(&data.clinic_id);
-
-    if !check_permission(&db, &auth.id, &clinic_str, "documents:write")
-        .await
-        .unwrap_or(false)
-    {
-        return Err(ApiError::Forbidden(
-            "Sem permissão para emitir documentos nesta clínica.".into(),
-        ));
-    }
-
-    let clinic_rec = parse_record_id("clinic", &data.clinic_id);
-    let pat_rec = parse_record_id("patient", &data.patient_id);
-
-    let doc_token = Uuid::new_v4().to_string();
-
-    let (mut pdf_url, tpl_rec) = if let Some(ref tpl_id) = data.template_id {
-        let t_rec = parse_record_id("contract_template", tpl_id);
-
-        let mut t_res = db
-            .query("SELECT pdf_url FROM type::record($tid)")
-            .bind(("tid", t_rec.clone()))
-            .await
-            .map_err(|e| ApiError::Database(e.to_string()))?;
-
-        #[derive(Deserialize, SurrealValue)]
-        struct TplPdf {
-            pdf_url: String,
-        }
-        let pdf_row: Option<TplPdf> = t_res.take(0).ok().and_then(|mut v: Vec<TplPdf>| v.pop());
-        let url = pdf_row.map(|r| r.pdf_url).unwrap_or_default();
-        (url, Some(t_rec))
-    } else {
-        (data.pdf_url.unwrap_or_default(), None)
-    };
-
-    if pdf_url.is_empty() {
-        pdf_url = "https://placehold.co/800x1100/ffffff/0f172a?text=Documento+Clinico".to_string();
-    }
-
-    #[derive(Deserialize, SurrealValue)]
-    struct PatBrief {
-        full_name: String,
-    }
-    let mut pat_res = db
-        .query("SELECT full_name FROM type::record($pid)")
-        .bind(("pid", pat_rec.clone()))
-        .await
-        .map_err(|e| ApiError::Database(e.to_string()))?;
-    let pat_row: Option<PatBrief> = pat_res
-        .take(0)
-        .ok()
-        .and_then(|mut v: Vec<PatBrief>| v.pop());
-    let p_name = pat_row.map(|p| p.full_name).unwrap_or_default();
-
-    let mut final_title = data.title.trim().to_string();
-    if !p_name.is_empty() {
-        final_title = final_title
-            .replace("{{paciente_nome}}", &p_name)
-            .replace("{{nome_paciente}}", &p_name);
-    }
-    let today_str = chrono::Local::now().format("%d/%m/%Y").to_string();
-    final_title = final_title
-        .replace("{{data_hoje}}", &today_str)
-        .replace("{{data_atual}}", &today_str);
-
-    let doc_rec = data
-        .doctor_user_id
-        .as_deref()
-        .map(|d| parse_record_id("user", d))
-        .or_else(|| Some(parse_record_id("user", &auth.id)));
-    let appt_rec = data
-        .appointment_id
-        .as_deref()
-        .map(|a| parse_record_id("appointment", a));
-
-    let is_static = data.document_type == "static_upload";
-    let initial_status = if is_static {
-        "signed"
-    } else {
-        "pending_signatures"
-    };
-
-    let mut res = db
-        .query(
-            "CREATE patient_document CONTENT {
-            clinic_id: $cid,
-            patient_id: $pid,
-            template_id: $tid,
-            doctor_user_id: $uid,
-            appointment_id: $aid,
-            title: $title,
-            document_type: $dtype,
-            original_pdf_url: $pdf_url,
-            status: $st,
-            signing_token: $stoken,
-            patient_otp_verified: false,
-            created_at: time::now(),
-            updated_at: time::now()
-        };",
-        )
-        .bind(("cid", clinic_rec))
-        .bind(("pid", pat_rec))
-        .bind(("tid", tpl_rec))
-        .bind(("uid", doc_rec))
-        .bind(("aid", appt_rec))
-        .bind(("title", final_title))
-        .bind(("dtype", data.document_type))
-        .bind(("pdf_url", pdf_url))
-        .bind(("st", initial_status))
-        .bind(("stoken", doc_token))
-        .await
-        .map_err(|e| ApiError::Database(format!("Erro ao emitir documento: {}", e)))?;
-
-    let created: Option<DbPatientDocumentRow> =
-        res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
-    let Some(row) = created else {
-        return Err(ApiError::Database(
-            "Erro ao recuperar documento emitido.".into(),
-        ));
-    };
-
-    Ok(HttpResponse::Created().json(map_patient_document(row)))
-}
-
-#[derive(Deserialize)]
-pub struct ClinicQuery {
-    pub clinic_id: String,
-}
-
-#[delete("/documents/{id}")]
-pub async fn delete_patient_document(
-    auth: AuthenticatedUser,
-    path: web::Path<String>,
-    query: web::Query<ClinicQuery>,
-    db: web::Data<Db>,
-) -> Result<HttpResponse, ApiError> {
-    let doc_rec = parse_record_id("patient_document", &path.into_inner());
-    let clinic_str = clinic_record_id(&query.clinic_id);
-
-    if !check_permission(&db, &auth.id, &clinic_str, "documents:delete")
-        .await
-        .unwrap_or(false)
-    {
-        return Err(ApiError::Forbidden(
-            "Sem privilégios para excluir documentos.".into(),
-        ));
-    }
-
-    db.query("DELETE type::record($id)")
-        .bind(("id", doc_rec))
-        .await
-        .map_err(|e| ApiError::Database(format!("Erro ao excluir documento: {}", e)))?;
-
-    Ok(HttpResponse::Ok().body("Documento excluído com sucesso."))
-}
-
-#[get("/documents/templates")]
-pub async fn list_templates(
-    auth: AuthenticatedUser,
-    query: web::Query<ClinicQuery>,
-    db: web::Data<Db>,
-) -> Result<HttpResponse, ApiError> {
-    let clinic_str = clinic_record_id(&query.clinic_id);
-
-    if !check_permission(&db, &auth.id, &clinic_str, "documents:read")
-        .await
-        .unwrap_or(false)
-    {
-        return Err(ApiError::Forbidden(
-            "Sem permissão para listar modelos.".into(),
-        ));
-    }
-
-    let clinic_rec = parse_record_id("clinic", &query.clinic_id);
-
-    let mut res = db
-        .query("SELECT * FROM contract_template WHERE clinic_id = $cid ORDER BY created_at DESC;")
-        .bind(("cid", clinic_rec))
-        .await
-        .map_err(|e| ApiError::Database(format!("Erro ao buscar modelos: {}", e)))?;
-
-    let raw: Vec<DbContractTemplateRow> = res.take(0).unwrap_or_default();
-    let list: Vec<ContractTemplate> = raw.into_iter().map(map_template).collect();
-
-    Ok(HttpResponse::Ok().json(list))
-}
-
-#[post("/documents/templates")]
-pub async fn create_template(
-    auth: AuthenticatedUser,
-    req: web::Json<CreateContractTemplateRequest>,
-    db: web::Data<Db>,
-) -> Result<HttpResponse, ApiError> {
-    let data = req.into_inner();
-    let clinic_str = clinic_record_id(&data.clinic_id);
-
-    if !check_permission(&db, &auth.id, &clinic_str, "documents:write")
-        .await
-        .unwrap_or(false)
-    {
-        return Err(ApiError::Forbidden(
-            "Sem permissão para criar modelos.".into(),
-        ));
-    }
-
-    let clinic_rec = parse_record_id("clinic", &data.clinic_id);
-
-    let fields_json = serde_json::to_value(&data.signature_fields).unwrap_or_default();
-
-    let mut res = db
-        .query(
-            "CREATE contract_template CONTENT {
-            clinic_id: $cid,
-            title: $title,
-            category: $cat,
-            description: $desc,
-            pdf_url: $pdf_url,
-            signature_fields: $fields,
-            created_at: time::now(),
-            updated_at: time::now()
-        };",
-        )
-        .bind(("cid", clinic_rec))
-        .bind(("title", data.title.trim().to_string()))
-        .bind(("cat", data.category))
-        .bind(("desc", data.description.map(|s| s.trim().to_string())))
-        .bind(("pdf_url", data.pdf_url))
-        .bind(("fields", fields_json))
-        .await
-        .map_err(|e| ApiError::Database(format!("Erro ao criar modelo de contrato: {}", e)))?;
-
-    let created: Option<DbContractTemplateRow> =
-        res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
-    let Some(row) = created else {
-        return Err(ApiError::Database(
-            "Falha ao retornar modelo criado.".into(),
-        ));
-    };
-
-    Ok(HttpResponse::Created().json(map_template(row)))
-}
-
-#[put("/documents/templates/{id}")]
-pub async fn update_template(
-    auth: AuthenticatedUser,
-    path: web::Path<String>,
-    req: web::Json<UpdateContractTemplateRequest>,
-    db: web::Data<Db>,
-) -> Result<HttpResponse, ApiError> {
-    let tpl_rec = parse_record_id("contract_template", &path.into_inner());
-    let data = req.into_inner();
-    let clinic_str = clinic_record_id(&data.clinic_id);
-
-    if !check_permission(&db, &auth.id, &clinic_str, "documents:write")
-        .await
-        .unwrap_or(false)
-    {
-        return Err(ApiError::Forbidden(
-            "Sem permissão para atualizar modelos.".into(),
-        ));
-    }
-
-    let fields_json = serde_json::to_value(&data.signature_fields).unwrap_or_default();
-
-    let mut res = db
-        .query(
-            "UPDATE type::record($id) SET
-            title = $title,
-            category = $cat,
-            description = $desc,
-            pdf_url = $pdf_url,
-            signature_fields = $fields,
-            updated_at = time::now();",
-        )
-        .bind(("id", tpl_rec))
-        .bind(("title", data.title.trim().to_string()))
-        .bind(("cat", data.category))
-        .bind(("desc", data.description.map(|s| s.trim().to_string())))
-        .bind(("pdf_url", data.pdf_url))
-        .bind(("fields", fields_json))
-        .await
-        .map_err(|e| ApiError::Database(format!("Erro ao atualizar modelo: {}", e)))?;
-
-    let updated: Option<DbContractTemplateRow> =
-        res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
-    let Some(row) = updated else {
-        return Err(ApiError::NotFound("Modelo não encontrado.".into()));
-    };
-
-    Ok(HttpResponse::Ok().json(map_template(row)))
-}
-
-#[delete("/documents/templates/{id}")]
-pub async fn delete_template(
-    auth: AuthenticatedUser,
-    path: web::Path<String>,
-    query: web::Query<ClinicQuery>,
-    db: web::Data<Db>,
-) -> Result<HttpResponse, ApiError> {
-    let tpl_rec = parse_record_id("contract_template", &path.into_inner());
-    let clinic_str = clinic_record_id(&query.clinic_id);
-
-    if !check_permission(&db, &auth.id, &clinic_str, "documents:delete")
-        .await
-        .unwrap_or(false)
-    {
-        return Err(ApiError::Forbidden(
-            "Sem permissão para excluir modelo.".into(),
-        ));
-    }
-
-    db.query("DELETE type::record($id)")
-        .bind(("id", tpl_rec))
-        .await
-        .map_err(|e| ApiError::Database(format!("Erro ao excluir modelo: {}", e)))?;
-
-    Ok(HttpResponse::Ok().body("Modelo excluído com sucesso."))
-}
-
-#[post("/documents/upload")]
-pub async fn upload_document_pdf(
-    _auth: AuthenticatedUser,
-    req: web::Json<FileUploadRequest>,
-    storage: web::Data<Arc<dyn StorageProvider>>,
-) -> Result<HttpResponse, ApiError> {
-    let data = req.into_inner();
-    let ext = data.filename.rsplit('.').next().unwrap_or("pdf");
-    let clean_clinic = data
-        .clinic_id
-        .as_deref()
-        .map(|c| c.replace("clinic:", ""))
-        .unwrap_or_else(|| "general".to_string());
-    let module = data.module.as_deref().unwrap_or("documents");
-    let prefix = format!("clinics/{}/{}", clean_clinic, module);
-
-    let file_url = storage
-        .upload_file(&prefix, ext, &data.base64_content)
-        .await
-        .map_err(|e| ApiError::Internal(format!("Erro no upload de PDF: {}", e)))?;
-
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "url": file_url,
-        "filename": data.filename
-    })))
-}
-
-// -------------------------------------------------------------------------------------------------
-// PUBLIC SIGNING PORTAL ENDPOINTS
-// -------------------------------------------------------------------------------------------------
-
+/// Retorna os dados públicos do documento, da clínica e do modelo para renderização no portal.
 #[get("/public/sign/{token}")]
 pub async fn get_public_signing_document(
     path: web::Path<String>,
@@ -625,7 +49,7 @@ pub async fn get_public_signing_document(
     let mut clinic_res = db
         .query(
             "SELECT * FROM type::record($cid);
-                SELECT * FROM type::record($pid);",
+             SELECT * FROM type::record($pid);",
         )
         .bind(("cid", doc.clinic_id.clone()))
         .bind(("pid", doc.patient_id.clone()))
@@ -691,6 +115,49 @@ pub async fn get_public_signing_document(
 
     let has_email = email_masked.is_some();
 
+    let doc_user_row: Option<DbUserAuthRow> = if let Some(ref uid) = doc.doctor_user_id {
+        let uid_str = uid.to_sql();
+        if let Ok(mut u_res) = db
+            .query("SELECT * FROM type::record($uid) LIMIT 1;")
+            .bind(("uid", uid_str))
+            .await
+        {
+            u_res.take(0).unwrap_or(None)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let doc_phone_raw = doc_user_row
+        .as_ref()
+        .and_then(|u| u.phone.clone())
+        .unwrap_or_default();
+    let doctor_phone_masked = if doc_phone_raw.len() >= 6 {
+        Some(format!("(XX) XXXXX-{}", &doc_phone_raw[doc_phone_raw.len() - 4..]))
+    } else {
+        None
+    };
+
+    let doc_email_raw = doc_user_row
+        .as_ref()
+        .and_then(|u| u.email.clone())
+        .unwrap_or_default();
+    let doctor_email_masked = if !doc_email_raw.is_empty() && doc_email_raw.contains('@') {
+        let parts: Vec<&str> = doc_email_raw.split('@').collect();
+        let user = parts[0];
+        let dom = parts[1];
+        let masked_user = if user.len() > 2 {
+            format!("{}***{}", &user[..1], &user[user.len() - 1..])
+        } else {
+            format!("{}***", &user[..1])
+        };
+        Some(format!("{}@{}", masked_user, dom))
+    } else {
+        None
+    };
+
     Ok(HttpResponse::Ok().json(PublicSigningDocumentResponse {
         document: map_patient_document(doc),
         clinic_name,
@@ -699,11 +166,14 @@ pub async fn get_public_signing_document(
         template,
         patient_phone_masked: phone_masked,
         patient_email_masked: email_masked,
+        doctor_phone_masked,
+        doctor_email_masked,
         require_whatsapp_otp: require_otp,
         has_email_channel: has_email,
     }))
 }
 
+/// Verifica o CPF do paciente antes da etapa de autenticação/criação de senha.
 #[post("/public/sign/{token}/check-patient")]
 pub async fn check_patient_signing(
     path: web::Path<String>,
@@ -758,6 +228,7 @@ pub async fn check_patient_signing(
     }))
 }
 
+/// Cadastra a primeira senha de assinatura digital de 6 dígitos pelo próprio paciente.
 #[post("/public/sign/{token}/register-patient-password")]
 pub async fn register_patient_password(
     path: web::Path<String>,
@@ -816,6 +287,7 @@ pub async fn register_patient_password(
     }))
 }
 
+/// Autentica o paciente no portal de assinatura por CPF e senha cadastrada.
 #[post("/public/sign/{token}/auth-patient")]
 pub async fn auth_patient_signing(
     path: web::Path<String>,
@@ -869,6 +341,7 @@ pub async fn auth_patient_signing(
     }))
 }
 
+/// Autentica o dentista responsável no portal de assinatura por login e senha do sistema.
 #[post("/public/sign/{token}/auth-doctor")]
 pub async fn auth_doctor_signing(
     path: web::Path<String>,
@@ -911,6 +384,7 @@ pub async fn auth_doctor_signing(
     }))
 }
 
+/// Dispara o código de validação OTP de 6 dígitos via WhatsApp ou E-mail.
 #[post("/public/sign/{token}/request-otp")]
 pub async fn request_signing_otp(
     path: web::Path<String>,
@@ -935,7 +409,7 @@ pub async fn request_signing_otp(
     let mut clinic_res = db
         .query(
             "SELECT * FROM type::record($cid);
-                SELECT * FROM type::record($pid);",
+             SELECT * FROM type::record($pid);",
         )
         .bind(("cid", doc.clinic_id.clone()))
         .bind(("pid", doc.patient_id.clone()))
@@ -955,20 +429,55 @@ pub async fn request_signing_otp(
         .bind(("hash", otp_hash))
         .await;
 
-    let Some(p) = patient_row else {
-        return Err(ApiError::NotFound("Paciente não localizado.".into()));
+    let is_doctor = req.signer_type.as_deref() == Some("doctor");
+
+    let (recipient_name, recipient_phone, recipient_email) = if is_doctor {
+        let doc_user_row: Option<DbUserAuthRow> = if let Some(ref uid) = doc.doctor_user_id {
+            let uid_str = uid.to_sql();
+            if let Ok(mut u_res) = db
+                .query("SELECT * FROM type::record($uid) LIMIT 1;")
+                .bind(("uid", uid_str))
+                .await
+            {
+                u_res.take(0).unwrap_or(None)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let name = doc_user_row
+            .as_ref()
+            .map(|u| u.full_name.clone())
+            .unwrap_or_else(|| "Cirurgião-Dentista".into());
+        let phone = doc_user_row
+            .as_ref()
+            .and_then(|u| u.phone.clone())
+            .unwrap_or_default();
+        let email = doc_user_row
+            .as_ref()
+            .and_then(|u| u.email.clone());
+
+        (name, phone, email)
+    } else {
+        let Some(p) = patient_row else {
+            return Err(ApiError::NotFound("Paciente não localizado.".into()));
+        };
+        (p.full_name, p.phone, p.email)
     };
+
     let clinic_name = clinic_row
         .as_ref()
         .map(|c| c.trading_name.clone())
         .unwrap_or_else(|| "Clínica Odontológica".into());
 
     if opt_channel == "email" {
-        let Some(p_email) = p.email else {
-            return Err(ApiError::BadRequest("O paciente não possui e-mail cadastrado na clínica.".into()));
+        let Some(p_email) = recipient_email else {
+            return Err(ApiError::BadRequest("Não há e-mail cadastrado para envio do código.".into()));
         };
         if p_email.trim().is_empty() || !p_email.contains('@') {
-            return Err(ApiError::BadRequest("E-mail cadastrado do paciente é inválido.".into()));
+            return Err(ApiError::BadRequest("E-mail cadastrado é inválido.".into()));
         }
 
         let smtp_config = if let Some(ref c) = clinic_row {
@@ -993,7 +502,7 @@ pub async fn request_signing_otp(
         };
 
         if let Some(cfg) = smtp_config {
-            crate::email::send_otp_email(&cfg, &p_email, &p.full_name, &clinic_name, &otp_code)
+            crate::email::send_otp_email(&cfg, &p_email, &recipient_name, &clinic_name, &otp_code)
                 .await
                 .map_err(|e| ApiError::Internal(format!("Erro ao enviar e-mail: {}", e)))?;
         } else {
@@ -1006,20 +515,24 @@ pub async fn request_signing_otp(
             "channel": "email"
         })));
     } else {
+        if recipient_phone.trim().is_empty() {
+            return Err(ApiError::BadRequest("Telefone/WhatsApp não disponível para envio.".into()));
+        }
+
         if let Some(ref c) = clinic_row {
             if let Some(ref inst) = c.whatsapp_instance {
                 let api_key = env::var("EVOLUTION_API_KEY").unwrap_or_default();
                 let msg = format!(
                     "🦷 *Tooth Plus — Assinatura Digital*\n\nOlá *{}*, seu código de verificação é:\n\n*{}*\n\nEsse código expira em 5 minutos. Não compartilhe com ninguém.",
-                    p.full_name, otp_code
+                    recipient_name, otp_code
                 );
                 if let Ok(message_id) = evolution
-                    .send_whatsapp_text(inst, &api_key, &p.phone, &msg)
+                    .send_whatsapp_text(inst, &api_key, &recipient_phone, &msg)
                     .await
                 {
                     if !message_id.is_empty() {
                         let _ = evolution
-                            .delete_whatsapp_message(inst, &api_key, &p.phone, &message_id)
+                            .delete_whatsapp_message(inst, &api_key, &recipient_phone, &message_id)
                             .await;
                     }
                 }
@@ -1034,6 +547,7 @@ pub async fn request_signing_otp(
     }
 }
 
+/// Recebe a assinatura desenhada no Canvas, valida o OTP, gera o PDF assinado e calcula o checksum SHA-256.
 #[post("/public/sign/{token}/submit-signature")]
 pub async fn submit_digital_signature(
     path: web::Path<String>,
@@ -1059,34 +573,76 @@ pub async fn submit_digital_signature(
         return Ok(HttpResponse::Ok().json(map_patient_document(doc)));
     }
 
-    if data.signer_type == "patient" {
-        if let Some(ref otp_input) = data.otp_code {
+    let mut clinic_req_res = db
+        .query("SELECT require_esign FROM type::record($cid) LIMIT 1;")
+        .bind(("cid", doc.clinic_id.clone()))
+        .await
+        .map_err(|e| ApiError::Database(e.to_string()))?;
+    #[derive(Deserialize, SurrealValue)]
+    struct ClinicRequireEsign {
+        require_esign: Option<bool>,
+    }
+    let clinic_req: Option<ClinicRequireEsign> = clinic_req_res.take(0).unwrap_or(None);
+    let require_otp = clinic_req.and_then(|c| c.require_esign).unwrap_or(false);
+
+    if require_otp {
+        let Some(ref otp_input) = data.otp_code else {
+            return Err(ApiError::BadRequest(
+                "O código de verificação OTP é obrigatório para assinar. Clique em 'Enviar Código' para receber o PIN.".into(),
+            ));
+        };
+        if otp_input.trim().is_empty() {
+            return Err(ApiError::BadRequest(
+                "O código de verificação OTP é obrigatório para assinar.".into(),
+            ));
+        }
+
+        let saved_hash = doc.otp_code_hash.as_deref().unwrap_or("");
+        let expires_at = doc.otp_expires_at;
+
+        if saved_hash.is_empty() {
+            return Err(ApiError::BadRequest(
+                "Nenhum código OTP foi solicitado. Clique em 'Enviar Código' primeiro.".into(),
+            ));
+        }
+
+        if !verify_otp(otp_input, saved_hash) {
+            return Err(ApiError::Unauthorized(
+                "Código de verificação OTP inválido. Tente novamente.".into(),
+            ));
+        }
+
+        if let Some(exp) = expires_at {
+            if chrono::Utc::now() > exp {
+                return Err(ApiError::BadRequest(
+                    "Código OTP expirado. Solicite um novo código.".into(),
+                ));
+            }
+        }
+    } else if let Some(ref otp_input) = data.otp_code {
+        if !otp_input.trim().is_empty() {
             let saved_hash = doc.otp_code_hash.as_deref().unwrap_or("");
             let expires_at = doc.otp_expires_at;
 
             if saved_hash.is_empty() {
                 return Err(ApiError::BadRequest(
-                    "Nenhum código OTP foi solicitado. Clique em 'Enviar código' primeiro.".into(),
+                    "Nenhum código OTP foi solicitado. Clique em 'Enviar Código' primeiro.".into(),
                 ));
             }
 
             if !verify_otp(otp_input, saved_hash) {
                 return Err(ApiError::Unauthorized(
-                    "Código de verificação inválido. Tente novamente.".into(),
+                    "Código de verificação OTP inválido. Tente novamente.".into(),
                 ));
             }
 
             if let Some(exp) = expires_at {
                 if chrono::Utc::now() > exp {
                     return Err(ApiError::BadRequest(
-                        "Código expirado. Solicite um novo código OTP.".into(),
+                        "Código OTP expirado. Solicite um novo código.".into(),
                     ));
                 }
             }
-        } else if doc.otp_code_hash.is_some() {
-            return Err(ApiError::BadRequest(
-                "Código de verificação OTP é obrigatório para assinar como paciente.".into(),
-            ));
         }
     }
 
@@ -1119,9 +675,7 @@ pub async fn submit_digital_signature(
         .to_string();
 
     let now_utc = chrono::Utc::now().to_rfc3339();
-
     let mut is_completed = false;
-    let mut checksum_val = doc.final_checksum_sha256.clone();
 
     let mut current_audit: Vec<serde_json::Value> = doc
         .audit_trail
@@ -1229,7 +783,7 @@ pub async fn submit_digital_signature(
         )
         .unwrap_or_else(|_| (doc.original_pdf_url.clone(), event_checksum.clone()));
 
-        checksum_val = Some(generated_checksum);
+        let checksum_val = Some(generated_checksum);
         let audit_json = serde_json::to_value(&current_audit).unwrap_or_default();
 
         let query = "UPDATE type::record($id) SET
@@ -1249,7 +803,7 @@ pub async fn submit_digital_signature(
             .bind(("sig", data.signature_base64))
             .bind(("status", new_st))
             .bind(("pdf_url", new_pdf_url))
-            .bind(("checksum", checksum_val.clone()))
+            .bind(("checksum", checksum_val))
             .bind(("audit", audit_json))
             .await
             .map_err(|e| ApiError::Database(e.to_string()))?;
@@ -1344,7 +898,7 @@ pub async fn submit_digital_signature(
         )
         .unwrap_or_else(|_| (doc.original_pdf_url.clone(), event_checksum.clone()));
 
-        checksum_val = Some(generated_checksum);
+        let checksum_val = Some(generated_checksum);
         let audit_json = serde_json::to_value(&current_audit).unwrap_or_default();
 
         let query = "UPDATE type::record($id) SET
@@ -1363,7 +917,7 @@ pub async fn submit_digital_signature(
             .bind(("sig", data.signature_base64))
             .bind(("status", new_st))
             .bind(("pdf_url", new_pdf_url))
-            .bind(("checksum", checksum_val.clone()))
+            .bind(("checksum", checksum_val))
             .bind(("audit", audit_json))
             .await
             .map_err(|e| ApiError::Database(e.to_string()))?;

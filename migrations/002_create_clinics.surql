@@ -20,6 +20,13 @@ DEFINE FIELD OVERWRITE zip_code ON clinic TYPE string;
 DEFINE FIELD OVERWRITE auto_reminders ON clinic TYPE bool DEFAULT true;
 DEFINE FIELD OVERWRITE require_esign ON clinic TYPE bool DEFAULT true;
 
+DEFINE FIELD OVERWRITE smtp_host ON clinic TYPE option<string>;
+DEFINE FIELD OVERWRITE smtp_port ON clinic TYPE option<int>;
+DEFINE FIELD OVERWRITE smtp_user ON clinic TYPE option<string>;
+DEFINE FIELD OVERWRITE smtp_pass ON clinic TYPE option<string>;
+DEFINE FIELD OVERWRITE smtp_from ON clinic TYPE option<string>;
+DEFINE FIELD OVERWRITE smtp_tls ON clinic TYPE option<bool> DEFAULT true;
+
 DEFINE FIELD OVERWRITE created_at ON clinic TYPE datetime DEFAULT time::now();
 
 DEFINE INDEX OVERWRITE idx_clinic_cnpj ON clinic COLUMNS document_cnpj UNIQUE;

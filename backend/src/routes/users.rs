@@ -17,6 +17,8 @@ struct DbUserRecord {
     id: RecordId,
     username: String,
     full_name: String,
+    email: Option<String>,
+    phone: Option<String>,
     document_cpf: String,
     professional_registry: Option<String>,
     is_active: bool,
@@ -90,6 +92,8 @@ pub async fn create_user(
                 username              = $username,
                 password_hash         = $password_hash,
                 full_name             = $full_name,
+                email                 = $email,
+                phone                 = $phone,
                 document_cpf          = $document_cpf,
                 professional_registry = $professional_registry,
                 is_active             = true
@@ -98,6 +102,8 @@ pub async fn create_user(
         .bind(("username", data.username.clone()))
         .bind(("password_hash", hashed_password))
         .bind(("full_name", data.full_name.clone()))
+        .bind(("email", data.email.map(|e| e.trim().to_string())))
+        .bind(("phone", data.phone.map(|p| p.trim().to_string())))
         .bind(("document_cpf", encrypted_cpf))
         .bind(("professional_registry", data.professional_registry.clone()))
         .await
@@ -154,6 +160,8 @@ pub async fn list_users(
                 in.id                    AS id,
                 in.username              AS username,
                 in.full_name             AS full_name,
+                in.email                 AS email,
+                in.phone                 AS phone,
                 in.document_cpf          AS document_cpf,
                 in.professional_registry AS professional_registry,
                 in.is_active             AS is_active,
@@ -175,6 +183,8 @@ pub async fn list_users(
             id: record_key(&u.id),
             username: u.username,
             full_name: u.full_name,
+            email: u.email,
+            phone: u.phone,
             document_cpf: decrypt_deterministic(&u.document_cpf).unwrap_or_default(),
             professional_registry: u.professional_registry,
             is_active: u.is_active,
@@ -214,6 +224,19 @@ pub async fn update_user(
 
     if let Some(v) = data.full_name {
         patch.insert("full_name".into(), serde_json::Value::String(v));
+    }
+    if let Some(v) = data.email {
+        patch.insert("email".into(), serde_json::Value::String(v));
+    }
+    if let Some(v) = data.phone {
+        patch.insert("phone".into(), serde_json::Value::String(v));
+    }
+    if let Some(ref pwd) = data.new_password {
+        if !pwd.trim().is_empty() {
+            let hashed = hash_password(pwd.trim())
+                .map_err(|e| ApiError::Internal(format!("Erro ao gerar hash da senha: {}", e)))?;
+            patch.insert("password_hash".into(), serde_json::Value::String(hashed));
+        }
     }
     if let Some(ref cpf) = data.document_cpf {
         let encrypted = encrypt_deterministic(cpf)

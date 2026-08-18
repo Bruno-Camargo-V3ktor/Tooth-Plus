@@ -1,3 +1,8 @@
+//! # Modelos de Domínio - Agenda e Agendamentos Odontológicos
+//!
+//! Este módulo define os status, tipos de consulta, estruturas de agendamentos
+//! e recursos do calendário clínico.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -104,7 +109,7 @@ pub struct AppointmentResponse {
     pub consumed_items: Vec<ConsumedItemDto>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CreateAppointmentRequest {
     pub clinic_id: String,
     pub patient_id: Option<String>,
@@ -119,7 +124,7 @@ pub struct CreateAppointmentRequest {
     pub consumed_items: Vec<ConsumedItemDto>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct UpdateAppointmentRequest {
     pub title: Option<String>,
     pub scheduled_for: Option<String>,
@@ -133,7 +138,7 @@ pub struct UpdateAppointmentRequest {
     pub consumed_items: Option<Vec<ConsumedItemDto>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct UpdateAppointmentStatusRequest {
     pub status: AppointmentStatus,
     pub cancellation_reason: Option<String>,

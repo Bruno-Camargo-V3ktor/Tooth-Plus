@@ -4,6 +4,8 @@ DEFINE TABLE OVERWRITE user SCHEMAFULL;
 DEFINE FIELD OVERWRITE username ON user TYPE string;
 DEFINE FIELD OVERWRITE password_hash ON user TYPE string;
 DEFINE FIELD OVERWRITE full_name ON user TYPE string;
+DEFINE FIELD OVERWRITE email ON user TYPE option<string>;
+DEFINE FIELD OVERWRITE phone ON user TYPE option<string>;
 DEFINE FIELD OVERWRITE document_cpf ON user TYPE string;
 DEFINE FIELD OVERWRITE professional_registry ON user TYPE option<string>;
 DEFINE FIELD OVERWRITE is_active ON user TYPE bool DEFAULT true;

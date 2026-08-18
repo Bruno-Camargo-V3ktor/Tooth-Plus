@@ -403,11 +403,16 @@ pub async fn auth_doctor_signing(
     }
 }
 
-pub async fn request_signing_otp(signing_token: &str, channel: &str) -> Result<String, String> {
+pub async fn request_signing_otp(
+    signing_token: &str,
+    channel: &str,
+    signer_type: Option<&str>,
+) -> Result<String, String> {
     let url = format!("{}/public/sign/{}/request-otp", API_BASE, signing_token);
 
     let payload = shared::documents::RequestOtpRequest {
         channel: Some(channel.to_string()),
+        signer_type: signer_type.map(|s| s.to_string()),
     };
 
     let res = get_client()
@@ -415,16 +420,19 @@ pub async fn request_signing_otp(signing_token: &str, channel: &str) -> Result<S
         .json(&payload)
         .send()
         .await
-        .map_err(|_| "Falha ao solicitar código de validação.".to_string())?;
+        .map_err(|_| "Falha de conexão ao enviar código OTP.".to_string())?;
 
     if res.status().is_success() {
-        let json_body: serde_json::Value = res.json().await.unwrap_or_default();
-        let msg = json_body.get("message").and_then(|v| v.as_str()).unwrap_or("Código enviado com sucesso.");
-        Ok(msg.to_string())
+        #[derive(serde::Deserialize)]
+        struct OtpRes {
+            message: String,
+        }
+        let data = res.json::<OtpRes>().await.map_err(|_| "Erro na resposta do OTP.".to_string())?;
+        Ok(data.message)
     } else {
         let err = res.text().await.unwrap_or_default();
         Err(if err.is_empty() {
-            "Erro ao disparar código de validação.".into()
+            "Erro ao gerar código de segurança OTP.".into()
         } else {
             err
         })

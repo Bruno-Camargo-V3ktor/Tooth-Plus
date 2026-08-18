@@ -1,3 +1,8 @@
+//! # Modelos de Domínio - Gestão de Estoque e Suprimentos
+//!
+//! Este módulo define itens de consumo odontológico, controle de lotes,
+//! datas de validade, fornecedores e movimentações de entrada e saída.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +71,7 @@ pub struct InventoryItem {
     pub updated_at: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CreateInventoryItemRequest {
     pub clinic_id: String,
     pub item_type: ItemType,
@@ -85,7 +90,7 @@ pub struct CreateInventoryItemRequest {
     pub equipment_status: Option<EquipmentStatus>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct UpdateInventoryItemRequest {
     pub clinic_id: String,
     pub item_type: ItemType,
@@ -120,7 +125,7 @@ pub struct StockMovement {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CreateStockMovementRequest {
     pub clinic_id: String,
     pub item_id: String,
@@ -165,7 +170,7 @@ pub struct StockResponse {
     pub recent_movements: Vec<StockMovement>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct StockQuery {
     pub clinic_id: String,
     pub item_type: Option<String>,

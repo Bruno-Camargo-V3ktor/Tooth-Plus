@@ -1,4 +1,9 @@
-use actix_web::{HttpResponse, post, web};
+//! # Módulo de Autenticação e Emissão de Tokens JWT (Backend)
+//!
+//! Controla o login de usuários no sistema, verificação criptográfica de senhas
+//! e retorno de clínicas acessíveis com papéis e permissões do usuário.
+
+use actix_web::{post, web, HttpResponse};
 use serde::Deserialize;
 use shared::auth::{LoginRequest, LoginResponse};
 use shared::models::ClinicAccess;
