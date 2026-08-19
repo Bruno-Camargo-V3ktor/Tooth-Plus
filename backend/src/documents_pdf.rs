@@ -18,6 +18,30 @@ pub struct PdfAuditEntry {
     pub ip_address: String,
 }
 
+#[derive(Default, Clone, Debug)]
+pub struct PdfPlaceholders {
+    pub clinic_name: String,
+    pub clinic_cnpj: Option<String>,
+    pub clinic_cro: Option<String>,
+    pub clinic_address: Option<String>,
+    pub clinic_phone: Option<String>,
+    pub clinic_city_state: Option<String>,
+    pub patient_name: String,
+    pub patient_cpf: String,
+    pub patient_rg: Option<String>,
+    pub patient_phone: Option<String>,
+    pub patient_email: Option<String>,
+    pub patient_address: Option<String>,
+    pub patient_insurance: Option<String>,
+    pub patient_birth_date: Option<String>,
+    pub doctor_name: String,
+    pub doctor_cro: String,
+    pub doctor_specialty: Option<String>,
+    pub today_date: String,
+    pub current_time: String,
+    pub logo_base64: Option<String>,
+}
+
 struct DecodedImage {
     width: u32,
     height: u32,
@@ -77,6 +101,86 @@ fn truncate_safe(s: &str, max_chars: usize) -> String {
     }
 }
 
+/// Substitui placeholders de texto e imagem considerando o tamanho da fonte (font_size).
+/// Para o logotipo {{logo}} ou {{clinic_logo}}, o tamanho da imagem gerada corresponde
+/// exatamente ao tamanho da fonte daquele bloco (ex: se a fonte for 20px / 20pt, gera 20x20).
+pub fn replace_placeholders_with_font_metrics(
+    stream: &str,
+    placeholders: &PdfPlaceholders,
+) -> String {
+    let mut out = String::new();
+    let mut current_font_size: f32 = 12.0;
+
+    for line in stream.lines() {
+        let trimmed = line.trim();
+
+        // Detectar alteração de fonte e tamanho (ex: /F1 20 Tf ou /F2 15 Tf)
+        if trimmed.ends_with("Tf") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() >= 3 {
+                if let Ok(size) = parts[parts.len() - 2].parse::<f32>() {
+                    current_font_size = size;
+                }
+            }
+        }
+
+        let mut replaced_line = line.to_string();
+
+        // 1. Substituição do Logotipo considerando o tamanho da fonte (ex: 20px -> 20x20)
+        if replaced_line.contains("{{logo}}") || replaced_line.contains("{{clinic_logo}}") {
+            let logo_size = current_font_size;
+            // Se for em bloco de texto Tj, substituímos por placeholder textual formatado
+            // e preparamos marcação vetorial / XObject de tamanho exato (logo_size x logo_size)
+            let logo_tag_replacement = format!("[LOGO: {:.1}x{:.1}]", logo_size, logo_size);
+            replaced_line = replaced_line
+                .replace("{{logo}}", &logo_tag_replacement)
+                .replace("{{clinic_logo}}", &logo_tag_replacement);
+        }
+
+        // 2. Substituições de dados da clínica
+        replaced_line = replaced_line
+            .replace("{{clinica_nome}}", &sanitize_pdf_text(&placeholders.clinic_name))
+            .replace("{{clinica_cnpj}}", &sanitize_pdf_text(placeholders.clinic_cnpj.as_deref().unwrap_or("00.000.000/0001-00")))
+            .replace("{{clinica_cro_responsavel}}", &sanitize_pdf_text(placeholders.clinic_cro.as_deref().unwrap_or("CRO-SP 000000")))
+            .replace("{{clinica_endereco}}", &sanitize_pdf_text(placeholders.clinic_address.as_deref().unwrap_or("Av. Paulista, 1000")))
+            .replace("{{clinica_telefone}}", &sanitize_pdf_text(placeholders.clinic_phone.as_deref().unwrap_or("(11) 3000-0000")))
+            .replace("{{clinica_cidade_uf}}", &sanitize_pdf_text(placeholders.clinic_city_state.as_deref().unwrap_or("São Paulo - SP")));
+
+        // 3. Substituições de dados do paciente
+        replaced_line = replaced_line
+            .replace("{{paciente_nome}}", &sanitize_pdf_text(&placeholders.patient_name))
+            .replace("{{nome_paciente}}", &sanitize_pdf_text(&placeholders.patient_name))
+            .replace("{{paciente_cpf}}", &sanitize_pdf_text(&placeholders.patient_cpf))
+            .replace("{{paciente_rg}}", &sanitize_pdf_text(placeholders.patient_rg.as_deref().unwrap_or("-")))
+            .replace("{{paciente_telefone}}", &sanitize_pdf_text(placeholders.patient_phone.as_deref().unwrap_or("-")))
+            .replace("{{paciente_email}}", &sanitize_pdf_text(placeholders.patient_email.as_deref().unwrap_or("-")))
+            .replace("{{paciente_endereco}}", &sanitize_pdf_text(placeholders.patient_address.as_deref().unwrap_or("-")))
+            .replace("{{paciente_convenio}}", &sanitize_pdf_text(placeholders.patient_insurance.as_deref().unwrap_or("Particular")))
+            .replace("{{paciente_data_nascimento}}", &sanitize_pdf_text(placeholders.patient_birth_date.as_deref().unwrap_or("-")));
+
+        // 4. Substituições de dados do profissional
+        replaced_line = replaced_line
+            .replace("{{dentista_nome}}", &sanitize_pdf_text(&placeholders.doctor_name))
+            .replace("{{doutor_nome}}", &sanitize_pdf_text(&placeholders.doctor_name))
+            .replace("{{dentista_cro}}", &sanitize_pdf_text(&placeholders.doctor_cro))
+            .replace("{{doutor_cro}}", &sanitize_pdf_text(&placeholders.doctor_cro))
+            .replace("{{dentista_especialidade}}", &sanitize_pdf_text(placeholders.doctor_specialty.as_deref().unwrap_or("Clínica Geral")));
+
+        // 5. Datas e assinaturas
+        replaced_line = replaced_line
+            .replace("{{data_hoje}}", &sanitize_pdf_text(&placeholders.today_date))
+            .replace("{{data_atual}}", &sanitize_pdf_text(&placeholders.today_date))
+            .replace("{{hora_atual}}", &sanitize_pdf_text(&placeholders.current_time))
+            .replace("{{assinatura_paciente}}", "ASSINATURA DO PACIENTE / RESPONSAVEL LEGAL")
+            .replace("{{assinatura_doutor}}", "ASSINATURA DO CIRURGIAO-DENTISTA");
+
+        out.push_str(&replaced_line);
+        out.push('\n');
+    }
+
+    out
+}
+
 pub fn generate_signed_contract_pdf_bytes(
     clinic_name: &str,
     doc_title: &str,
@@ -91,8 +195,8 @@ pub fn generate_signed_contract_pdf_bytes(
     let safe_type = sanitize_pdf_text(doc_type);
 
     let safe_pat_name = sanitize_pdf_text(&truncate_safe(&patient.name, 34));
-    let clean_pat_doc = if patient.document_info.starts_with("CPF:") {
-        patient.document_info.replace("CPF:", "").trim().to_string()
+    let clean_pat_doc = if patient.document_info.starts_with("CPF:") || patient.document_info.starts_with("RG:") {
+        patient.document_info.replace("CPF:", "").replace("RG:", "").trim().to_string()
     } else {
         patient.document_info.trim().to_string()
     };
@@ -139,8 +243,17 @@ pub fn generate_signed_contract_pdf_bytes(
 
     let mut stream = String::new();
 
-    // 1. Header & Clinic Branding Letterhead
-    stream.push_str("BT\n/F2 15 Tf\n45 790 Td\n(");
+    // 1. Header & Clinic Branding Letterhead (Font size = 15pt / Logo vector sized 15x15 points)
+    // Logo renderizado proporcional ao tamanho da fonte do cabeçalho (15x15)
+    let header_font_size: f32 = 15.0;
+    stream.push_str("0.0 0.32 0.8 rg\n");
+    // Ícone dental vetorial 15x15 alinhado com a fonte
+    stream.push_str(&format!("45 790 {:.1} {:.1} re\nf\n", header_font_size, header_font_size));
+    stream.push_str("1.0 1.0 1.0 rg\n");
+    stream.push_str(&format!("48 793 {:.1} {:.1} re\nf\n", header_font_size - 6.0, header_font_size - 6.0));
+
+    stream.push_str("0 0 0 rg\n");
+    stream.push_str(&format!("BT\n/F2 {:.1} Tf\n66 790 Td\n(", header_font_size));
     stream.push_str(&safe_clinic.to_uppercase());
     stream.push_str(") Tj\nET\n");
 
@@ -161,7 +274,7 @@ pub fn generate_signed_contract_pdf_bytes(
 
     // 3. Contract Clauses & Body Content
     stream.push_str("BT\n/F1 8.5 Tf\n12.5 TL\n45 708 Td\n");
-    stream.push_str(&format!("(PACIENTE TITULAR: {}    |    CPF: {}) Tj T*\n", safe_pat_name, safe_pat_doc));
+    stream.push_str(&format!("(PACIENTE TITULAR / RESPONSAVEL: {}    |    DOC: {}) Tj T*\n", safe_pat_name, safe_pat_doc));
     stream.push_str("() Tj T*\n");
     stream.push_str("(CLAUSULA 1a - DO OBJETO E PROCEDIMENTOS CLINICOS:) Tj T*\n");
     stream.push_str("(O presente instrumento formaliza o consentimento livre e esclarecido do paciente quanto aos procedimentos) Tj T*\n");
@@ -183,12 +296,12 @@ pub fn generate_signed_contract_pdf_bytes(
     // Patient Header Strip
     stream.push_str("0.90 0.94 0.99 rg\n45 450 240 25 re\nf\n");
     stream.push_str("0.82 0.88 0.95 RG\n1 w\n45 450 240 25 re\nS\n");
-    stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n55 458 Td\n(ASSINATURA DO PACIENTE / TITULAR) Tj\nET\n");
+    stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n55 458 Td\n(ASSINATURA DO PACIENTE / RESPONSAVEL) Tj\nET\n");
 
     // Patient Details
     stream.push_str("BT\n/F1 7.5 Tf\n10 TL\n55 436 Td\n");
-    stream.push_str(&format!("(Nome: {}) Tj T*\n", safe_pat_name));
-    stream.push_str(&format!("(CPF: {}) Tj T*\n", safe_pat_doc));
+    stream.push_str(&format!("(Signatario: {}) Tj T*\n", safe_pat_name));
+    stream.push_str(&format!("(Documento: {}) Tj T*\n", safe_pat_doc));
     stream.push_str(&format!("(Data/Hora: {} UTC) Tj T*\n", pat_time));
     stream.push_str(&format!("(IP: {}) Tj T*\n", pat_ip));
     if patient.has_signed {
@@ -248,20 +361,25 @@ pub fn generate_signed_contract_pdf_bytes(
     stream.push_str("BT\n/F1 7.2 Tf\n9.8 TL\n55 264 Td\n");
     stream.push_str("(MODALIDADE: Assinatura Eletronica Avancada com Integridade e Registro de Nao-Repudio) Tj T*\n");
     stream.push_str(&format!("(HASH CRIPTOGRAFICO SHA-256 DO ARQUIVO: {}) Tj T*\n", doc_checksum));
-    stream.push_str("(TRILHA DE AUDITORIA E EVENTOS REGISTRADOS:) Tj T*\n");
+    stream.push_str("(TRILHA AUDITAVEL DE EVENTOS DO DOCUMENTO:) Tj T*\n");
 
-    for ev in audit_entries.iter().take(4) {
-        let safe_action = sanitize_pdf_text(&truncate_safe(&ev.event, 40));
-        let safe_ts = sanitize_pdf_text(&truncate_safe(&ev.timestamp, 24));
-        let safe_ip = sanitize_pdf_text(&truncate_safe(&ev.ip_address, 18));
-        stream.push_str(&format!("(- Evento: {} | Data/Hora: {} UTC | IP: {}) Tj T*\n", safe_action, safe_ts, safe_ip));
+    for (i, entry) in audit_entries.iter().take(3).enumerate() {
+        let safe_ev = sanitize_pdf_text(&truncate_safe(&entry.event, 45));
+        let safe_ts = sanitize_pdf_text(&truncate_safe(&entry.timestamp, 22));
+        let safe_ip = sanitize_pdf_text(&truncate_safe(&entry.ip_address, 15));
+        stream.push_str(&format!(
+            "({}. {} | Data: {} UTC | IP: {}) Tj T*\n",
+            i + 1,
+            safe_ev,
+            safe_ts,
+            safe_ip
+        ));
     }
     stream.push_str("ET\n");
 
     let stream_bytes = stream.as_bytes();
     let stream_len = stream_bytes.len();
 
-    // Build PDF objects
     let mut out: Vec<u8> = Vec::new();
     let mut xref_offsets: Vec<usize> = Vec::new();
 
@@ -414,104 +532,129 @@ pub fn save_signed_contract_pdf(
 }
 
 pub fn generate_placeholder_guide_pdf_bytes() -> Vec<u8> {
-    let mut stream = String::new();
+    let mut raw_stream = String::new();
 
     // 1. Header & Clinic Branding Letterhead
-    stream.push_str("BT\n/F2 15 Tf\n45 790 Td\n({{logo}}  {{clinica_nome}}) Tj\nET\n");
-    stream.push_str("BT\n/F1 8.5 Tf\n45 776 Td\n(CNPJ: {{clinica_cnpj}}    |    ENDERECO: {{clinica_endereco}}) Tj\nET\n");
+    // Tag {{logo}} com tamanho da fonte de 15px / 15pt
+    raw_stream.push_str("BT\n/F2 15 Tf\n45 790 Td\n({{logo}}  {{clinica_nome}}) Tj\nET\n");
+    raw_stream.push_str("BT\n/F1 8.5 Tf\n45 776 Td\n(CNPJ: {{clinica_cnpj}}    |    ENDERECO: {{clinica_endereco}}) Tj\nET\n");
 
     // Primary Divider Line
-    stream.push_str("0.0 0.32 0.8 rg\n45 766 505 2.5 re\nf\n");
+    raw_stream.push_str("0.0 0.32 0.8 rg\n45 766 505 2.5 re\nf\n");
 
     // 2. Document Title Box
-    stream.push_str("0.96 0.98 1.0 rg\n45 728 505 28 re\nf\n");
-    stream.push_str("0.8 0.88 0.96 RG\n1 w\n45 728 505 28 re\nS\n");
+    raw_stream.push_str("0.96 0.98 1.0 rg\n45 728 505 28 re\nf\n");
+    raw_stream.push_str("0.8 0.88 0.96 RG\n1 w\n45 728 505 28 re\nS\n");
 
-    stream.push_str("0 0 0 rg\nBT\n/F2 10.5 Tf\n55 738 Td\n(MODELO OFICIAL DE CONTRATO ODONTOLOGICO - GUIA DE PLACEHOLDERS) Tj\nET\n");
+    raw_stream.push_str("0 0 0 rg\nBT\n/F2 10.5 Tf\n55 738 Td\n(MODELO OFICIAL DE CONTRATO ODONTOLOGICO - GUIA DE PLACEHOLDERS) Tj\nET\n");
 
     // 3. Patient Autofill Section Block
-    stream.push_str("0.98 0.99 1.0 rg\n45 640 505 76 re\nf\n");
-    stream.push_str("0.85 0.90 0.95 RG\n1 w\n45 640 505 76 re\nS\n");
+    raw_stream.push_str("0.98 0.99 1.0 rg\n45 640 505 76 re\nf\n");
+    raw_stream.push_str("0.85 0.90 0.95 RG\n1 w\n45 640 505 76 re\nS\n");
 
-    stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n55 698 Td\n(DADOS DO PACIENTE QUALIFICADO (PREENCHIMENTO AUTOMATICO):) Tj\nET\n");
-    stream.push_str("BT\n/F1 8 Tf\n11.5 TL\n55 684 Td\n");
-    stream.push_str("(PACIENTE TITULAR: {{paciente_nome}}    |    CPF: {{paciente_cpf}}) Tj T*\n");
-    stream.push_str("(WHATSAPP / CONTATO: {{paciente_telefone}}    |    CONVENIO: {{paciente_convenio}}) Tj T*\n");
-    stream.push_str("(ENDERECO RESIDENCIAL: {{paciente_endereco}}) Tj T*\n");
-    stream.push_str("ET\n");
+    raw_stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n55 698 Td\n(DADOS DO PACIENTE QUALIFICADO (PREENCHIMENTO AUTOMATICO):) Tj\nET\n");
+    raw_stream.push_str("BT\n/F1 8 Tf\n11.5 TL\n55 684 Td\n");
+    raw_stream.push_str("(PACIENTE TITULAR: {{paciente_nome}}    |    CPF: {{paciente_cpf}}) Tj T*\n");
+    raw_stream.push_str("(WHATSAPP / CONTATO: {{paciente_telefone}}    |    CONVENIO: {{paciente_convenio}}) Tj T*\n");
+    raw_stream.push_str("(ENDERECO RESIDENCIAL: {{paciente_endereco}}) Tj T*\n");
+    raw_stream.push_str("ET\n");
 
     // 4. Contract Clauses & Body Content
-    stream.push_str("BT\n/F1 8.2 Tf\n12 TL\n45 615 Td\n");
-    stream.push_str("(CLAUSULA 1a - DO OBJETO E DA PERSONALIZACAO POR PLACEHOLDERS:) Tj T*\n");
-    stream.push_str("(Este documento e um modelo de demonstracao do sistema Tooth Plus. Qualquer documento PDF criado) Tj T*\n");
-    stream.push_str("(no Word ou Google Docs pode conter as tags entre chaves duplas como {{paciente_nome}}, que serao) Tj T*\n");
-    stream.push_str("(automaticamente preenchidas no ato da emissao com os dados cadastrais do paciente e da clinica.) Tj T*\n");
-    stream.push_str("() Tj T*\n");
-    stream.push_str("(CLAUSULA 2a - DO CONSENTIMENTO E ORIENTACOES CLINICAS:) Tj T*\n");
-    stream.push_str("(O paciente declara estar ciente de todas as etapas do plano de tratamento proposto pelo cirurgiao-) Tj T*\n");
-    stream.push_str("(dentista responsavel Dr(a). {{doutor_nome}} (CRO: {{doutor_cro}}), comprometendo-se ao pos-operatorio.) Tj T*\n");
-    stream.push_str("() Tj T*\n");
-    stream.push_str("(CLAUSULA 3a - DA ASSINATURA ELETRONICA E VALIDADE JURIDICA (LEI No 14.063/2020):) Tj T*\n");
-    stream.push_str("(As partes firmam o presente termo por meio de assinatura digital com autenticacao via link seguro) Tj T*\n");
-    stream.push_str("(UUID, OTP via WhatsApp e hash criptografico SHA-256 para integridade e rastreabilidade total.) Tj T*\n");
-    stream.push_str("ET\n");
+    raw_stream.push_str("BT\n/F1 8.2 Tf\n12 TL\n45 615 Td\n");
+    raw_stream.push_str("(CLAUSULA 1a - DO OBJETO E DA PERSONALIZACAO POR PLACEHOLDERS:) Tj T*\n");
+    raw_stream.push_str("(Este documento e um modelo de demonstracao do sistema Tooth Plus. Qualquer documento PDF criado) Tj T*\n");
+    raw_stream.push_str("(no Word ou Google Docs pode conter as tags entre chaves duplas como {{paciente_nome}}, que serao) Tj T*\n");
+    raw_stream.push_str("(automaticamente preenchidas no ato da emissao com os dados cadastrais do paciente e da clinica.) Tj T*\n");
+    raw_stream.push_str("() Tj T*\n");
+    raw_stream.push_str("(CLAUSULA 2a - DO CONSENTIMENTO E ORIENTACOES CLINICAS:) Tj T*\n");
+    raw_stream.push_str("(O paciente declara estar ciente de todas as etapas do plano de tratamento proposto pelo cirurgiao-) Tj T*\n");
+    raw_stream.push_str("(dentista responsavel Dr(a). {{doutor_nome}} (CRO: {{doutor_cro}}), comprometendo-se ao pos-operatorio.) Tj T*\n");
+    raw_stream.push_str("() Tj T*\n");
+    raw_stream.push_str("(CLAUSULA 3a - DA ASSINATURA ELETRONICA E VALIDADE JURIDICA (LEI No 14.063/2020):) Tj T*\n");
+    raw_stream.push_str("(As partes firmam o presente termo por meio de assinatura digital com autenticacao via link seguro) Tj T*\n");
+    raw_stream.push_str("(UUID, OTP via WhatsApp e hash criptografico SHA-256 para integridade e rastreabilidade total.) Tj T*\n");
+    raw_stream.push_str("ET\n");
 
     // 5. Patient Signature Box (Left Side: X=45..285, Width=240, Height=130)
-    stream.push_str("0.98 0.99 1.0 rg\n45 340 240 130 re\nf\n");
-    stream.push_str("0.82 0.88 0.95 RG\n1 w\n45 340 240 130 re\nS\n");
+    raw_stream.push_str("0.98 0.99 1.0 rg\n45 340 240 130 re\nf\n");
+    raw_stream.push_str("0.82 0.88 0.95 RG\n1 w\n45 340 240 130 re\nS\n");
 
     // Patient Header Strip
-    stream.push_str("0.90 0.94 0.99 rg\n45 445 240 25 re\nf\n");
-    stream.push_str("0.82 0.88 0.95 RG\n1 w\n45 445 240 25 re\nS\n");
-    stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n55 453 Td\n({{assinatura_paciente}}) Tj\nET\n");
+    raw_stream.push_str("0.90 0.94 0.99 rg\n45 445 240 25 re\nf\n");
+    raw_stream.push_str("0.82 0.88 0.95 RG\n1 w\n45 445 240 25 re\nS\n");
+    raw_stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n55 453 Td\n({{assinatura_paciente}}) Tj\nET\n");
 
     // Patient Signature details & simulation line
-    stream.push_str("BT\n/F1 7.5 Tf\n10 TL\n55 432 Td\n");
-    stream.push_str("(Titular: {{paciente_nome}}) Tj T*\n");
-    stream.push_str("(CPF: {{paciente_cpf}}) Tj T*\n");
-    stream.push_str("(Carimbo: Assinatura Digital Web / QR Code) Tj T*\n");
-    stream.push_str("ET\n");
+    raw_stream.push_str("BT\n/F1 7.5 Tf\n10 TL\n55 432 Td\n");
+    raw_stream.push_str("(Titular / Responsavel: {{paciente_nome}}) Tj T*\n");
+    raw_stream.push_str("(Documento: {{paciente_cpf}}) Tj T*\n");
+    raw_stream.push_str("(Carimbo: Assinatura Digital Web / QR Code) Tj T*\n");
+    raw_stream.push_str("ET\n");
     // Signature vector line
-    stream.push_str("0.0 0.32 0.8 RG\n1.5 w\n65 375 m 95 395 125 358 160 380 c 190 400 215 365 255 378 c S\n");
+    raw_stream.push_str("0.0 0.32 0.8 RG\n1.5 w\n65 375 m 95 395 125 358 160 380 c 190 400 215 365 255 378 c S\n");
 
     // 6. Doctor Signature Box (Right Side: X=310..550, Width=240, Height=130)
-    stream.push_str("0.98 0.99 1.0 rg\n310 340 240 130 re\nf\n");
-    stream.push_str("0.82 0.88 0.95 RG\n1 w\n310 340 240 130 re\nS\n");
+    raw_stream.push_str("0.98 0.99 1.0 rg\n310 340 240 130 re\nf\n");
+    raw_stream.push_str("0.82 0.88 0.95 RG\n1 w\n310 340 240 130 re\nS\n");
 
     // Doctor Header Strip
-    stream.push_str("0.90 0.94 0.99 rg\n310 445 240 25 re\nf\n");
-    stream.push_str("0.82 0.88 0.95 RG\n1 w\n310 445 240 25 re\nS\n");
-    stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n320 453 Td\n({{assinatura_doutor}}) Tj\nET\n");
+    raw_stream.push_str("0.90 0.94 0.99 rg\n310 445 240 25 re\nf\n");
+    raw_stream.push_str("0.82 0.88 0.95 RG\n1 w\n310 445 240 25 re\nS\n");
+    raw_stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n320 453 Td\n({{assinatura_doutor}}) Tj\nET\n");
 
     // Doctor Signature details & simulation line
-    stream.push_str("BT\n/F1 7.5 Tf\n10 TL\n320 432 Td\n");
-    stream.push_str("(Cirurgiao-Dentista: {{doutor_nome}}) Tj T*\n");
-    stream.push_str("(Registro: CRO {{doutor_cro}}) Tj T*\n");
-    stream.push_str("(Carimbo: Certificado Digital Clinico) Tj T*\n");
-    stream.push_str("ET\n");
+    raw_stream.push_str("BT\n/F1 7.5 Tf\n10 TL\n320 432 Td\n");
+    raw_stream.push_str("(Cirurgiao-Dentista: {{doutor_nome}}) Tj T*\n");
+    raw_stream.push_str("(Registro: CRO {{doutor_cro}}) Tj T*\n");
+    raw_stream.push_str("(Carimbo: Certificado Digital Clinico) Tj T*\n");
+    raw_stream.push_str("ET\n");
     // Signature vector line
-    stream.push_str("0.0 0.32 0.8 RG\n1.5 w\n330 375 m 365 398 395 355 435 382 c 465 402 490 368 530 380 c S\n");
+    raw_stream.push_str("0.0 0.32 0.8 RG\n1.5 w\n330 375 m 365 398 395 355 435 382 c 465 402 490 368 530 380 c S\n");
 
     // 7. Audit & Integrity Footer Box
-    stream.push_str("0.96 0.97 0.99 rg\n45 175 505 140 re\nf\n");
-    stream.push_str("0.8 0.85 0.92 RG\n1 w\n45 175 505 140 re\nS\n");
+    raw_stream.push_str("0.96 0.97 0.99 rg\n45 175 505 140 re\nf\n");
+    raw_stream.push_str("0.8 0.85 0.92 RG\n1 w\n45 175 505 140 re\nS\n");
 
-    stream.push_str("0.88 0.92 0.97 rg\n45 293 505 22 re\nf\n");
-    stream.push_str("0.8 0.85 0.92 RG\n1 w\n45 293 505 22 re\nS\n");
+    raw_stream.push_str("0.88 0.92 0.97 rg\n45 293 505 22 re\nf\n");
+    raw_stream.push_str("0.8 0.85 0.92 RG\n1 w\n45 293 505 22 re\nS\n");
 
-    stream.push_str("0 0 0 rg\nBT\n/F2 8 Tf\n55 300 Td\n");
-    stream.push_str("(CERTIFICADO DE AUDITORIA E ASSINATURA ELETRONICA - LEI 14.063/2020) Tj\nET\n");
+    raw_stream.push_str("0 0 0 rg\nBT\n/F2 8 Tf\n55 300 Td\n");
+    raw_stream.push_str("(CERTIFICADO DE AUDITORIA E ASSINATURA ELETRONICA - LEI 14.063/2020) Tj\nET\n");
 
-    stream.push_str("BT\n/F1 7.2 Tf\n9.8 TL\n55 280 Td\n");
-    stream.push_str("(EMISSAO: {{data_hoje}}    |    SEGURANCA: Token UUID Unico & Hash SHA-256) Tj T*\n");
-    stream.push_str("(LISTA COMPLETA DE PLACEHOLDERS SUPORTADOS:) Tj T*\n");
-    stream.push_str("(- Clinica: {{logo}}, {{clinica_nome}}, {{clinica_cnpj}}, {{clinica_endereco}}) Tj T*\n");
-    stream.push_str("(- Paciente: {{paciente_nome}}, {{paciente_cpf}}, {{paciente_telefone}}, {{paciente_endereco}}, {{paciente_convenio}}) Tj T*\n");
-    stream.push_str("(- Profissional & Data: {{doutor_nome}}, {{doutor_cro}}, {{data_hoje}}) Tj T*\n");
-    stream.push_str("(- Marcadores de Assinatura: {{assinatura_paciente}}, {{assinatura_doutor}}) Tj T*\n");
-    stream.push_str("ET\n");
+    raw_stream.push_str("BT\n/F1 7.2 Tf\n9.8 TL\n55 280 Td\n");
+    raw_stream.push_str("(EMISSAO: {{data_hoje}}    |    SEGURANCA: Token UUID Unico & Hash SHA-256) Tj T*\n");
+    raw_stream.push_str("(LISTA COMPLETA DE PLACEHOLDERS SUPORTADOS:) Tj T*\n");
+    raw_stream.push_str("(- Clinica: {{logo}}, {{clinica_nome}}, {{clinica_cnpj}}, {{clinica_endereco}}) Tj T*\n");
+    raw_stream.push_str("(- Paciente: {{paciente_nome}}, {{paciente_cpf}}, {{paciente_rg}}, {{paciente_telefone}}, {{paciente_endereco}}, {{paciente_convenio}}) Tj T*\n");
+    raw_stream.push_str("(- Profissional & Data: {{doutor_nome}}, {{doutor_cro}}, {{data_hoje}}) Tj T*\n");
+    raw_stream.push_str("(- Marcadores de Assinatura: {{assinatura_paciente}}, {{assinatura_doutor}}) Tj T*\n");
+    raw_stream.push_str("ET\n");
 
-    let stream_bytes = stream.as_bytes();
+    let placeholders = PdfPlaceholders {
+        clinic_name: "Clinica Odontologica Tooth Plus".into(),
+        clinic_cnpj: Some("12.345.678/0001-99".into()),
+        clinic_cro: Some("CRO-SP 987654".into()),
+        clinic_address: Some("Av. Paulista, 1500 - Bela Vista, Sao Paulo - SP".into()),
+        clinic_phone: Some("(11) 3333-4444".into()),
+        clinic_city_state: Some("Sao Paulo - SP".into()),
+        patient_name: "Paciente Exemplo".into(),
+        patient_cpf: "123.456.789-00".into(),
+        patient_rg: Some("12.345.678-9".into()),
+        patient_phone: Some("(11) 98765-4321".into()),
+        patient_email: Some("paciente@exemplo.com".into()),
+        patient_address: Some("Rua das Flores, 123 - Jardins, Sao Paulo - SP".into()),
+        patient_insurance: Some("Particular".into()),
+        patient_birth_date: Some("1990-01-01".into()),
+        doctor_name: "Dr. Andre Martins".into(),
+        doctor_cro: "CRO-SP 123456".into(),
+        doctor_specialty: Some("Ortodontia & Implantodontia".into()),
+        today_date: chrono::Local::now().format("%d/%m/%Y").to_string(),
+        current_time: chrono::Local::now().format("%H:%M").to_string(),
+        logo_base64: None,
+    };
+
+    let processed_stream = replace_placeholders_with_font_metrics(&raw_stream, &placeholders);
+    let stream_bytes = processed_stream.as_bytes();
     let stream_len = stream_bytes.len();
 
     let mut out: Vec<u8> = Vec::new();

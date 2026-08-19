@@ -316,13 +316,13 @@ pub fn StockMovementsSection(movements: Vec<StockMovement>) -> Element {
     }
 
     rsx! {
-        div { class: "table-responsive",
-            table { class: "data-table",
+        div { class: "table-container",
+            table { class: "modern-table",
                 thead {
                     tr {
-                        th { "Data / Hora" }
+                        th { style: "width: 180px;", "Data / Hora" }
                         th { "Tipo de Movimentação" }
-                        th { "Variação de Saldo" }
+                        th { style: "width: 150px; text-align: center;", "Variação de Saldo" }
                         th { "Nota Fiscal" }
                         th { "Observações" }
                     }
@@ -332,29 +332,38 @@ pub fn StockMovementsSection(movements: Vec<StockMovement>) -> Element {
                         {
                             let is_in = mov.quantity_change > 0;
                             let change_label = if is_in { format!("+{}", mov.quantity_change) } else { mov.quantity_change.to_string() };
-                            let change_badge = if is_in { "badge-success font-mono" } else { "badge-danger font-mono" };
+                            let (change_style, change_icon) = if is_in {
+                                ("background: #dcfce7; color: #166534; font-weight: 700; border: 1px solid #bbf7d0; border-radius: 6px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px;", "↑")
+                            } else {
+                                ("background: #fee2e2; color: #991b1b; font-weight: 700; border: 1px solid #fecaca; border-radius: 6px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px;", "↓")
+                            };
 
-                            let type_label = match mov.movement_type {
-                                MovementType::PurchaseIn => "Entrada por Compra",
-                                MovementType::ManualOut => "Saída Manual",
-                                MovementType::AppointmentOut => "Consumo em Atendimento",
-                                MovementType::Adjustment => "Ajuste de Inventário",
-                                MovementType::Loss => "Perda / Descarte",
+                            let (type_badge_style, type_label) = match mov.movement_type {
+                                MovementType::PurchaseIn => ("background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px;", "📦 Entrada por Compra"),
+                                MovementType::ManualOut => ("background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px;", "📤 Saída Manual"),
+                                MovementType::AppointmentOut => ("background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px;", "🦷 Consumo em Atendimento"),
+                                MovementType::Adjustment => ("background: #faf5ff; color: #6b21a8; border: 1px solid #e9d5ff; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px;", "⚖️ Ajuste de Inventário"),
+                                MovementType::Loss => ("background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px;", "⚠️ Perda / Descarte"),
                             };
 
                             rsx! {
                                 tr { key: "{mov.id}",
-                                    td { class: "font-mono font-xs",
+                                    td { class: "font-mono font-xs", style: "color: #475569; font-weight: 500;",
                                         "{mov.created_at.chars().take(16).collect::<String>().replace('T', \" \")}"
                                     }
                                     td {
-                                        span { class: "badge-outline", "{type_label}" }
+                                        span { style: "{type_badge_style}", "{type_label}" }
+                                    }
+                                    td { style: "text-align: center;",
+                                        span { style: "{change_style}",
+                                            span { "{change_icon}" }
+                                            span { "{change_label}" }
+                                        }
                                     }
                                     td {
-                                        span { class: "{change_badge}", "{change_label}" }
-                                    }
-                                    td {
-                                        span { class: "font-mono font-xs", "{mov.invoice_number.as_deref().unwrap_or(\"-\")}" }
+                                        span { class: "font-mono font-xs", style: "background: #f1f5f9; padding: 3px 8px; border-radius: 4px; color: #334155;",
+                                            "{mov.invoice_number.as_deref().unwrap_or(\"-\")}"
+                                        }
                                     }
                                     td { class: "text-muted font-xs",
                                         "{mov.notes.as_deref().unwrap_or(\"-\")}"

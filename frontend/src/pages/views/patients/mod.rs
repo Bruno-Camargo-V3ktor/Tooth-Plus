@@ -6,6 +6,7 @@
 pub mod anamnese_tab;
 pub mod anamnese_templates_modal;
 pub mod documents_tab;
+pub mod edit_patient_modal;
 pub mod odontogram_tab;
 pub mod overview_tab;
 pub mod patient_form;
@@ -15,6 +16,7 @@ pub mod photos_tab;
 pub use anamnese_tab::*;
 pub use anamnese_templates_modal::*;
 pub use documents_tab::*;
+pub use edit_patient_modal::*;
 pub use odontogram_tab::*;
 pub use overview_tab::*;
 pub use patient_form::*;
@@ -152,6 +154,7 @@ pub fn PatientsView() -> Element {
     let mut details_loading = use_signal(|| false);
     let mut active_patient_tab = use_signal(|| "overview".to_string());
     let mut is_create_patient_open = use_signal(|| false);
+    let mut is_edit_patient_open = use_signal(|| false);
     let mut is_templates_modal_open = use_signal(|| false);
     let mut is_emit_contract_open = use_signal(|| false);
 
@@ -179,6 +182,9 @@ pub fn PatientsView() -> Element {
             });
         }
     };
+
+    let on_select_loader = load_patient_details.clone();
+    let on_edit_loader = load_patient_details.clone();
 
     rsx! {
         div { class: "patients-view-container",
@@ -265,6 +271,16 @@ pub fn PatientsView() -> Element {
                                         span { class: "patient-profile-meta-item",
                                             IconCalendar { size: 13, color: "#64748b".to_string() }
                                             span { "Nasc: {format_br_date_short(bdate)}" }
+                                        }
+                                    }
+                                    if can_write {
+                                        button {
+                                            r#type: "button",
+                                            class: "btn-secondary",
+                                            style: "margin-left: auto; font-size: 12px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px;",
+                                            onclick: move |_| is_edit_patient_open.set(true),
+                                            IconEdit { size: 13, color: "#0052cc".to_string() }
+                                            span { "Editar Cadastro" }
                                         }
                                     }
                                 }
@@ -446,7 +462,7 @@ pub fn PatientsView() -> Element {
                     token: token.clone(),
                     clinic_id: clinic_id.clone(),
                     on_select_patient: move |p_id: String| {
-                        let mut loader = load_patient_details.clone();
+                        let mut loader = on_select_loader.clone();
                         selected_patient_id.set(Some(p_id.clone()));
                         loader(p_id);
                     },
@@ -480,6 +496,31 @@ pub fn PatientsView() -> Element {
                     clinic_id: clinic_id.clone(),
                     toast_msg,
                     error_toast,
+                }
+            }
+
+            if is_edit_patient_open() {
+                if let Some(ref det) = patient_details() {
+                    {
+                        let reload_loader = on_edit_loader.clone();
+                        let sel_p_id = selected_patient_id().unwrap_or_default();
+                        rsx! {
+                            EditPatientModal {
+                                is_open: is_edit_patient_open,
+                                patient: det.patient.clone(),
+                                clinic_id: clinic_id.clone(),
+                                token: token.clone(),
+                                reload_patient_details: move |()| {
+                                    let mut l = reload_loader.clone();
+                                    if !sel_p_id.is_empty() {
+                                        l(sel_p_id.clone());
+                                    }
+                                },
+                                toast_msg,
+                                error_toast,
+                            }
+                        }
+                    }
                 }
             }
         }

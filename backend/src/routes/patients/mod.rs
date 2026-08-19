@@ -221,10 +221,27 @@ pub(crate) fn map_patient(row: DbPatientRow) -> Patient {
     let has_pwd =
         row.password_hash.is_some() && !row.password_hash.as_deref().unwrap_or("").is_empty();
 
-    let guardians: Vec<shared::patients::PatientGuardian> = row
+    let mut guardians: Vec<shared::patients::PatientGuardian> = row
         .legal_guardians
         .and_then(|v| serde_json::from_value(v).ok())
         .unwrap_or_default();
+
+    for g in &mut guardians {
+        if let Some(ref cpf) = g.document_cpf {
+            if let Ok(dec) = crate::security::crypto::decrypt_deterministic(cpf) {
+                g.document_cpf = Some(dec);
+            }
+        }
+        if let Some(ref rg) = g.document_rg {
+            if let Ok(dec) = crate::security::crypto::decrypt_deterministic(rg) {
+                g.document_rg = Some(dec);
+            }
+        }
+    }
+
+    let decrypted_guardian_cpf = row.legal_guardian_cpf.and_then(|s| {
+        crate::security::crypto::decrypt_deterministic(&s).ok().or(Some(s))
+    });
 
     Patient {
         id: row.id.to_sql(),
@@ -234,7 +251,7 @@ pub(crate) fn map_patient(row: DbPatientRow) -> Patient {
         document_rg: masked_rg,
         legal_guardians: guardians,
         legal_guardian_name: row.legal_guardian_name,
-        legal_guardian_cpf: row.legal_guardian_cpf,
+        legal_guardian_cpf: decrypted_guardian_cpf,
         phone: row.phone,
         email: row.email,
         birth_date: row.birth_date,

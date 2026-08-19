@@ -173,7 +173,132 @@ pub async fn get_public_signing_document(
     }))
 }
 
-/// Verifica o CPF do paciente antes da etapa de autenticação/criação de senha.
+fn normalize_doc_digits(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_uppercase()
+}
+
+fn check_doc_match(input_clean: &str, target_raw: &str) -> bool {
+    let target_clean = normalize_doc_digits(target_raw);
+    !target_clean.is_empty() && target_clean == input_clean
+}
+
+/// Identifica se o signatário é válido por CPF ou RG.
+/// Regra para Menores de Idade:
+/// - REJEITA se for o RG ou CPF do menor.
+/// - ACEITA se for o RG ou CPF de um responsável legal cadastrado (`legal_guardians` ou `legal_guardian_cpf`).
+/// Retorna `Ok((signer_name, signer_doc))` ou `Err(ApiError)`.
+fn validate_patient_or_guardian_identity(
+    pat: &DbPatientAuthRow,
+    doc_input: &str,
+) -> Result<(String, String), ApiError> {
+    let clean_input = normalize_doc_digits(doc_input);
+    if clean_input.len() < 4 {
+        return Err(ApiError::BadRequest("Informe um CPF ou RG válido com ao menos 4 caracteres.".into()));
+    }
+
+    // 1. Identificar se é menor de idade
+    let guardians: Vec<shared::patients::PatientGuardian> = pat
+        .legal_guardians
+        .as_ref()
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    let is_minor = if let Some(ref bd) = pat.birth_date {
+        if let Ok(naive) = chrono::NaiveDate::parse_from_str(bd, "%Y-%m-%d") {
+            let now = chrono::Local::now().date_naive();
+            now.years_since(naive).unwrap_or(0) < 18
+        } else {
+            !guardians.is_empty() || pat.legal_guardian_cpf.is_some()
+        }
+    } else {
+        !guardians.is_empty() || pat.legal_guardian_cpf.is_some()
+    };
+
+    if is_minor {
+        // Checar se o usuário inseriu o CPF ou RG do próprio menor
+        let input_hash = hash_blind_index(doc_input);
+        let minor_has_matching_cpf = pat.document_cpf_hash.as_deref() == Some(&input_hash)
+            || pat.document_cpf.as_ref().map(|c| check_doc_match(&clean_input, c)).unwrap_or(false)
+            || (pat.document_cpf_encrypted.is_some() && {
+                let dec = get_patient_decrypted_cpf(pat);
+                check_doc_match(&clean_input, &dec)
+            });
+
+        let minor_has_matching_rg = pat
+            .document_rg
+            .as_ref()
+            .map(|rg| check_doc_match(&clean_input, rg))
+            .unwrap_or(false);
+
+        if minor_has_matching_cpf || minor_has_matching_rg {
+            return Err(ApiError::BadRequest(
+                "Para pacientes menores de 18 anos, a assinatura deve ser identificada com o CPF ou RG do responsável legal cadastrado.".into(),
+            ));
+        }
+
+        // Checar na lista de responsáveis legais (por CPF ou RG)
+        for g in &guardians {
+            if let Some(ref g_cpf) = g.document_cpf {
+                let dec_cpf = crate::security::crypto::decrypt_deterministic(g_cpf).unwrap_or_else(|_| g_cpf.clone());
+                if check_doc_match(&clean_input, &dec_cpf) {
+                    let signer_desc = format!("{} (Resp. Legal por {})", g.name, pat.full_name);
+                    return Ok((signer_desc, dec_cpf));
+                }
+            }
+            if let Some(ref g_rg) = g.document_rg {
+                let dec_rg = crate::security::crypto::decrypt_deterministic(g_rg).unwrap_or_else(|_| g_rg.clone());
+                if check_doc_match(&clean_input, &dec_rg) {
+                    let signer_desc = format!("{} (Resp. Legal por {})", g.name, pat.full_name);
+                    return Ok((signer_desc, dec_rg));
+                }
+            }
+        }
+
+        // Checar campos legados de responsável
+        if let Some(ref l_cpf) = pat.legal_guardian_cpf {
+            let dec_l_cpf = crate::security::crypto::decrypt_deterministic(l_cpf).unwrap_or_else(|_| l_cpf.clone());
+            if check_doc_match(&clean_input, &dec_l_cpf) {
+                let g_name = pat.legal_guardian_name.clone().unwrap_or_else(|| "Responsável Legal".into());
+                let signer_desc = format!("{} (Resp. Legal por {})", g_name, pat.full_name);
+                return Ok((signer_desc, dec_l_cpf));
+            }
+        }
+
+        return Err(ApiError::BadRequest(
+            "Documento informado (CPF/RG) não confere com nenhum dos responsáveis legais cadastrados para este paciente menor de idade.".into(),
+        ));
+    } else {
+        // Adulto: verificar CPF do paciente
+        let input_hash = hash_blind_index(doc_input);
+        let matches_cpf = pat.document_cpf_hash.as_deref() == Some(&input_hash)
+            || pat.document_cpf.as_ref().map(|c| check_doc_match(&clean_input, c)).unwrap_or(false)
+            || (pat.document_cpf_encrypted.is_some() && {
+                let dec = get_patient_decrypted_cpf(pat);
+                check_doc_match(&clean_input, &dec)
+            });
+
+        let matches_rg = pat
+            .document_rg
+            .as_ref()
+            .map(|rg| check_doc_match(&clean_input, rg))
+            .unwrap_or(false);
+
+        if matches_cpf || matches_rg {
+            let doc_str = if matches_rg {
+                pat.document_rg.clone().unwrap_or_else(|| clean_input.clone())
+            } else {
+                get_patient_decrypted_cpf(pat)
+            };
+            return Ok((pat.full_name.clone(), doc_str));
+        }
+
+        return Err(ApiError::BadRequest(
+            "CPF ou RG informado não confere com o paciente deste contrato.".into(),
+        ));
+    }
+}
+
+/// Verifica o CPF ou RG do paciente (ou responsável se menor) antes da etapa de autenticação/criação de senha.
 #[post("/public/sign/{token}/check-patient")]
 pub async fn check_patient_signing(
     path: web::Path<String>,
@@ -205,12 +330,7 @@ pub async fn check_patient_signing(
         return Err(ApiError::NotFound("Paciente não localizado.".into()));
     };
 
-    let cpf_input_hash = hash_blind_index(&data.cpf);
-    if cpf_input_hash != pat.document_cpf_hash {
-        return Err(ApiError::BadRequest(
-            "CPF informado não confere com o paciente deste contrato.".into(),
-        ));
-    }
+    let (signer_name, _) = validate_patient_or_guardian_identity(&pat, &data.cpf)?;
 
     let phone_raw = pat.phone.clone();
     let phone_masked = if phone_raw.len() >= 6 {
@@ -222,13 +342,13 @@ pub async fn check_patient_signing(
     let has_password = pat.password_hash.as_ref().map(|h| !h.is_empty()).unwrap_or(false);
 
     Ok(HttpResponse::Ok().json(PatientCheckResponse {
-        patient_name: pat.full_name,
+        patient_name: signer_name,
         has_password,
         phone_masked,
     }))
 }
 
-/// Cadastra a primeira senha de assinatura digital de 6 dígitos pelo próprio paciente.
+/// Cadastra a primeira senha de assinatura digital de 6 dígitos pelo próprio paciente (ou responsável utilizando a senha do cadastro do menor).
 #[post("/public/sign/{token}/register-patient-password")]
 pub async fn register_patient_password(
     path: web::Path<String>,
@@ -264,12 +384,7 @@ pub async fn register_patient_password(
         return Err(ApiError::NotFound("Paciente não localizado.".into()));
     };
 
-    let cpf_input_hash = hash_blind_index(&data.cpf);
-    if cpf_input_hash != pat.document_cpf_hash {
-        return Err(ApiError::Unauthorized(
-            "CPF informado não confere com o paciente deste contrato.".into(),
-        ));
-    }
+    let (signer_name, _) = validate_patient_or_guardian_identity(&pat, &data.cpf)?;
 
     let pwd_hash = crate::security::crypto::hash_password(data.password.trim())
         .map_err(|e| ApiError::Internal(format!("Erro ao gerar hash da senha: {}", e)))?;
@@ -283,11 +398,11 @@ pub async fn register_patient_password(
     Ok(HttpResponse::Ok().json(SignAuthResponse {
         token: doc.signing_token,
         signer_type: "patient".to_string(),
-        signer_name: pat.full_name,
+        signer_name,
     }))
 }
 
-/// Autentica o paciente no portal de assinatura por CPF e senha cadastrada.
+/// Autentica o paciente (ou responsável por menor) no portal de assinatura por CPF/RG e senha cadastrada no perfil do paciente.
 #[post("/public/sign/{token}/auth-patient")]
 pub async fn auth_patient_signing(
     path: web::Path<String>,
@@ -319,12 +434,7 @@ pub async fn auth_patient_signing(
         return Err(ApiError::NotFound("Paciente não localizado.".into()));
     };
 
-    let cpf_input_hash = hash_blind_index(&data.cpf);
-    if cpf_input_hash != pat.document_cpf_hash {
-        return Err(ApiError::Unauthorized(
-            "CPF informado não confere com o paciente deste contrato.".into(),
-        ));
-    }
+    let (signer_name, _) = validate_patient_or_guardian_identity(&pat, &data.cpf)?;
 
     if let Some(ref saved_hash) = pat.password_hash {
         if !verify_password(saved_hash, data.password.trim()) {
@@ -332,12 +442,16 @@ pub async fn auth_patient_signing(
                 "Senha de assinatura incorreta.".into(),
             ));
         }
+    } else {
+        return Err(ApiError::BadRequest(
+            "Senha de assinatura ainda não cadastrada. Por favor, crie sua senha de assinatura de 6 dígitos.".into(),
+        ));
     }
 
     Ok(HttpResponse::Ok().json(SignAuthResponse {
         token: doc.signing_token,
         signer_type: "patient".to_string(),
-        signer_name: pat.full_name,
+        signer_name,
     }))
 }
 
@@ -735,17 +849,65 @@ pub async fn submit_digital_signature(
             "pending_signatures"
         };
 
-        let pat_cpf = patient_obj
-            .as_ref()
-            .map(get_patient_decrypted_cpf)
-            .unwrap_or_else(|| "234.567.890-11".into());
+        let (signer_display_name, signer_doc_info) = if let Some(ref pat) = patient_obj {
+            let is_minor = if let Some(ref bd) = pat.birth_date {
+                if let Ok(naive) = chrono::NaiveDate::parse_from_str(bd, "%Y-%m-%d") {
+                    let now = chrono::Local::now().date_naive();
+                    now.years_since(naive).unwrap_or(0) < 18
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            let guardians: Vec<shared::patients::PatientGuardian> = pat
+                .legal_guardians
+                .as_ref()
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+
+            if is_minor || !guardians.is_empty() || pat.legal_guardian_cpf.is_some() {
+                // Obter documento descriptografado do responsável
+                let (g_name, g_doc) = if let Some(g) = guardians.first() {
+                    let doc_str = g.document_cpf.as_ref().map(|c| {
+                        let dec = crate::security::crypto::decrypt_deterministic(c).unwrap_or_else(|_| c.clone());
+                        format!("CPF: {}", dec)
+                    }).or_else(|| {
+                        g.document_rg.as_ref().map(|r| {
+                            let dec = crate::security::crypto::decrypt_deterministic(r).unwrap_or_else(|_| r.clone());
+                            format!("RG: {}", dec)
+                        })
+                    }).unwrap_or_else(|| "Doc: Não informado".into());
+                    (g.name.clone(), doc_str)
+                } else {
+                    let name = pat.legal_guardian_name.clone().unwrap_or_else(|| "Responsável Legal".into());
+                    let doc_str = pat.legal_guardian_cpf.as_ref().map(|c| {
+                        let dec = crate::security::crypto::decrypt_deterministic(c).unwrap_or_else(|_| c.clone());
+                        format!("CPF: {}", dec)
+                    }).unwrap_or_else(|| "Doc: Não informado".into());
+                    (name, doc_str)
+                };
+                (format!("{} (Resp. Legal por {})", g_name, pat.full_name), g_doc)
+            } else {
+                let dec_cpf = get_patient_decrypted_cpf(pat);
+                let doc_str = if !dec_cpf.is_empty() {
+                    format!("CPF: {}", dec_cpf)
+                } else if let Some(ref rg) = pat.document_rg {
+                    let dec_rg = crate::security::crypto::decrypt_deterministic(rg).unwrap_or_else(|_| rg.clone());
+                    format!("RG: {}", dec_rg)
+                } else {
+                    "CPF: Não informado".into()
+                };
+                (pat.full_name.clone(), doc_str)
+            }
+        } else {
+            ("Paciente".into(), "CPF: 000.000.000-00".into())
+        };
 
         let pat_info = crate::documents_pdf::PdfSignerInfo {
-            name: patient_obj
-                .as_ref()
-                .map(|p| p.full_name.clone())
-                .unwrap_or_else(|| "Carlos Eduardo Souza".into()),
-            document_info: pat_cpf,
+            name: signer_display_name,
+            document_info: signer_doc_info,
             signed_at: Some(now_utc.clone()),
             ip_address: Some(peer_ip.clone()),
             has_signed: true,

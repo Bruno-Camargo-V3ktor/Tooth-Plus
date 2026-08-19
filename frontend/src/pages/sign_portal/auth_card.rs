@@ -35,14 +35,14 @@ pub fn SignerAuthCard(
 
     let mut is_authenticating = use_signal(|| false);
 
-    // Handler: Verificar CPF
+    // Handler: Verificar CPF ou RG
     let tok_check = token.clone();
     let mut handle_check_cpf = move |_| {
-        let cpf = patient_cpf().trim().to_string();
-        let clean_cpf: String = cpf.chars().filter(|c| c.is_alphanumeric()).collect();
-        if clean_cpf.len() < 11 {
+        let doc = patient_cpf().trim().to_string();
+        let clean_doc: String = doc.chars().filter(|c| c.is_alphanumeric()).collect();
+        if clean_doc.len() < 4 {
             let mut err = error_msg;
-            err.set(Some("Digite um CPF válido com 11 dígitos.".into()));
+            err.set(Some("Digite um CPF ou RG válido.".into()));
             return;
         }
 
@@ -54,7 +54,7 @@ pub fn SignerAuthCard(
         check_sig.set(true);
         err_sig.set(None);
         spawn(async move {
-            match check_patient_signing(&t, &cpf).await {
+            match check_patient_signing(&t, &doc).await {
                 Ok(info) => {
                     info_sig.set(Some(info));
                 }
@@ -271,21 +271,24 @@ pub fn SignerAuthCard(
                     }
                 } else {
                     div { class: "portal-auth-form",
-                        p { class: "portal-helper-text", "Para validar sua identidade, digite o número do seu CPF cadastrado na clínica:" }
+                        p { class: "portal-helper-text", "Para validar sua identidade, digite o número do seu CPF ou RG cadastrado na clínica:" }
                         div { class: "form-group",
-                            label { class: "portal-label", "CPF do Paciente *" }
+                            label { class: "portal-label", "CPF ou RG *" }
                             input {
                                 class: "portal-input font-mono text-center",
-                                placeholder: "000.000.000-00",
+                                placeholder: "CPF ou RG (ex: 123.456.789-00 ou 12.345.678-9)",
                                 value: "{patient_cpf}",
                                 oninput: move |e| patient_cpf.set(e.value())
+                            }
+                            p { class: "portal-helper-text", style: "font-size: 11px; color: #64748b; margin-top: 4px;",
+                                "ℹ️ Para pacientes menores de 18 anos, insira o CPF ou RG do responsável legal cadastrado."
                             }
                         }
                         button {
                             class: "portal-btn-primary full-width mt-2",
                             disabled: is_checking_cpf(),
                             onclick: move |e| handle_check_cpf(e),
-                            if is_checking_cpf() { "Verificando..." } else { "Verificar CPF" }
+                            if is_checking_cpf() { "Verificando..." } else { "Verificar Documento" }
                         }
                     }
                 }

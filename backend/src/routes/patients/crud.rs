@@ -178,6 +178,33 @@ pub async fn create_patient(
     };
 
     let guardians_list = data.legal_guardians.unwrap_or_default();
+    let encrypted_guardians: Vec<shared::patients::PatientGuardian> = guardians_list
+        .into_iter()
+        .map(|mut g| {
+            if let Some(ref cpf) = g.document_cpf {
+                let t = cpf.trim();
+                if !t.is_empty() {
+                    g.document_cpf = encrypt_deterministic(t).ok().or(Some(t.to_string()));
+                }
+            }
+            if let Some(ref rg) = g.document_rg {
+                let t = rg.trim();
+                if !t.is_empty() {
+                    g.document_rg = encrypt_deterministic(t).ok().or(Some(t.to_string()));
+                }
+            }
+            g
+        })
+        .collect();
+
+    let enc_guardian_cpf = data.legal_guardian_cpf.and_then(|s| {
+        let t = s.trim();
+        if t.is_empty() {
+            None
+        } else {
+            encrypt_deterministic(t).ok().or(Some(t.to_string()))
+        }
+    });
 
     let mut res = db
         .query(
@@ -217,9 +244,9 @@ pub async fn create_patient(
         .bind(("cpf_enc", cpf_encrypted))
         .bind(("cpf_hash", cpf_hash))
         .bind(("rg", data.document_rg.map(|s| s.trim().to_string())))
-        .bind(("guardians", serde_json::to_value(&guardians_list).unwrap_or_default()))
+        .bind(("guardians", serde_json::to_value(&encrypted_guardians).unwrap_or_default()))
         .bind(("g_name", data.legal_guardian_name.map(|s| s.trim().to_string())))
-        .bind(("g_cpf", data.legal_guardian_cpf.map(|s| s.trim().to_string())))
+        .bind(("g_cpf", enc_guardian_cpf))
         .bind(("phone", data.phone.trim().to_string()))
         .bind(("email", data.email.map(|s| s.trim().to_string())))
         .bind(("birth_date", data.birth_date.clone()))
@@ -562,6 +589,33 @@ pub async fn update_patient(
     };
 
     let guardians_list = data.legal_guardians.unwrap_or_default();
+    let encrypted_guardians: Vec<shared::patients::PatientGuardian> = guardians_list
+        .into_iter()
+        .map(|mut g| {
+            if let Some(ref cpf) = g.document_cpf {
+                let t = cpf.trim();
+                if !t.is_empty() {
+                    g.document_cpf = encrypt_deterministic(t).ok().or(Some(t.to_string()));
+                }
+            }
+            if let Some(ref rg) = g.document_rg {
+                let t = rg.trim();
+                if !t.is_empty() {
+                    g.document_rg = encrypt_deterministic(t).ok().or(Some(t.to_string()));
+                }
+            }
+            g
+        })
+        .collect();
+
+    let enc_guardian_cpf = data.legal_guardian_cpf.and_then(|s| {
+        let t = s.trim();
+        if t.is_empty() {
+            None
+        } else {
+            encrypt_deterministic(t).ok().or(Some(t.to_string()))
+        }
+    });
 
     let query = "UPDATE type::record($pid) SET
         full_name = $full_name,
@@ -598,9 +652,9 @@ pub async fn update_patient(
         .bind(("cpf_enc", cpf_encrypted))
         .bind(("cpf_hash", cpf_hash))
         .bind(("rg", data.document_rg.map(|s| s.trim().to_string())))
-        .bind(("guardians", serde_json::to_value(&guardians_list).unwrap_or_default()))
+        .bind(("guardians", serde_json::to_value(&encrypted_guardians).unwrap_or_default()))
         .bind(("g_name", data.legal_guardian_name.map(|s| s.trim().to_string())))
-        .bind(("g_cpf", data.legal_guardian_cpf.map(|s| s.trim().to_string())))
+        .bind(("g_cpf", enc_guardian_cpf))
         .bind(("phone", data.phone.trim().to_string()))
         .bind(("email", data.email.map(|s| s.trim().to_string())))
         .bind(("birth_date", data.birth_date))
