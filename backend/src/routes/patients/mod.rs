@@ -39,6 +39,28 @@ pub(crate) fn clinic_record_id(clinic_id: &str) -> String {
     }
 }
 
+/// Helper para mascarar CPF protegendo privacidade dos dados (ex: ***.***.123-**).
+pub fn mask_cpf(raw: &str) -> String {
+    let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() == 11 {
+        format!("***.***.{}-**", &digits[6..9])
+    } else if digits.len() >= 4 {
+        format!("***.***.{}-**", &digits[digits.len() - 4..digits.len() - 2])
+    } else {
+        "***.***.***-**".to_string()
+    }
+}
+
+/// Helper para mascarar RG (ex: **.***.678-*).
+pub fn mask_rg(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.len() <= 3 {
+        return "**.*".to_string();
+    }
+    let visible = &trimmed[trimmed.len() - 2..];
+    format!("**.***.**{}", visible)
+}
+
 /// Linha da tabela `patient` no banco de dados.
 #[derive(Deserialize, Debug, SurrealValue)]
 pub(crate) struct DbPatientRow {
@@ -49,6 +71,7 @@ pub(crate) struct DbPatientRow {
     pub document_cpf_encrypted: Option<String>,
     pub document_cpf_hash: Option<String>,
     pub document_rg: Option<String>,
+    pub legal_guardians: Option<serde_json::Value>,
     pub legal_guardian_name: Option<String>,
     pub legal_guardian_cpf: Option<String>,
     pub phone: String,
@@ -73,12 +96,26 @@ pub(crate) struct DbPatientRow {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// Linha da tabela `anamnesis_template` no banco de dados.
+#[derive(Deserialize, Debug, SurrealValue)]
+pub(crate) struct DbAnamnesisTemplateRow {
+    pub id: RecordId,
+    pub clinic_id: RecordId,
+    pub template_type: String,
+    pub title: String,
+    pub questions: Option<serde_json::Value>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
 /// Linha da tabela `patient_anamnesis` no banco de dados.
 #[derive(Deserialize, Debug, SurrealValue)]
 pub(crate) struct DbAnamnesisRow {
     pub id: Option<RecordId>,
     pub patient_id: RecordId,
     pub clinic_id: RecordId,
+    pub template_type: Option<String>,
+    pub custom_responses: Option<serde_json::Value>,
     pub allergies: Option<Vec<String>>,
     pub continuous_medications: Option<String>,
     pub systemic_diseases: Option<Vec<String>>,
@@ -116,11 +153,18 @@ pub(crate) struct DbTreatmentRow {
     pub clinic_id: RecordId,
     pub dentist_user_id: Option<RecordId>,
     pub appointment_id: Option<RecordId>,
+    pub document_id: Option<RecordId>,
+    pub exam_id: Option<RecordId>,
+    pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,
+    pub surfaces: Option<Vec<String>>,
+    pub materials_used: Option<Vec<String>>,
     pub status: Option<String>,
     pub cost_cents: Option<i64>,
+    pub post_care_instructions: Option<String>,
     pub clinical_notes: Option<String>,
+    pub performed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -150,28 +194,45 @@ pub(crate) struct DbDocumentRow {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Converte a linha de banco de dados `DbPatientRow` no modelo compartilhado `Patient`.
+
+/// Converte a linha de banco de dados `DbPatientRow` no modelo compartilhado `Patient` com mascaramento protetivo.
 pub(crate) fn map_patient(row: DbPatientRow) -> Patient {
-    let decrypted_cpf = if let Some(ref enc) = row.document_cpf_encrypted {
-        crate::security::crypto::decrypt_deterministic(enc).unwrap_or_else(|_| {
-            row.document_cpf
-                .clone()
-                .unwrap_or_else(|| "CPF Protegido".into())
-        })
+    let masked_cpf = if let Some(ref enc) = row.document_cpf_encrypted {
+        let dec = crate::security::crypto::decrypt_deterministic(enc).unwrap_or_else(|_| {
+            row.document_cpf.clone().unwrap_or_default()
+        });
+        if dec.is_empty() {
+            None
+        } else {
+            Some(mask_cpf(&dec))
+        }
+    } else if let Some(ref raw_cpf) = row.document_cpf {
+        if raw_cpf.is_empty() {
+            None
+        } else {
+            Some(mask_cpf(raw_cpf))
+        }
     } else {
-        row.document_cpf
-            .clone()
-            .unwrap_or_else(|| "Não informado".into())
+        None
     };
+
+    let masked_rg = row.document_rg.as_deref().map(mask_rg);
+
     let has_pwd =
         row.password_hash.is_some() && !row.password_hash.as_deref().unwrap_or("").is_empty();
+
+    let guardians: Vec<shared::patients::PatientGuardian> = row
+        .legal_guardians
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
 
     Patient {
         id: row.id.to_sql(),
         clinic_id: row.clinic_id.to_sql(),
         full_name: row.full_name,
-        document_cpf: decrypted_cpf,
-        document_rg: row.document_rg,
+        document_cpf: masked_cpf,
+        document_rg: masked_rg,
+        legal_guardians: guardians,
         legal_guardian_name: row.legal_guardian_name,
         legal_guardian_cpf: row.legal_guardian_cpf,
         phone: row.phone,
@@ -202,3 +263,4 @@ pub(crate) fn map_patient(row: DbPatientRow) -> Patient {
             .unwrap_or_else(|| Utc::now().to_rfc3339()),
     }
 }
+

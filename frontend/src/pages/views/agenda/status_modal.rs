@@ -1,7 +1,7 @@
 //! # Modal de Atualização de Status do Atendimento (Frontend)
 //!
 //! Permite alterar o status do agendamento (Confirmado, Em Atendimento, Concluído, etc.)
-//! registrando o motivo de cancelamento ou confirmando os insumos consumidos.
+//! registrando o motivo de cancelamento (pelo Doutor ou pelo Paciente) ou confirmando os insumos consumidos.
 
 use crate::api::update_appointment_status;
 use crate::components::icons::IconCheck;
@@ -30,7 +30,9 @@ pub fn AppointmentStatusModal(
         AppointmentStatus::Confirmed => "confirmed".to_string(),
         AppointmentStatus::InProgress => "in_progress".to_string(),
         AppointmentStatus::Completed => "completed".to_string(),
-        AppointmentStatus::Canceled => "canceled".to_string(),
+        AppointmentStatus::CanceledByDoctor => "canceled_by_doctor".to_string(),
+        AppointmentStatus::CanceledByPatient => "canceled_by_patient".to_string(),
+        AppointmentStatus::Canceled => "canceled_by_doctor".to_string(),
         AppointmentStatus::NoShow => "no_show".to_string(),
     });
     let mut cancellation_reason = use_signal(|| app.cancellation_reason.clone().unwrap_or_default());
@@ -47,12 +49,14 @@ pub fn AppointmentStatusModal(
             "confirmed" => AppointmentStatus::Confirmed,
             "in_progress" => AppointmentStatus::InProgress,
             "completed" => AppointmentStatus::Completed,
+            "canceled_by_doctor" => AppointmentStatus::CanceledByDoctor,
+            "canceled_by_patient" => AppointmentStatus::CanceledByPatient,
             "canceled" => AppointmentStatus::Canceled,
             "no_show" => AppointmentStatus::NoShow,
             _ => AppointmentStatus::Pending,
         };
 
-        let reason_opt = if status_enum == AppointmentStatus::Canceled {
+        let reason_opt = if status_enum.is_canceled() {
             let r = cancellation_reason().trim().to_string();
             if r.is_empty() {
                 None
@@ -99,71 +103,92 @@ pub fn AppointmentStatusModal(
         });
     };
 
+    let is_canceled_selected = selected_status() == "canceled_by_doctor" || selected_status() == "canceled_by_patient" || selected_status() == "canceled";
+
     rsx! {
         div { class: "modal-overlay",
             div { class: "action-modal modal-small",
-                div { class: "settings-header",
-                    h2 { class: "settings-title", "Alterar Status do Agendamento" }
-                    button { class: "close-btn", onclick: move |_| { let mut o = is_open; o.set(false); }, "×" }
+                div { class: "modal-header",
+                    div {
+                        h2 { class: "modal-title", "Atualizar Status do Atendimento" }
+                        p { class: "modal-subtitle", "Avance as etapas do atendimento ou registre o cancelamento com justificativa." }
+                    }
+                    button { class: "modal-close", onclick: move |_| { let mut o = is_open; o.set(false); }, "×" }
                 }
 
-                div { class: "settings-content",
-                    div { class: "form-grid",
-                        div { class: "input-group-wrapper full-width",
-                            label { "Novo Status" }
-                            select {
-                                class: "modern-input-field modern-select",
-                                value: "{selected_status}",
-                                onchange: move |e| selected_status.set(e.value()),
-                                option { value: "pending", "Pendente" }
-                                option { value: "confirmed", "Confirmado" }
-                                option { value: "in_progress", "Em Atendimento" }
-                                option { value: "completed", "Concluído" }
-                                option { value: "canceled", "Cancelado" }
-                                option { value: "no_show", "Não Compareceu" }
-                            }
+                div { class: "modal-body",
+                    div { class: "appointment-summary-box mb-3",
+                        h4 { class: "font-weight-bold mb-1", "{app.title}" }
+                        p { class: "text-muted font-xs",
+                            "Paciente: {app.patient_name.as_deref().unwrap_or(\"Não informado\")}"
                         }
+                    }
 
-                        if selected_status() == "canceled" {
-                            div { class: "input-group-wrapper full-width",
-                                label { "Motivo do Cancelamento" }
-                                textarea {
-                                    class: "modern-input-field",
-                                    placeholder: "Ex: Paciente solicitou reagendamento por motivos pessoais...",
-                                    value: "{cancellation_reason}",
-                                    oninput: move |e| cancellation_reason.set(e.value())
+                    div { class: "form-group",
+                        label { class: "form-label", "Novo Status *" }
+                        select {
+                            class: "select-field",
+                            value: "{selected_status}",
+                            onchange: move |e| selected_status.set(e.value()),
+                            option { value: "pending", "⏳ Pendente / Aguardando" }
+                            option { value: "confirmed", "✓ Confirmado pelo Paciente" }
+                            option { value: "in_progress", "🦷 Em Atendimento no Consultório" }
+                            option { value: "completed", "★ Atendimento Concluído" }
+                            option { value: "canceled_by_doctor", "✕ Cancelado pelo Doutor / Clínica" }
+                            option { value: "canceled_by_patient", "✕ Cancelado pelo Paciente" }
+                            option { value: "no_show", "⚠ Não Compareceu (Falta)" }
+                        }
+                    }
+
+                    if is_canceled_selected {
+                        div { class: "form-group mt-2",
+                            label { class: "form-label text-danger font-semibold",
+                                if selected_status() == "canceled_by_doctor" {
+                                    "Motivo / Observações do Cancelamento pelo Doutor *"
+                                } else {
+                                    "Motivo / Observações do Cancelamento pelo Paciente *"
                                 }
                             }
+                            textarea {
+                                class: "form-textarea",
+                                placeholder: if selected_status() == "canceled_by_doctor" {
+                                    "Ex: Profissional em procedimento de emergência / Reagendado a pedido da clínica..."
+                                } else {
+                                    "Ex: Paciente solicitou reagendamento por motivos de viagem / trabalho..."
+                                },
+                                value: "{cancellation_reason}",
+                                oninput: move |e| cancellation_reason.set(e.value())
+                            }
                         }
+                    }
 
-                        if selected_status() == "completed" && !consumed_items().is_empty() {
-                            div { class: "input-group-wrapper full-width",
-                                h4 { class: "form-section-title", "Materiais Utilizados (Baixa de Estoque)" }
-                                div { class: "consumed-items-list",
-                                    for (idx, item) in consumed_items().iter().enumerate() {
-                                        {
-                                            let item_name = item.item_name.clone().unwrap_or_else(|| "Item de estoque".into());
-                                            let planned = item.quantity_planned;
-                                            let used_val = item.quantity_used.unwrap_or(planned);
+                    if selected_status() == "completed" && !consumed_items().is_empty() {
+                        div { class: "form-group mt-3",
+                            h4 { class: "form-section-title", "Materiais Utilizados (Baixa de Estoque)" }
+                            div { class: "consumed-items-list",
+                                for (idx, item) in consumed_items().iter().enumerate() {
+                                    {
+                                        let item_name = item.item_name.clone().unwrap_or_else(|| "Item de estoque".into());
+                                        let planned = item.quantity_planned;
+                                        let used_val = item.quantity_used.unwrap_or(planned);
 
-                                            rsx! {
-                                                div { key: "{item.item_id}", class: "consumed-item-row",
-                                                    span { class: "consumed-item-name", "{item_name}" }
-                                                    div { class: "consumed-item-qty-wrap",
-                                                        span { class: "text-muted font-xs mr-2", "Previsto: {planned}" }
-                                                        input {
-                                                            class: "modern-input-field qty-input",
-                                                            r#type: "number",
-                                                            min: "0",
-                                                            value: "{used_val}",
-                                                            oninput: move |e| {
-                                                                let val = e.value().parse::<i32>().unwrap_or(0);
-                                                                let mut items = consumed_items();
-                                                                if let Some(it) = items.get_mut(idx) {
-                                                                    it.quantity_used = Some(val);
-                                                                }
-                                                                consumed_items.set(items);
+                                        rsx! {
+                                            div { key: "{item.item_id}", class: "consumed-item-row",
+                                                span { class: "consumed-item-name", "{item_name}" }
+                                                div { class: "consumed-item-qty-wrap",
+                                                    span { class: "text-muted font-xs mr-2", "Previsto: {planned}" }
+                                                    input {
+                                                        class: "form-input qty-input",
+                                                        r#type: "number",
+                                                        min: "0",
+                                                        value: "{used_val}",
+                                                        oninput: move |e| {
+                                                            let val = e.value().parse::<i32>().unwrap_or(0);
+                                                            let mut items = consumed_items();
+                                                            if let Some(it) = items.get_mut(idx) {
+                                                                it.quantity_used = Some(val);
                                                             }
+                                                            consumed_items.set(items);
                                                         }
                                                     }
                                                 }
@@ -176,7 +201,7 @@ pub fn AppointmentStatusModal(
                     }
                 }
 
-                div { class: "modal-footer-actions",
+                div { class: "modal-footer",
                     button {
                         class: "btn-secondary",
                         onclick: move |_| { let mut o = is_open; o.set(false); },
@@ -186,6 +211,7 @@ pub fn AppointmentStatusModal(
                         class: "btn-primary",
                         disabled: is_submitting(),
                         onclick: move |e| handle_submit(e),
+                        IconCheck { size: 16, color: "currentColor".to_string() }
                         span { if is_submitting() { "Atualizando..." } else { "Confirmar Status" } }
                     }
                 }

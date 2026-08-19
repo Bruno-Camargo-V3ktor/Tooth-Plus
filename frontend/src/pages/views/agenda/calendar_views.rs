@@ -15,12 +15,15 @@ use shared::appointments::{
 
 const DEFAULT_START_HOUR: i32 = 7;
 const DEFAULT_END_HOUR: i32 = 21;
-const HOUR_HEIGHT_PX: f64 = 70.0;
+const HOUR_HEIGHT_PX: f64 = 100.0;
+const TIMELINE_TOP_PADDING: f64 = 24.0;
+const CARD_WIDTH_PX: f64 = 440.0;
+const CARD_GAP_PX: f64 = 14.0;
 
 /// Formata a data ISO (YYYY-MM-DD) para exibição com dia da semana em português.
 fn format_day_full(date_str: &str) -> String {
-    if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-        let weekday = match naive_date.weekday() {
+    if let Ok(d) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+        let weekday = match d.weekday() {
             chrono::Weekday::Mon => "Segunda-feira",
             chrono::Weekday::Tue => "Terça-feira",
             chrono::Weekday::Wed => "Quarta-feira",
@@ -29,7 +32,11 @@ fn format_day_full(date_str: &str) -> String {
             chrono::Weekday::Sat => "Sábado",
             chrono::Weekday::Sun => "Domingo",
         };
-        format!("{} • {}", naive_date.format("%d/%m/%Y"), weekday)
+        format!("{}, {} de {}", weekday, d.format("%d"), match d.month() {
+            1 => "janeiro", 2 => "fevereiro", 3 => "março", 4 => "abril",
+            5 => "maio", 6 => "junho", 7 => "julho", 8 => "agosto",
+            9 => "setembro", 10 => "outubro", 11 => "novembro", _ => "dezembro",
+        })
     } else {
         date_str.to_string()
     }
@@ -154,8 +161,9 @@ pub fn AgendaToolbar(
                         option { value: "confirmed", "Confirmado" }
                         option { value: "in_progress", "Em Atendimento" }
                         option { value: "completed", "Concluído" }
-                        option { value: "canceled", "Cancelado" }
-                        option { value: "no_show", "Faltou" }
+                        option { value: "canceled_by_doctor", "Cancelado (Doutor)" }
+                        option { value: "canceled_by_patient", "Cancelado (Paciente)" }
+                        option { value: "no_show", "Não Compareceu" }
                     }
 
                     // 3. Filtro por Tipo
@@ -192,8 +200,9 @@ struct PositionedAppointment {
     app: AppointmentResponse,
     top_px: f64,
     height_px: f64,
-    left_percent: f64,
-    width_percent: f64,
+    left_px: f64,
+    width_px: f64,
+    total_cols: usize,
 }
 
 /// Calcula o intervalo horário dinâmico (com base em 7h-21h e expandido se houver agendamentos fora do padrão).
@@ -234,6 +243,7 @@ fn compute_timeline_layout(
         app: AppointmentResponse,
         start_min: i32,
         end_min: i32,
+        real_end_min: i32,
     }
 
     let mut items: Vec<RawItem> = appointments
@@ -250,12 +260,15 @@ fn compute_timeline_layout(
             };
 
             let start_min = (h - start_hour) * 60 + m;
-            let dur = a.duration_minutes.max(15);
-            let end_min = start_min + dur;
+            let real_dur = a.duration_minutes.max(15);
+            let visual_dur = a.duration_minutes.max(50);
+            let end_min = start_min + visual_dur;
+            let real_end_min = start_min + real_dur;
             RawItem {
                 app: a.clone(),
                 start_min,
                 end_min,
+                real_end_min,
             }
         })
         .collect();
@@ -293,6 +306,7 @@ fn compute_timeline_layout(
             app: AppointmentResponse,
             start_min: i32,
             end_min: i32,
+            real_end_min: i32,
             col: usize,
         }
         let mut placed_items: Vec<Placed> = Vec::new();
@@ -321,25 +335,27 @@ fn compute_timeline_layout(
                 app: item.app,
                 start_min: item.start_min,
                 end_min: item.end_min,
+                real_end_min: item.real_end_min,
                 col,
             });
         }
 
         let total_cols = column_ends.len().max(1);
-        let col_width = 100.0 / total_cols as f64;
 
         for p in placed_items {
-            let top_px = (p.start_min as f64 * scale).max(0.0);
-            let height_px = ((p.end_min - p.start_min) as f64 * scale - 3.0).max(42.0);
-            let left_percent = p.col as f64 * col_width;
-            let width_percent = col_width - 0.5;
+            let top_px = TIMELINE_TOP_PADDING + (p.start_min as f64 * scale).max(0.0);
+            let actual_dur_px = (p.real_end_min - p.start_min) as f64 * scale;
+            let height_px = (actual_dur_px - 4.0).max(85.0);
+            let left_px = 12.0 + (p.col as f64 * (CARD_WIDTH_PX + CARD_GAP_PX));
+            let width_px = CARD_WIDTH_PX;
 
             result.push(PositionedAppointment {
                 app: p.app,
                 top_px,
                 height_px,
-                left_percent,
-                width_percent,
+                left_px,
+                width_px,
+                total_cols,
             });
         }
     }
@@ -347,12 +363,13 @@ fn compute_timeline_layout(
     result
 }
 
-/// Visualização da grade contínua proporcional no tempo com faixa horária dinâmica e cards completos.
+/// Visualização da grade contínua proporcional no tempo com layout inspirado no card de estoque.
 #[component]
 pub fn DayTimelineView(
     appointments: Vec<AppointmentResponse>,
     can_write: bool,
     can_delete: bool,
+    can_finance: bool,
     on_slot_click: EventHandler<i32>,
     on_edit: EventHandler<AppointmentResponse>,
     on_status_change: EventHandler<AppointmentResponse>,
@@ -360,20 +377,27 @@ pub fn DayTimelineView(
 ) -> Element {
     let (start_hour, end_hour) = compute_dynamic_hour_bounds(&appointments);
     let total_hours = end_hour - start_hour;
-    let total_height = (total_hours as f64) * HOUR_HEIGHT_PX;
+    let total_height = TIMELINE_TOP_PADDING + (total_hours as f64) * HOUR_HEIGHT_PX + 40.0;
 
     let positioned_apps = compute_timeline_layout(&appointments, start_hour, HOUR_HEIGHT_PX);
+    let max_cols = positioned_apps.iter().map(|p| p.total_cols).max().unwrap_or(1);
+    let min_canvas_width = 12.0 + (max_cols as f64 * (CARD_WIDTH_PX + CARD_GAP_PX)) + 24.0;
+    let min_grid_width = min_canvas_width + 85.0;
 
     rsx! {
         div { class: "timeline-calendar-wrapper",
-            div { class: "timeline-grid-body", style: "height: {total_height}px;",
-                // 1. Coluna de Horários (Gutter) Dinâmica
+            div { class: "timeline-grid-body", style: "height: {total_height}px; min-height: {total_height}px; min-width: {min_grid_width}px;",
+                // 1. Coluna de Horários (Gutter) Dinâmica com alinhamento na linha
                 div { class: "timeline-time-gutter", style: "height: {total_height}px;",
                     for h in start_hour..=end_hour {
                         {
                             let h_label = format!("{:02}:00", h);
+                            let top_pos = TIMELINE_TOP_PADDING + ((h - start_hour) as f64) * HOUR_HEIGHT_PX;
                             rsx! {
-                                div { key: "{h}", class: "timeline-gutter-hour",
+                                div {
+                                    key: "{h}",
+                                    class: "timeline-gutter-hour",
+                                    style: "top: {top_pos}px;",
                                     span { "{h_label}" }
                                 }
                             }
@@ -384,18 +408,18 @@ pub fn DayTimelineView(
                 // 2. Área do Canvas da Timeline
                 div {
                     class: "timeline-canvas-container",
-                    style: "height: {total_height}px;",
+                    style: "height: {total_height}px; min-width: {min_canvas_width}px;",
                     onclick: move |e: MouseEvent| {
                         if can_write {
                             let coords = e.element_coordinates();
                             let y = coords.y;
-                            let clicked_hour = start_hour + (y / HOUR_HEIGHT_PX).floor() as i32;
+                            let clicked_hour = start_hour + ((y - TIMELINE_TOP_PADDING).max(0.0) / HOUR_HEIGHT_PX).floor() as i32;
                             let clamped_hour = clicked_hour.clamp(start_hour, end_hour);
                             on_slot_click.call(clamped_hour);
                         }
                     },
 
-                    // Renderização de cada Agendamento Proporcional com todas as Informações
+                    // Renderização de cada Agendamento Proporcional
                     for item in positioned_apps {
                         {
                             let app = item.app.clone();
@@ -405,8 +429,10 @@ pub fn DayTimelineView(
 
                             let top_style = format!("{:.1}px", item.top_px);
                             let height_style = format!("{:.1}px", item.height_px);
-                            let left_style = format!("{:.2}%", item.left_percent);
-                            let width_style = format!("{:.2}%", item.width_percent);
+                            let left_style = format!("{:.1}px", item.left_px);
+                            let width_style = format!("{:.1}px", item.width_px);
+
+                            let single_card_class = if item.total_cols == 1 { "single-column-card" } else { "multi-column-card" };
 
                             let type_class = match app.appointment_type {
                                 AppointmentType::Consultation => "type-consultation",
@@ -417,6 +443,15 @@ pub fn DayTimelineView(
                                 AppointmentType::Other => "type-other",
                             };
 
+                            let type_tag_class = match app.appointment_type {
+                                AppointmentType::Consultation => "tag-consultation",
+                                AppointmentType::Treatment => "tag-treatment",
+                                AppointmentType::Surgery => "tag-surgery",
+                                AppointmentType::Return => "tag-return",
+                                AppointmentType::Meeting => "tag-meeting",
+                                AppointmentType::Other => "tag-other",
+                            };
+
                             let time_label = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&app.scheduled_for) {
                                 let local_dt = dt.with_timezone(&chrono::Local);
                                 let end_dt = local_dt + chrono::Duration::minutes(app.duration_minutes as i64);
@@ -425,78 +460,131 @@ pub fn DayTimelineView(
                                 format!("{} min", app.duration_minutes)
                             };
 
-                            let fin_badge = if let Some(amount_cents) = app.financial_amount_cents {
-                                let reais = amount_cents as f64 / 100.0;
-                                let prefix = if app.financial_type.as_deref().unwrap_or("income") == "income" { "+ R$" } else { "- R$" };
-                                Some(format!("{} {:.2}", prefix, reais))
+                            let fin_badge = if can_finance {
+                                if let Some(amount_cents) = app.financial_amount_cents {
+                                    let reais = amount_cents as f64 / 100.0;
+                                    let prefix = if app.financial_type.as_deref().unwrap_or("income") == "income" { "+ R$" } else { "- R$" };
+                                    Some(format!("{} {:.2}", prefix, reais))
+                                } else {
+                                    None
+                                }
                             } else {
                                 None
                             };
 
+
                             rsx! {
                                 div {
                                     key: "{app.id}",
-                                    class: "timeline-app-card {type_class}",
-                                    style: "top: {top_style}; height: {height_style}; left: {left_style}; width: {width_style};",
+                                    class: "timeline-app-card {type_class} {single_card_class}",
+                                    style: "top: {top_style}; min-height: {height_style}; left: {left_style}; width: {width_style};",
                                     onclick: move |e| e.stop_propagation(),
 
-                                    // Informações Principais (Tempo, Tipo, Título, Paciente, Doutor, Financeiro)
-                                    div { class: "timeline-card-main-info",
-                                        div { class: "timeline-card-time",
-                                            IconClock { size: 12, color: "#1e293b".to_string() }
-                                            span { "{time_label}" }
-                                        }
-
-                                        span { class: "timeline-chip-type", "{app.appointment_type.label()}" }
-
-                                        h4 { class: "timeline-card-title", "{app.title}" }
-
-                                        if let Some(ref p_name) = app.patient_name {
-                                            span { class: "timeline-chip-patient",
-                                                IconUsers { size: 11, color: "#1e40af".to_string() }
-                                                span { "{p_name}" }
+                                    // Header no Estilo do Estoque: Tags à esquerda + Ações à direita
+                                    div { class: "timeline-card-header",
+                                        div { class: "stock-badges-group",
+                                            span { class: "stock-tag {type_tag_class}", "{app.appointment_type.label()}" }
+                                            button {
+                                                class: "app-status-badge {app.status.color_class()}",
+                                                r#type: "button",
+                                                onclick: move |_| on_status_change.call(app_status.clone()),
+                                                title: "Clique para alterar status",
+                                                "{app.status.label()}"
                                             }
                                         }
 
-                                        if !app.assigned_users.is_empty() {
-                                            for user in &app.assigned_users {
-                                                span { class: "timeline-chip-doctor",
-                                                    IconTooth { size: 11, color: "#065f46".to_string() }
-                                                    span { "{user.user_name.as_deref().unwrap_or(&user.role_in_appointment)}" }
+                                        div { class: "card-header-actions",
+                                            if can_write {
+                                                button {
+                                                    class: "btn-action-icon",
+                                                    style: "width: 26px; height: 26px;",
+                                                    onclick: move |_| on_edit.call(app_edit.clone()),
+                                                    title: "Editar Agendamento",
+                                                    IconEdit { size: 13, color: "#475569".to_string() }
+                                                }
+                                            }
+                                            if can_delete {
+                                                button {
+                                                    class: "btn-action-icon btn-action-danger",
+                                                    style: "width: 26px; height: 26px;",
+                                                    onclick: move |_| on_delete.call(app_del.clone()),
+                                                    title: "Excluir Agendamento",
+                                                    IconTrash { size: 13, color: "#ef4444".to_string() }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Corpo do Card: Título, Paciente, Doutor e Pills
+                                    div { class: "timeline-card-body",
+                                        h4 { class: "timeline-card-title", "{app.title}" }
+
+                                        div { class: "timeline-card-parties",
+                                            if let Some(ref p_name) = app.patient_name {
+                                                span { class: "timeline-chip-patient",
+                                                    IconUsers { size: 12, color: "#2563eb".to_string() }
+                                                    span { "Paciente: {p_name}" }
+                                                }
+                                            }
+
+                                            if !app.assigned_users.is_empty() {
+                                                for user in &app.assigned_users {
+                                                    span { class: "timeline-chip-doctor",
+                                                        IconTooth { size: 12, color: "#059669".to_string() }
+                                                        span { "Dr(a): {user.user_name.as_deref().unwrap_or(&user.role_in_appointment)}" }
+                                                    }
                                                 }
                                             }
                                         }
 
-                                        if let Some(ref fin_text) = fin_badge {
-                                            span { class: "timeline-chip-fin", "{fin_text}" }
-                                        }
-                                    }
+                                        // Linha de Metadados / Pills (Horário, Equipamentos, Finanças)
+                                        div { class: "timeline-card-meta-row",
+                                            span { class: "timeline-meta-pill pill-time",
+                                                IconClock { size: 11, color: "#475569".to_string() }
+                                                span { "{time_label}" }
+                                            }
 
-                                    // Ações Rápidas à Direita (Status, Editar, Excluir)
-                                    div { class: "timeline-actions-wrap",
-                                        button {
-                                            class: "app-status-badge {app.status.color_class()}",
-                                            onclick: move |_| on_status_change.call(app_status.clone()),
-                                            title: "Alterar status",
-                                            "{app.status.label()}"
-                                        }
+                                            if !app.assigned_equipment.is_empty() {
+                                                span { class: "timeline-meta-pill pill-equip",
+                                                    "🛠️ "
+                                                    for (idx, eq) in app.assigned_equipment.iter().enumerate() {
+                                                        if idx > 0 { ", " }
+                                                        "{eq}"
+                                                    }
+                                                }
+                                            }
 
-                                        if can_write {
-                                            button {
-                                                class: "btn-action-icon",
-                                                style: "width: 26px; height: 26px;",
-                                                onclick: move |_| on_edit.call(app_edit.clone()),
-                                                title: "Editar Agendamento",
-                                                IconEdit { size: 13, color: "#475569".to_string() }
+                                            if let Some(ref fin_text) = fin_badge {
+                                                span { class: "timeline-meta-pill pill-fin", "{fin_text}" }
                                             }
                                         }
-                                        if can_delete {
-                                            button {
-                                                class: "btn-action-icon btn-action-danger",
-                                                style: "width: 26px; height: 26px;",
-                                                onclick: move |_| on_delete.call(app_del.clone()),
-                                                title: "Excluir Agendamento",
-                                                IconTrash { size: 13, color: "#ef4444".to_string() }
+
+                                        // Alerta de Cancelamento (pelo Doutor ou Paciente) com Observações
+                                        if app.status.is_canceled() {
+                                            div {
+                                                class: if app.status == AppointmentStatus::CanceledByDoctor {
+                                                    "timeline-cancel-alert cancel-by-doc"
+                                                } else {
+                                                    "timeline-cancel-alert cancel-by-pat"
+                                                },
+                                                strong {
+                                                    if app.status == AppointmentStatus::CanceledByDoctor {
+                                                        "⚠️ Cancelado pelo Doutor / Clínica: "
+                                                    } else {
+                                                        "⚠️ Cancelado pelo Paciente: "
+                                                    }
+                                                }
+                                                span { "{app.cancellation_reason.as_deref().unwrap_or(\"Sem observações informadas.\")}" }
+                                            }
+                                        }
+
+                                        // Observações Clínicas
+                                        if let Some(ref notes_text) = app.notes {
+                                            if !notes_text.trim().is_empty() {
+                                                p { class: "timeline-card-notes",
+                                                    span { class: "font-semibold", "📝 Obs: " }
+                                                    span { "{notes_text}" }
+                                                }
                                             }
                                         }
                                     }

@@ -83,7 +83,7 @@ pub async fn get_agenda_resources(
                 name,
                 unit AS extra_info
             FROM inventory_item
-            WHERE clinic_id = type::record($clinic_id)",
+            WHERE clinic_id = type::record($clinic_id) AND item_type != 'equipment'",
         )
         .bind(("clinic_id", clinic_rec.clone()))
         .await
@@ -99,9 +99,33 @@ pub async fn get_agenda_resources(
         })
         .collect();
 
+    let mut equip_resp = db
+        .query(
+            "SELECT
+                id,
+                name,
+                unit AS extra_info
+            FROM inventory_item
+            WHERE clinic_id = type::record($clinic_id) AND item_type = 'equipment'",
+        )
+        .bind(("clinic_id", clinic_rec.clone()))
+        .await
+        .map_err(|_| ApiError::Database("Falha ao buscar equipamentos odontológicos.".into()))?;
+
+    let equip_raw: Vec<DbResourceRecord> = equip_resp.take(0).unwrap_or_default();
+    let equipment_items = equip_raw
+        .into_iter()
+        .map(|r| AgendaResourceOption {
+            id: r.id.to_sql(),
+            name: r.name,
+            extra_info: r.extra_info,
+        })
+        .collect();
+
     Ok(HttpResponse::Ok().json(AgendaResourcesResponse {
         team_members,
         patients,
         inventory_items,
+        equipment_items,
     }))
 }

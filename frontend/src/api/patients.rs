@@ -271,3 +271,148 @@ pub async fn reset_patient_signature_password(
         })
     }
 }
+
+pub async fn fetch_anamnesis_templates(
+    token: &str,
+    clinic_id: &str,
+) -> Result<Vec<shared::anamnesis::AnamnesisTemplate>, String> {
+    let url = format!("{}/clinics/{}/anamnesis-templates", API_BASE, clinic_id);
+
+    let res = get_client()
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao buscar modelos de anamnese.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<Vec<shared::anamnesis::AnamnesisTemplate>>()
+            .await
+            .map_err(|_| "Erro ao processar modelos de anamnese.".into())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao carregar modelos de anamnese.".into()
+        } else {
+            err
+        })
+    }
+}
+
+pub async fn save_anamnesis_template(
+    token: &str,
+    req: shared::anamnesis::SaveAnamnesisTemplateRequest,
+) -> Result<shared::anamnesis::AnamnesisTemplate, String> {
+    let url = format!("{}/clinics/{}/anamnesis-templates", API_BASE, req.clinic_id);
+
+    let res = get_client()
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao salvar modelo de anamnese.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<shared::anamnesis::AnamnesisTemplate>()
+            .await
+            .map_err(|_| "Erro ao processar modelo de anamnese salvo.".into())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao salvar modelo de anamnese.".into()
+        } else {
+            err
+        })
+    }
+}
+
+pub async fn sync_patient_anamnesis(
+    token: &str,
+    patient_id: &str,
+    req: shared::anamnesis::SyncAnamnesisRequest,
+) -> Result<PatientAnamnesis, String> {
+    let clean_id = patient_id.strip_prefix("patient:").unwrap_or(patient_id);
+    let url = format!("{}/patients/{}/anamnesis/sync", API_BASE, clean_id);
+
+    let res = get_client()
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao sincronizar anamnese.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<PatientAnamnesis>()
+            .await
+            .map_err(|_| "Erro ao processar ficha de anamnese sincronizada.".into())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao sincronizar anamnese.".into()
+        } else {
+            err
+        })
+    }
+}
+
+pub async fn delete_patient_treatment(
+    token: &str,
+    patient_id: &str,
+    treatment_id: &str,
+    clinic_id: &str,
+) -> Result<(), String> {
+    let clean_p_id = patient_id.strip_prefix("patient:").unwrap_or(patient_id);
+    let clean_t_id = treatment_id.strip_prefix("patient_treatment:").unwrap_or(treatment_id);
+    let url = format!("{}/patients/{}/treatments/{}?clinic_id={}", API_BASE, clean_p_id, clean_t_id, clinic_id);
+
+    let res = get_client()
+        .delete(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao remover procedimento.".to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao remover procedimento.".into()
+        } else {
+            err
+        })
+    }
+}
+
+pub async fn delete_patient_exam(
+    token: &str,
+    patient_id: &str,
+    exam_id: &str,
+    clinic_id: &str,
+) -> Result<(), String> {
+    let clean_p_id = patient_id.strip_prefix("patient:").unwrap_or(patient_id);
+    let clean_e_id = exam_id.strip_prefix("patient_exam:").unwrap_or(exam_id);
+    let url = format!("{}/patients/{}/exams/{}?clinic_id={}", API_BASE, clean_p_id, clean_e_id, clinic_id);
+
+    let res = get_client()
+        .delete(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao remover exame.".to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao remover exame.".into()
+        } else {
+            err
+        })
+    }
+}
+
+

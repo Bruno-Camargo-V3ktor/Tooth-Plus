@@ -1,6 +1,6 @@
 //! # Modal de Cadastro de Paciente (Frontend)
 //!
-//! Modal em 2 colunas com suporte a CPF protegido, convênio, senha de assinatura
+//! Modal em 2 colunas com suporte a CPF ou RG protegidos, convênio
 //! e dados residenciais de acordo com o design system do Tooth-Plus.
 
 use crate::api::create_patient;
@@ -19,12 +19,12 @@ pub fn PatientFormModal(
 ) -> Element {
     let mut form_full_name = use_signal(String::new);
     let mut form_cpf = use_signal(String::new);
+    let mut form_rg = use_signal(String::new);
     let mut form_phone = use_signal(String::new);
     let mut form_email = use_signal(String::new);
     let mut form_birth_date = use_signal(String::new);
     let mut form_gender = use_signal(|| "Masculino".to_string());
     let mut form_insurance = use_signal(|| "Particular".to_string());
-    let mut form_sig_pwd = use_signal(String::new);
     let mut form_street = use_signal(String::new);
     let mut form_num_comp = use_signal(String::new);
 
@@ -38,11 +38,18 @@ pub fn PatientFormModal(
 
         let full_name = form_full_name().trim().to_string();
         let cpf = form_cpf().trim().to_string();
+        let rg = form_rg().trim().to_string();
         let phone = form_phone().trim().to_string();
 
-        if full_name.is_empty() || cpf.is_empty() || phone.is_empty() {
+        if full_name.is_empty() || phone.is_empty() {
             let mut err = error_toast;
-            err.set(Some("Preencha Nome, CPF e WhatsApp / Celular.".into()));
+            err.set(Some("Preencha o Nome Completo e WhatsApp / Celular.".into()));
+            return;
+        }
+
+        if cpf.is_empty() && rg.is_empty() {
+            let mut err = error_toast;
+            err.set(Some("É obrigatório informar ao menos um documento de identificação (CPF ou RG).".into()));
             return;
         }
 
@@ -58,8 +65,9 @@ pub fn PatientFormModal(
         let req = CreatePatientRequest {
             clinic_id: cid.clone(),
             full_name,
-            document_cpf: cpf,
-            document_rg: None,
+            document_cpf: if cpf.is_empty() { None } else { Some(cpf) },
+            document_rg: if rg.is_empty() { None } else { Some(rg) },
+            legal_guardians: None,
             legal_guardian_name: None,
             legal_guardian_cpf: None,
             phone,
@@ -79,7 +87,6 @@ pub fn PatientFormModal(
             address_zip: None,
             insurance_plan: if form_insurance().trim().is_empty() { None } else { Some(form_insurance().trim().to_string()) },
             insurance_number: None,
-            signature_password: if form_sig_pwd().trim().is_empty() { None } else { Some(form_sig_pwd().trim().to_string()) },
         };
 
         let t = tok.clone();
@@ -112,7 +119,7 @@ pub fn PatientFormModal(
                     div {
                         h2 { class: "settings-title", "Cadastrar Novo Paciente" }
                         p { class: "text-muted font-xs mt-1",
-                            "Preencha os dados do paciente. O CPF será armazenado com criptografia determinística."
+                            "Preencha os dados do paciente. Os documentos serão protegidos e a senha de assinatura será definida pelo próprio paciente no primeiro acesso ao portal."
                         }
                     }
                     button {
@@ -127,20 +134,21 @@ pub fn PatientFormModal(
 
                 form { onsubmit: move |e| handle_submit(e),
                     div { class: "settings-content",
-                        // Grid de 2 Colunas
                         div { class: "form-grid-2",
-                            // Linha 1: Nome Completo | CPF
-                            div { class: "form-group",
+                            // Linha 1: Nome Completo (full width)
+                            div { class: "form-group full-width", style: "grid-column: 1 / -1;",
                                 label { "Nome Completo *" }
                                 input {
                                     class: "form-input",
-                                    placeholder: "Nome do paciente",
+                                    placeholder: "Nome completo do paciente",
                                     value: "{form_full_name}",
                                     oninput: move |e| form_full_name.set(e.value())
                                 }
                             }
+
+                            // Linha 2: CPF | RG (pelo menos um)
                             div { class: "form-group",
-                                label { "CPF *" }
+                                label { "CPF (Obrigatório se não tiver RG)" }
                                 input {
                                     class: "form-input",
                                     placeholder: "000.000.000-00",
@@ -148,8 +156,17 @@ pub fn PatientFormModal(
                                     oninput: move |e| form_cpf.set(e.value())
                                 }
                             }
+                            div { class: "form-group",
+                                label { "RG (Registro Geral)" }
+                                input {
+                                    class: "form-input",
+                                    placeholder: "00.000.000-0",
+                                    value: "{form_rg}",
+                                    oninput: move |e| form_rg.set(e.value())
+                                }
+                            }
 
-                            // Linha 2: WhatsApp / Celular | E-mail
+                            // Linha 3: WhatsApp / Celular | E-mail
                             div { class: "form-group",
                                 label { "WhatsApp / Celular *" }
                                 input {
@@ -170,7 +187,7 @@ pub fn PatientFormModal(
                                 }
                             }
 
-                            // Linha 3: Data de Nascimento | Sexo
+                            // Linha 4: Data de Nascimento | Sexo
                             div { class: "form-group",
                                 label { "Data de Nascimento" }
                                 input {
@@ -192,8 +209,8 @@ pub fn PatientFormModal(
                                 }
                             }
 
-                            // Linha 4: Plano / Convênio | Senha de Assinatura
-                            div { class: "form-group",
+                            // Linha 5: Plano / Convênio
+                            div { class: "form-group full-width", style: "grid-column: 1 / -1;",
                                 label { "Plano / Convênio" }
                                 select {
                                     class: "form-input",
@@ -209,18 +226,8 @@ pub fn PatientFormModal(
                                     option { value: "Outro Convênio", "Outro Convênio" }
                                 }
                             }
-                            div { class: "form-group",
-                                label { "Senha de Assinatura Digital do Paciente" }
-                                input {
-                                    class: "form-input",
-                                    r#type: "password",
-                                    placeholder: "Defina uma senha para o paciente assinar...",
-                                    value: "{form_sig_pwd}",
-                                    oninput: move |e| form_sig_pwd.set(e.value())
-                                }
-                            }
 
-                            // Linha 5: Endereço (Rua/Av) | Número / Complemento
+                            // Linha 6: Endereço (Rua/Av) | Número / Complemento
                             div { class: "form-group",
                                 label { "Endereço (Rua/Av)" }
                                 input {
@@ -264,3 +271,4 @@ pub fn PatientFormModal(
         }
     }
 }
+

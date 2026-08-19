@@ -5,6 +5,18 @@
 //! histórico de procedimentos e tratamentos clínicos.
 
 use serde::{Deserialize, Serialize};
+use crate::anamnesis::AnamnesisResponseItem;
+
+/// Responsável legal pelo paciente (obrigatório para menores de 18 anos ou incapazes).
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
+pub struct PatientGuardian {
+    pub name: String,
+    pub document_cpf: Option<String>,
+    pub document_rg: Option<String>,
+    pub relationship: String, // "Pai", "Mãe", "Tutor Legal", "Avô/Avó", "Outro"
+    pub phone: String,
+    pub email: Option<String>,
+}
 
 /// Representação completa de um paciente cadastrado na clínica.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -15,13 +27,15 @@ pub struct Patient {
     pub clinic_id: String,
     /// Nome completo do paciente.
     pub full_name: String,
-    /// CPF descriptografado para exibição autorizada.
-    pub document_cpf: String,
+    /// CPF descriptografado / mascarado para exibição autorizada.
+    pub document_cpf: Option<String>,
     /// Registro Geral (RG), alternativo ou complementar ao CPF.
     pub document_rg: Option<String>,
-    /// Nome do responsável legal (para menores ou incapazes).
+    /// Lista de responsáveis legais cadastrados (especialmente para menores).
+    pub legal_guardians: Vec<PatientGuardian>,
+    /// Nome do responsável legal legado.
     pub legal_guardian_name: Option<String>,
-    /// CPF do responsável legal.
+    /// CPF do responsável legal legado.
     pub legal_guardian_cpf: Option<String>,
     /// Telefone principal / WhatsApp para contato e disparo de OTP.
     pub phone: String,
@@ -70,8 +84,9 @@ pub struct Patient {
 pub struct CreatePatientRequest {
     pub clinic_id: String,
     pub full_name: String,
-    pub document_cpf: String,
+    pub document_cpf: Option<String>,
     pub document_rg: Option<String>,
+    pub legal_guardians: Option<Vec<PatientGuardian>>,
     pub legal_guardian_name: Option<String>,
     pub legal_guardian_cpf: Option<String>,
     pub phone: String,
@@ -91,7 +106,6 @@ pub struct CreatePatientRequest {
     pub address_zip: Option<String>,
     pub insurance_plan: Option<String>,
     pub insurance_number: Option<String>,
-    pub signature_password: Option<String>,
 }
 
 /// Requisição para atualização cadastral do paciente.
@@ -99,8 +113,9 @@ pub struct CreatePatientRequest {
 pub struct UpdatePatientRequest {
     pub clinic_id: String,
     pub full_name: String,
-    pub document_cpf: String,
+    pub document_cpf: Option<String>,
     pub document_rg: Option<String>,
+    pub legal_guardians: Option<Vec<PatientGuardian>>,
     pub legal_guardian_name: Option<String>,
     pub legal_guardian_cpf: Option<String>,
     pub phone: String,
@@ -120,7 +135,6 @@ pub struct UpdatePatientRequest {
     pub address_zip: Option<String>,
     pub insurance_plan: Option<String>,
     pub insurance_number: Option<String>,
-    pub new_signature_password: Option<String>,
 }
 
 /// Ficha médica e histórico de saúde (Anamnese Odontológica).
@@ -129,6 +143,8 @@ pub struct PatientAnamnesis {
     pub id: Option<String>,
     pub patient_id: String,
     pub clinic_id: String,
+    pub template_type: Option<String>,
+    pub custom_responses: Vec<AnamnesisResponseItem>,
     pub allergies: Vec<String>,
     pub continuous_medications: Option<String>,
     pub systemic_diseases: Vec<String>,
@@ -145,6 +161,8 @@ pub struct PatientAnamnesis {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct SaveAnamnesisRequest {
     pub clinic_id: String,
+    pub template_type: Option<String>,
+    pub custom_responses: Option<Vec<AnamnesisResponseItem>>,
     pub allergies: Vec<String>,
     pub continuous_medications: Option<String>,
     pub systemic_diseases: Vec<String>,
@@ -186,7 +204,7 @@ pub struct CreatePatientExamRequest {
     pub clinical_interpretation: Option<String>,
 }
 
-/// Procedimento ou tratamento odontológico registrado no prontuário/odontograma.
+/// Procedimento ou evolução odontológica registrada no prontuário.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PatientTreatment {
     pub id: String,
@@ -195,25 +213,39 @@ pub struct PatientTreatment {
     pub dentist_user_id: Option<String>,
     pub dentist_user_name: Option<String>,
     pub appointment_id: Option<String>,
+    pub document_id: Option<String>,
+    pub exam_id: Option<String>,
+    pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,
+    pub surfaces: Option<Vec<String>>,
+    pub materials_used: Option<Vec<String>>,
     pub status: String,
     pub cost_cents: i64,
+    pub post_care_instructions: Option<String>,
     pub clinical_notes: Option<String>,
+    pub performed_at: Option<String>,
     pub created_at: String,
 }
 
-/// Requisição para cadastrar um novo procedimento odontológico.
+/// Requisição para cadastrar um novo procedimento odontológico / evolução.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CreatePatientTreatmentRequest {
     pub clinic_id: String,
     pub dentist_user_id: Option<String>,
     pub appointment_id: Option<String>,
+    pub document_id: Option<String>,
+    pub exam_id: Option<String>,
+    pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,
+    pub surfaces: Option<Vec<String>>,
+    pub materials_used: Option<Vec<String>>,
     pub status: String,
     pub cost_cents: i64,
+    pub post_care_instructions: Option<String>,
     pub clinical_notes: Option<String>,
+    pub performed_at: Option<String>,
 }
 
 /// Indicadores quantitativos (KPIs) exibidos no topo da listagem de pacientes.
@@ -242,3 +274,4 @@ pub struct PatientDetailsResponse {
     pub treatments: Vec<PatientTreatment>,
     pub documents: Vec<crate::documents::PatientDocument>,
 }
+

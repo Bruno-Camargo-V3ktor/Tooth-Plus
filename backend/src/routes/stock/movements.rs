@@ -50,16 +50,10 @@ pub async fn create_stock_movement(
     let auth_rec_id = parse_record_id("user", &auth.id);
 
     let query = "
-        BEGIN TRANSACTION;
-
-        LET $item = (SELECT * FROM $item_id);
-        IF $item[0] == NONE {
-            THROW 'Item de estoque não encontrado.';
-        };
-
-        UPDATE $item_id SET
+        UPDATE inventory_item SET
             current_stock = current_stock + $qty_change,
-            updated_at = time::now();
+            updated_at = time::now()
+        WHERE id = $item_id;
 
         CREATE stock_movement CONTENT {
             item_id: $item_id,
@@ -72,13 +66,11 @@ pub async fn create_stock_movement(
             notes: $notes,
             created_at: time::now()
         };
-
-        COMMIT TRANSACTION;
     ";
 
     let mut res = db
         .query(query)
-        .bind(("item_id", item_rec_id.clone()))
+        .bind(("item_id", item_rec_id))
         .bind(("cid", clinic_rec_id))
         .bind(("uid", auth_rec_id))
         .bind(("qty_change", req.quantity_change))
@@ -91,13 +83,15 @@ pub async fn create_stock_movement(
             ApiError::Internal(format!("Erro ao registrar movimentação de estoque: {}", e))
         })?;
 
-    let created: Option<DbStockMovementRow> = res.take(3).map_err(|e| {
-        ApiError::Internal(format!("Erro ao ler comprovante de movimentação: {}", e))
-    })?;
+
+
+
+    let created: Option<DbStockMovementRow> = res.take(1).unwrap_or(None);
 
     let Some(mov) = created else {
         return Ok(HttpResponse::Ok().body("Movimentação registrada com sucesso."));
     };
+
 
     Ok(HttpResponse::Created().json(shared::stock::StockMovement {
         id: mov.id.to_sql(),

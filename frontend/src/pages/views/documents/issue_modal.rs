@@ -212,7 +212,12 @@ pub fn IssueDocumentModal(
                                 },
                                 option { value: "", "Selecione o paciente..." }
                                 for p in &patients {
-                                    option { value: "{p.id}", "{p.full_name} ({p.document_cpf})" }
+                                    {
+                                        let doc_lbl = p.document_cpf.as_deref().unwrap_or(p.document_rg.as_deref().unwrap_or("-"));
+                                        rsx! {
+                                            option { value: "{p.id}", "{p.full_name} ({doc_lbl})" }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -266,9 +271,10 @@ pub fn IssueDocumentModal(
                                 span { class: "patient-autofill-val", "{p.full_name}" }
                             }
                             div { class: "patient-autofill-item",
-                                span { class: "patient-autofill-label", "CPF Protegido" }
-                                span { class: "patient-autofill-val", "{p.document_cpf}" }
+                                span { class: "patient-autofill-label", "Documento" }
+                                span { class: "patient-autofill-val", "{p.document_cpf.as_deref().unwrap_or(p.document_rg.as_deref().unwrap_or(\"-\"))}" }
                             }
+
                             div { class: "patient-autofill-item",
                                 span { class: "patient-autofill-label", "Telefone" }
                                 span { class: "patient-autofill-val", "{p.phone}" }

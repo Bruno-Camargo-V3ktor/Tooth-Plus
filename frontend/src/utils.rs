@@ -96,7 +96,7 @@ pub fn replace_template_variables(
 
     if let Some(p) = patient {
         let p_name = &p.full_name;
-        let p_cpf = &p.document_cpf;
+        let p_cpf = p.document_cpf.as_deref().unwrap_or(p.document_rg.as_deref().unwrap_or("Não informado"));
         let p_phone = &p.phone;
         let p_email = p.email.as_deref().unwrap_or("Não informado");
         let p_insurance = p.insurance_plan.as_deref().unwrap_or("Particular");

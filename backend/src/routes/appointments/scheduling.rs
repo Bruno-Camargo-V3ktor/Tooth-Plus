@@ -62,6 +62,8 @@ pub async fn list_appointments(
             appointment_type,
             financial_amount_cents,
             financial_type,
+            room,
+            notes,
             cancellation_reason
         FROM appointment
         WHERE clinic_id = type::record($clinic_id)",
@@ -101,6 +103,13 @@ pub async fn list_appointments(
 
     let db_appointments: Vec<DbAppointmentRecord> = response.take(0).unwrap_or_default();
     let mut results: Vec<AppointmentResponse> = Vec::new();
+
+    let can_finance = check_permission(&db, &auth.id, &clinic_rec, "appointments:finance")
+        .await
+        .unwrap_or(false)
+        || check_permission(&db, &auth.id, &clinic_rec, "agenda:finance")
+            .await
+            .unwrap_or(false);
 
     for app in db_appointments {
         let app_rec_str = app.id.to_sql();
@@ -149,6 +158,22 @@ pub async fn list_appointments(
 
         let db_consumed: Vec<DbConsumedRecord> = consumed_resp.take(0).unwrap_or_default();
 
+        #[derive(Deserialize, Debug, SurrealValue)]
+        struct EquipRow {
+            name: Option<String>,
+        }
+
+        let mut equip_resp = db
+            .query(
+                "SELECT out.name AS name FROM uses_equipment WHERE in = type::record($app_id)",
+            )
+            .bind(("app_id", app_rec_str.clone()))
+            .await
+            .map_err(|_| ApiError::Database("Falha ao buscar equipamentos do agendamento.".into()))?;
+
+        let db_equip: Vec<EquipRow> = equip_resp.take(0).unwrap_or_default();
+        let assigned_equipment: Vec<String> = db_equip.into_iter().filter_map(|e| e.name).collect();
+
         results.push(AppointmentResponse {
             id: app.id.key.to_sql(),
             clinic_id: app.clinic_id.to_sql(),
@@ -159,8 +184,9 @@ pub async fn list_appointments(
             duration_minutes: app.duration_minutes,
             status: parse_status(&app.status),
             appointment_type: parse_type(&app.appointment_type),
-            financial_amount_cents: app.financial_amount_cents,
-            financial_type: app.financial_type,
+            financial_amount_cents: if can_finance { app.financial_amount_cents } else { None },
+            financial_type: if can_finance { app.financial_type } else { None },
+            notes: app.notes,
             cancellation_reason: app.cancellation_reason,
             assigned_users: db_assigned
                 .into_iter()
@@ -168,7 +194,7 @@ pub async fn list_appointments(
                     user_id: a.user_id.to_sql(),
                     user_name: a.user_name,
                     role_in_appointment: a.role_in_appointment,
-                    split_percentage: a.split_percentage,
+                    split_percentage: if can_finance { a.split_percentage } else { 0 },
                 })
                 .collect(),
             consumed_items: db_consumed
@@ -180,8 +206,10 @@ pub async fn list_appointments(
                     quantity_used: c.quantity_used,
                 })
                 .collect(),
+            assigned_equipment,
         });
     }
+
 
     Ok(HttpResponse::Ok().json(results))
 }
@@ -208,6 +236,19 @@ pub async fn create_appointment(
         ));
     }
 
+    let can_finance = check_permission(&db, &auth.id, &clinic_rec, "appointments:finance")
+        .await
+        .unwrap_or(false)
+        || check_permission(&db, &auth.id, &clinic_rec, "agenda:finance")
+            .await
+            .unwrap_or(false);
+
+    let (fin_amount, fin_type) = if can_finance {
+        (data.financial_amount_cents, data.financial_type)
+    } else {
+        (None, None)
+    };
+
     if data.assigned_users.is_empty() {
         return Err(ApiError::BadRequest(
             "Vincule ao menos um profissional responsável ao agendamento.".into(),
@@ -232,33 +273,38 @@ pub async fn create_appointment(
                 status                 = 'pending',
                 appointment_type       = $appointment_type,
                 financial_amount_cents = $financial_amount,
-                financial_type         = $financial_type
+                financial_type         = $financial_type,
+                notes                  = $notes
             RETURN id",
         )
-        .bind(("clinic_id", clinic_rec))
+        .bind(("clinic_id", clinic_rec.clone()))
         .bind(("patient_id", patient_rec))
         .bind(("patient_name", data.patient_name))
         .bind(("title", data.title))
         .bind(("scheduled_for", parsed_dt))
         .bind(("duration_minutes", data.duration_minutes))
         .bind(("appointment_type", type_to_str(&data.appointment_type)))
-        .bind(("financial_amount", data.financial_amount_cents))
-        .bind(("financial_type", data.financial_type))
+        .bind(("financial_amount", fin_amount))
+        .bind(("financial_type", fin_type))
+        .bind(("notes", data.notes))
         .await
-        .map_err(|_| ApiError::Database("Falha ao criar agendamento.".into()))?;
+        .map_err(|e| ApiError::Database(format!("Falha ao criar agendamento: {}", e)))?;
 
     #[derive(Deserialize, SurrealValue)]
     struct CreatedId {
         id: RecordId,
     }
 
-    let created: Option<CreatedId> = create_resp.take(0).unwrap_or(None);
+    let created: Vec<CreatedId> = create_resp.take(0).unwrap_or_default();
     let new_app_id = created
-        .ok_or_else(|| ApiError::Database("Agendamento não retornou ID.".into()))?
-        .id;
+        .into_iter()
+        .next()
+        .map(|c| c.id)
+        .ok_or_else(|| ApiError::Database("Agendamento não retornou ID.".into()))?;
 
     for u in &data.assigned_users {
         let u_rec = parse_record_id("user", &u.user_id);
+        let split_val = if can_finance { u.split_percentage } else { 100 };
         db.query(
             "RELATE $app_id->assigned_to->$user_id SET
                 role_in_appointment = $role,
@@ -267,7 +313,7 @@ pub async fn create_appointment(
         .bind(("app_id", new_app_id.clone()))
         .bind(("user_id", u_rec))
         .bind(("role", u.role_in_appointment.clone()))
-        .bind(("split", u.split_percentage))
+        .bind(("split", split_val))
         .await
         .map_err(|_| ApiError::Database("Falha ao vincular profissional ao agendamento.".into()))?;
     }
@@ -286,7 +332,19 @@ pub async fn create_appointment(
         .map_err(|_| ApiError::Database("Falha ao associar item de estoque.".into()))?;
     }
 
+    if let Some(ref equip_list) = data.assigned_equipment {
+        for equip_id in equip_list {
+            let equip_rec = parse_record_id("inventory_item", equip_id);
+            db.query("RELATE $app_id->uses_equipment->$equip_id")
+                .bind(("app_id", new_app_id.clone()))
+                .bind(("equip_id", equip_rec))
+                .await
+                .map_err(|_| ApiError::Database("Falha ao alocar equipamento.".into()))?;
+        }
+    }
+
     Ok(HttpResponse::Created().json(serde_json::json!({
+        "status": "success",
         "id": new_app_id.key.to_sql(),
         "message": "Agendamento criado com sucesso."
     })))
@@ -315,6 +373,13 @@ pub async fn update_appointment(
     {
         return Err(ApiError::Forbidden("Sem privilégios de edição.".into()));
     }
+
+    let can_finance = check_permission(&db, &auth.id, &clinic_rec, "appointments:finance")
+        .await
+        .unwrap_or(false)
+        || check_permission(&db, &auth.id, &clinic_rec, "agenda:finance")
+            .await
+            .unwrap_or(false);
 
     let mut patch = serde_json::Map::new();
 
@@ -360,18 +425,24 @@ pub async fn update_appointment(
         );
     }
 
-    if let Some(amt) = data.financial_amount_cents {
-        patch.insert(
-            "financial_amount_cents".into(),
-            serde_json::Value::Number(amt.into()),
-        );
+    if can_finance {
+        if let Some(amt) = data.financial_amount_cents {
+            patch.insert(
+                "financial_amount_cents".into(),
+                serde_json::Value::Number(amt.into()),
+            );
+        }
+
+        if let Some(ref ft) = data.financial_type {
+            patch.insert(
+                "financial_type".into(),
+                serde_json::Value::String(ft.clone()),
+            );
+        }
     }
 
-    if let Some(ref ft) = data.financial_type {
-        patch.insert(
-            "financial_type".into(),
-            serde_json::Value::String(ft.clone()),
-        );
+    if let Some(ref nt) = data.notes {
+        patch.insert("notes".into(), serde_json::Value::String(nt.clone()));
     }
 
     if !patch.is_empty() {
@@ -382,8 +453,9 @@ pub async fn update_appointment(
             .map_err(|_| ApiError::Database("Falha ao atualizar dados do agendamento.".into()))?;
     }
 
+    let app_rec_id = parse_record_id("appointment", &app_id);
+
     if let Some(ref assigned_users) = data.assigned_users {
-        let app_rec_id = parse_record_id("appointment", &app_id);
         db.query("DELETE assigned_to WHERE in = $app_id")
             .bind(("app_id", app_rec_id.clone()))
             .await
@@ -391,6 +463,7 @@ pub async fn update_appointment(
 
         for u in assigned_users {
             let u_rec = parse_record_id("user", &u.user_id);
+            let split_val = if can_finance { u.split_percentage } else { 100 };
             db.query(
                 "RELATE $app_id->assigned_to->$user_id SET
                     role_in_appointment = $role,
@@ -399,14 +472,13 @@ pub async fn update_appointment(
             .bind(("app_id", app_rec_id.clone()))
             .bind(("user_id", u_rec))
             .bind(("role", u.role_in_appointment.clone()))
-            .bind(("split", u.split_percentage))
+            .bind(("split", split_val))
             .await
             .map_err(|_| ApiError::Database("Falha ao vincular membros.".into()))?;
         }
     }
 
     if let Some(ref consumed_items) = data.consumed_items {
-        let app_rec_id = parse_record_id("appointment", &app_id);
         db.query("DELETE consumes WHERE in = $app_id")
             .bind(("app_id", app_rec_id.clone()))
             .await
@@ -428,6 +500,22 @@ pub async fn update_appointment(
         }
     }
 
+    if let Some(ref equip_list) = data.assigned_equipment {
+        db.query("DELETE uses_equipment WHERE in = $app_id")
+            .bind(("app_id", app_rec_id.clone()))
+            .await
+            .map_err(|_| ApiError::Database("Falha ao atualizar equipamentos.".into()))?;
+
+        for equip_id in equip_list {
+            let equip_rec = parse_record_id("inventory_item", equip_id);
+            db.query("RELATE $app_id->uses_equipment->$equip_id")
+                .bind(("app_id", app_rec_id.clone()))
+                .bind(("equip_id", equip_rec))
+                .await
+                .map_err(|_| ApiError::Database("Falha ao associar equipamento.".into()))?;
+        }
+    }
+
     Ok(HttpResponse::Ok().json("Agendamento atualizado com sucesso."))
 }
 
@@ -446,9 +534,6 @@ pub async fn delete_appointment(
     if !check_permission(&db, &auth.id, &clinic_rec, "appointments:delete")
         .await
         .unwrap_or(false)
-        && !check_permission(&db, &auth.id, &clinic_rec, "appointments:write")
-            .await
-            .unwrap_or(false)
         && !check_permission(&db, &auth.id, &clinic_rec, "agenda:delete")
             .await
             .unwrap_or(false)
@@ -457,6 +542,7 @@ pub async fn delete_appointment(
             "Sem privilégios para excluir agendamentos.".into(),
         ));
     }
+
 
     db.query("DELETE assigned_to WHERE in = type::record($app_id)")
         .bind(("app_id", app_rec.clone()))
@@ -467,6 +553,11 @@ pub async fn delete_appointment(
         .bind(("app_id", app_rec.clone()))
         .await
         .map_err(|_| ApiError::Database("Falha ao remover vínculos de estoque.".into()))?;
+
+    db.query("DELETE uses_equipment WHERE in = type::record($app_id)")
+        .bind(("app_id", app_rec.clone()))
+        .await
+        .map_err(|_| ApiError::Database("Falha ao remover vínculos de equipamentos.".into()))?;
 
     db.query("DELETE type::record($app_id)")
         .bind(("app_id", app_rec))

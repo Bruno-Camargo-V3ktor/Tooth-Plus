@@ -7,10 +7,16 @@ use super::{clinic_record_id, parse_record_id, DbExamRow};
 use crate::db::Db;
 use crate::error::ApiError;
 use crate::security::auth_guard::{check_permission, AuthenticatedUser};
-use actix_web::{post, web, HttpResponse};
+use actix_web::{delete, post, web, HttpResponse};
 use chrono::Utc;
 use shared::patients::{CreatePatientExamRequest, PatientExam};
 use surrealdb::types::ToSql;
+
+/// Query para exclusão de exame
+#[derive(serde::Deserialize)]
+pub struct DeleteExamQuery {
+    pub clinic_id: String,
+}
 
 /// Registra um exame ou fotos no prontuário do paciente com URLs dos arquivos anexados.
 #[post("/patients/{id}/exams")]
@@ -24,7 +30,7 @@ pub async fn create_exam(
     let data = req.into_inner();
     let clinic_str = clinic_record_id(&data.clinic_id);
 
-    if !check_permission(&db, &auth.id, &clinic_str, "patients:write")
+    if !check_permission(&db, &auth.id, &clinic_str, "exams:upload")
         .await
         .unwrap_or(false)
     {
@@ -86,3 +92,36 @@ pub async fn create_exam(
         created_at: e.created_at.to_rfc3339(),
     }))
 }
+
+/// Exclui um exame anexado ao prontuário.
+#[delete("/patients/{id}/exams/{exam_id}")]
+pub async fn delete_exam(
+    auth: AuthenticatedUser,
+    path: web::Path<(String, String)>,
+    query: web::Query<DeleteExamQuery>,
+    db: web::Data<Db>,
+) -> Result<HttpResponse, ApiError> {
+    let (_pat_id, exam_id) = path.into_inner();
+    let clinic_str = clinic_record_id(&query.clinic_id);
+
+    if !check_permission(&db, &auth.id, &clinic_str, "exams:delete")
+        .await
+        .unwrap_or(false)
+    {
+        return Err(ApiError::Forbidden(
+            "Sem permissão para remover exames do paciente.".into(),
+        ));
+    }
+
+    let exam_rec = parse_record_id("patient_exam", &exam_id);
+
+    db.query("DELETE type::record($eid);")
+        .bind(("eid", exam_rec))
+        .await
+        .map_err(|e| ApiError::Database(format!("Erro ao excluir exame: {}", e)))?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "message": "Exame excluído com sucesso."
+    })))
+}
+

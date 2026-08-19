@@ -5,8 +5,8 @@
 
 use crate::api::delete_patient;
 use crate::components::icons::{
-    IconCheckCircle, IconEdit, IconFolder, IconLock, IconRefresh, IconSearch, IconTooth, IconTrash,
-    IconUsers,
+    IconCheckCircle, IconEdit, IconFolder, IconHeartPulse, IconLock, IconRefresh, IconSearch,
+    IconTooth, IconTrash, IconUsers,
 };
 use dioxus::prelude::*;
 use shared::patients::{Patient, PatientKpis};
@@ -43,10 +43,12 @@ pub fn PatientListSection(
     reload_trigger: Signal<usize>,
     can_write: bool,
     can_delete: bool,
+    can_manage_templates: bool,
     token: String,
     clinic_id: String,
     on_select_patient: EventHandler<String>,
     on_open_create_modal: EventHandler<()>,
+    on_open_templates_modal: EventHandler<()>,
     toast_msg: Signal<Option<String>>,
     error_toast: Signal<Option<String>>,
 ) -> Element {
@@ -169,6 +171,15 @@ pub fn PatientListSection(
                         IconRefresh { size: 16, color: "#475569".to_string() }
                     }
 
+                    if can_manage_templates {
+                        button {
+                            class: "btn-secondary",
+                            onclick: move |_| on_open_templates_modal.call(()),
+                            IconHeartPulse { size: 16, color: "currentColor".to_string() }
+                            span { " Modelos de Anamnese" }
+                        }
+                    }
+
                     if can_write {
                         button {
                             class: "btn-primary",
@@ -219,7 +230,7 @@ pub fn PatientListSection(
                         thead {
                             tr {
                                 th { "PACIENTE" }
-                                th { "CPF (PROTEGIDO)" }
+                                th { "DOCUMENTO (CPF / RG)" }
                                 th { "TELEFONE / WHATSAPP" }
                                 th { "PLANO / CONVÊNIO" }
                                 th { "CADASTRO" }
@@ -240,6 +251,14 @@ pub fn PatientListSection(
                                     let clean_phone: String = pat.phone.chars().filter(|c| c.is_ascii_digit()).collect();
                                     let wa_url = format!("https://wa.me/55{}", clean_phone);
 
+                                    let doc_display = if let Some(ref cpf) = pat.document_cpf {
+                                        format!("CPF: {}", cpf)
+                                    } else if let Some(ref rg) = pat.document_rg {
+                                        format!("RG: {}", rg)
+                                    } else {
+                                        "Não informado".to_string()
+                                    };
+
                                     rsx! {
                                         tr { key: "{pat.id}",
                                             td {
@@ -256,7 +275,7 @@ pub fn PatientListSection(
                                             td {
                                                 span { class: "cpf-protected-pill",
                                                     IconLock { size: 12, color: "#64748b".to_string() }
-                                                    span { "{pat.document_cpf}" }
+                                                    span { "{doc_display}" }
                                                 }
                                             }
                                             td {
@@ -334,3 +353,4 @@ pub fn PatientListSection(
         }
     }
 }
+

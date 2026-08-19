@@ -86,18 +86,23 @@ pub async fn create_user(
     let encrypted_cpf =
         encrypt_deterministic(&data.document_cpf).map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    #[derive(Deserialize, Debug, SurrealValue)]
+    struct DbCreatedUser {
+        id: RecordId,
+    }
+
     let mut create_resp = db
         .query(
-            "CREATE user SET
-                username              = $username,
-                password_hash         = $password_hash,
-                full_name             = $full_name,
-                email                 = $email,
-                phone                 = $phone,
-                document_cpf          = $document_cpf,
-                professional_registry = $professional_registry,
-                is_active             = true
-            RETURN id",
+            "CREATE user CONTENT {
+                username: $username,
+                password_hash: $password_hash,
+                full_name: $full_name,
+                email: $email,
+                phone: $phone,
+                document_cpf: $document_cpf,
+                professional_registry: $professional_registry,
+                is_active: true
+            }",
         )
         .bind(("username", data.username.clone()))
         .bind(("password_hash", hashed_password))
@@ -107,17 +112,19 @@ pub async fn create_user(
         .bind(("document_cpf", encrypted_cpf))
         .bind(("professional_registry", data.professional_registry.clone()))
         .await
-        .map_err(|_| ApiError::Database("Falha ao criar usuário.".into()))?;
+        .map_err(|e| ApiError::Database(format!("Falha ao criar usuário: {}", e)))?;
 
-    #[derive(Deserialize, SurrealValue)]
-    struct CreatedId {
-        id: RecordId,
-    }
+    let created: Option<DbCreatedUser> = create_resp
+        .take(0)
+        .map_err(|e| ApiError::Database(format!("Falha ao decodificar usuário criado: {}", e)))?;
 
-    let created: Option<CreatedId> = create_resp.take(0).unwrap_or(None);
-    let new_user_id = created
-        .ok_or_else(|| ApiError::Database("Usuário não retornou ID após criação.".into()))?
-        .id;
+    let Some(created_user) = created else {
+        return Err(ApiError::Database(
+            "Usuário não retornou registro após criação.".into(),
+        ));
+    };
+
+    let new_user_id = created_user.id;
 
     for clinic_id in &data.clinic_ids {
         let clinic_rec = parse_record_id("clinic", clinic_id);

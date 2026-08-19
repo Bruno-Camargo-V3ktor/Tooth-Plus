@@ -1,3 +1,4 @@
+pub mod anamnesis;
 pub mod appointments;
 pub mod auth;
 pub mod clinics;

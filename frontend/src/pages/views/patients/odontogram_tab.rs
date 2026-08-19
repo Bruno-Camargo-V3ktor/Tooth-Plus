@@ -1,10 +1,11 @@
 //! # Aba de Histórico de Procedimentos e Tratamentos Odontológicos (Frontend)
 //!
 //! Controla os procedimentos realizados, planejados ou em andamento,
-//! com registro de dente/região, valores e observações clínicas.
+//! com registro de dente/região, superfícies, materiais, orientações pós-operatórias,
+//! vínculos com agendamento/documento/exame e observações clínicas.
 
-use crate::api::create_patient_treatment;
-use crate::components::icons::IconTooth;
+use crate::api::{create_patient_treatment, delete_patient_treatment};
+use crate::components::icons::{IconTooth, IconTrash};
 use dioxus::prelude::*;
 use shared::patients::{CreatePatientTreatmentRequest, PatientTreatment};
 
@@ -23,16 +24,27 @@ pub fn PatientOdontogramTab(
     token: String,
     treatments: Vec<PatientTreatment>,
     can_write: bool,
+    can_delete: bool,
     reload_patient_details: EventHandler<()>,
     toast_msg: Signal<Option<String>>,
     error_toast: Signal<Option<String>>,
 ) -> Element {
     let mut is_add_modal_open = use_signal(|| false);
+    let mut delete_target_id = use_signal(|| None::<(String, String)>);
+    let mut is_deleting = use_signal(|| false);
 
+    let mut form_category = use_signal(|| "Dentística".to_string());
     let mut form_procedure_name = use_signal(String::new);
     let mut form_tooth = use_signal(String::new);
+    let mut form_surf_m = use_signal(|| false);
+    let mut form_surf_d = use_signal(|| false);
+    let mut form_surf_o = use_signal(|| false);
+    let mut form_surf_v = use_signal(|| false);
+    let mut form_surf_l = use_signal(|| false);
     let mut form_status = use_signal(|| "completed".to_string());
     let mut form_cost = use_signal(String::new);
+    let mut form_materials = use_signal(String::new);
+    let mut form_post_care = use_signal(String::new);
     let mut form_notes = use_signal(String::new);
     let mut is_submitting = use_signal(|| false);
 
@@ -56,15 +68,35 @@ pub fn PatientOdontogramTab(
             0
         };
 
+        let mut surfaces = Vec::new();
+        if form_surf_m() { surfaces.push("Mesial (M)".to_string()); }
+        if form_surf_d() { surfaces.push("Distal (D)".to_string()); }
+        if form_surf_o() { surfaces.push("Oclusal/Incisal (O/I)".to_string()); }
+        if form_surf_v() { surfaces.push("Vestibular (V)".to_string()); }
+        if form_surf_l() { surfaces.push("Lingual/Palatina (L/P)".to_string()); }
+
+        let materials_list = if form_materials().trim().is_empty() {
+            None
+        } else {
+            Some(form_materials().split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+        };
+
         let req = CreatePatientTreatmentRequest {
             clinic_id: cid.clone(),
             dentist_user_id: None,
             appointment_id: None,
+            document_id: None,
+            exam_id: None,
+            procedure_category: Some(form_category()),
             procedure_name: proc_name,
             tooth_number: if form_tooth().trim().is_empty() { None } else { Some(form_tooth().trim().to_string()) },
+            surfaces: if surfaces.is_empty() { None } else { Some(surfaces) },
+            materials_used: materials_list,
             status: form_status(),
             cost_cents,
+            post_care_instructions: if form_post_care().trim().is_empty() { None } else { Some(form_post_care().trim().to_string()) },
             clinical_notes: if form_notes().trim().is_empty() { None } else { Some(form_notes().trim().to_string()) },
+            performed_at: None,
         };
 
         let t = tok.clone();
@@ -91,12 +123,45 @@ pub fn PatientOdontogramTab(
         });
     };
 
+    let tok_del = token.clone();
+    let cid_del = clinic_id.clone();
+    let pat_id_del = patient_id.clone();
+    let on_reload_del = reload_patient_details.clone();
+
+    let mut handle_confirm_delete = move |_| {
+        let Some((ref t_id, _)) = *delete_target_id.read() else { return; };
+        let t_id_clone = t_id.clone();
+        let t = tok_del.clone();
+        let p = pat_id_del.clone();
+        let c = cid_del.clone();
+        let mut target_sig = delete_target_id;
+        let mut toast = toast_msg;
+        let mut err_sig = error_toast;
+        let mut del_sig = is_deleting;
+        let reload = on_reload_del.clone();
+
+        del_sig.set(true);
+        spawn(async move {
+            match delete_patient_treatment(&t, &p, &t_id_clone, &c).await {
+                Ok(_) => {
+                    target_sig.set(None);
+                    toast.set(Some("Procedimento removido do histórico.".into()));
+                    reload.call(());
+                }
+                Err(e) => {
+                    err_sig.set(Some(format!("Erro ao remover procedimento: {}", e)));
+                }
+            }
+            del_sig.set(false);
+        });
+    };
+
     rsx! {
         div { class: "patient-tab-content",
             div { class: "tab-header-actions-row",
                 div { class: "tab-header-title-group",
-                    h3 { class: "tab-header-title", "Histórico de Procedimentos e Evolução" }
-                    p { class: "tab-header-desc", "Registro detalhado de intervenções clínicas odontológicas." }
+                    h3 { class: "tab-header-title", "Histórico de Procedimentos e Evolução Clínica" }
+                    p { class: "tab-header-desc", "Acompanhamento detalhado da evolução clínica, materiais empregados, superfícies e cuidados pós-operatórios." }
                 }
                 if can_write {
                     button {
@@ -121,31 +186,52 @@ pub fn PatientOdontogramTab(
                     table { class: "modern-table",
                         thead {
                             tr {
-                                th { "Data" }
-                                th { "Procedimento" }
-                                th { "Dente / Região" }
-                                th { "Status" }
-                                th { "Valor" }
-                                th { "Observações" }
+                                th { "DATA / HORA" }
+                                th { "CATEGORIA" }
+                                th { "PROCEDIMENTO" }
+                                th { "DENTE / FACES" }
+                                th { "STATUS" }
+                                th { "VALOR" }
+                                th { "DETALHES / CUIDADOS" }
+                                if can_delete {
+                                    th { class: "text-right", "AÇÕES" }
+                                }
                             }
                         }
                         tbody {
                             for treat in &treatments {
                                 {
-                                    let dt = treat.created_at.chars().take(10).collect::<String>();
+                                    let dt = treat.performed_at.as_deref().unwrap_or(&treat.created_at).chars().take(10).collect::<String>();
                                     let cost_brl = format_currency(treat.cost_cents);
                                     let is_completed = treat.status == "completed";
                                     let is_in_progress = treat.status == "in_progress";
+                                    let category_lbl = treat.procedure_category.as_deref().unwrap_or("Geral");
+                                    let surfaces_str = treat.surfaces.as_ref().map(|s| s.join(", ")).unwrap_or_default();
+                                    let treat_id = treat.id.clone();
+                                    let treat_name = treat.procedure_name.clone();
 
                                     rsx! {
                                         tr { key: "{treat.id}",
                                             td { class: "font-mono font-xs", "{dt}" }
-                                            td { strong { class: "text-dark", "{treat.procedure_name}" } }
+                                            td {
+                                                span { class: "badge-insurance-plan", "{category_lbl}" }
+                                            }
+                                            td {
+                                                p { style: "font-weight: 600; color: #1e293b; margin: 0;", "{treat.procedure_name}" }
+                                                if let Some(ref mats) = treat.materials_used {
+                                                    if !mats.is_empty() {
+                                                        p { style: "font-size: 11px; color: #64748b; margin: 2px 0 0 0;", "Materiais: {mats.join(\", \")}" }
+                                                    }
+                                                }
+                                            }
                                             td {
                                                 if let Some(ref tooth) = treat.tooth_number {
                                                     span { class: "badge-outline", "Dente {tooth}" }
                                                 } else {
-                                                    span { class: "text-muted", "Geral" }
+                                                    span { class: "text-muted font-xs", "Região Geral" }
+                                                }
+                                                if !surfaces_str.is_empty() {
+                                                    span { style: "display: block; font-size: 10px; color: #64748b; margin-top: 2px;", "Faces: {surfaces_str}" }
                                                 }
                                             }
                                             td {
@@ -158,8 +244,23 @@ pub fn PatientOdontogramTab(
                                                 }
                                             }
                                             td { class: "font-mono font-bold", "{cost_brl}" }
-                                            td { class: "text-muted font-xs",
-                                                "{treat.clinical_notes.as_deref().unwrap_or(\"-\")}"
+                                            td { style: "max-width: 250px;",
+                                                if let Some(ref post) = treat.post_care_instructions {
+                                                    p { style: "font-size: 11px; color: #0284c7; margin: 0 0 2px 0;", "Pós-op: {post}" }
+                                                }
+                                                p { class: "text-muted font-xs", style: "margin: 0;",
+                                                    "{treat.clinical_notes.as_deref().unwrap_or(\"-\")}"
+                                                }
+                                            }
+                                            if can_delete {
+                                                td { class: "text-right",
+                                                    button {
+                                                        class: "btn-delete-row-table",
+                                                        title: "Remover procedimento",
+                                                        onclick: move |_| delete_target_id.set(Some((treat_id.clone(), treat_name.clone()))),
+                                                        IconTrash { size: 15, color: "currentColor".to_string() }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -173,27 +274,45 @@ pub fn PatientOdontogramTab(
             // Modal Aprimorado: Registrar Novo Procedimento
             if is_add_modal_open() {
                 div { class: "modal-overlay",
-                    div { class: "action-modal stock-custom-modal", style: "max-width: 600px;",
+                    div { class: "action-modal stock-custom-modal", style: "max-width: 680px;",
                         div { class: "settings-header",
                             div {
-                                h2 { class: "settings-title", "Registrar Novo Procedimento" }
+                                h2 { class: "settings-title", "Registrar Procedimento e Evolução Clínica" }
                                 p { class: "text-muted font-xs mt-1",
-                                    "Adicione procedimentos planejados ou concluídos no histórico do paciente."
+                                    "Adicione procedimentos realizados ou planejados com materiais, faces e cuidados pós-operatórios."
                                 }
                             }
                             button { class: "close-btn", onclick: move |_| is_add_modal_open.set(false), "×" }
                         }
-                        div { class: "settings-content",
-                            div { class: "form-group",
-                                label { "Procedimento *" }
-                                input {
-                                    class: "form-input",
-                                    placeholder: "Ex: Restauração em Resina Composta, Extração...",
-                                    value: "{form_procedure_name}",
-                                    oninput: move |e| form_procedure_name.set(e.value())
-                                }
-                            }
+                        div { class: "settings-content", style: "max-height: 65vh; overflow-y: auto;",
                             div { class: "form-grid-2",
+                                div { class: "form-group",
+                                    label { "Categoria do Procedimento *" }
+                                    select {
+                                        class: "form-input",
+                                        value: "{form_category}",
+                                        onchange: move |e| form_category.set(e.value()),
+                                        option { value: "Dentística", "Dentística / Restauração" }
+                                        option { value: "Endodontia", "Endodontia / Canal" }
+                                        option { value: "Cirurgia", "Cirurgia / Extração" }
+                                        option { value: "Periodontia", "Periodontia / Raspagem" }
+                                        option { value: "Ortodontia", "Ortodontia / Alinhadores" }
+                                        option { value: "Prótese", "Prótese / Reabilitação" }
+                                        option { value: "Implantodontia", "Implantodontia" }
+                                        option { value: "Profilaxia", "Profilaxia / Prevenção" }
+                                        option { value: "Odontopediatria", "Odontopediatria" }
+                                        option { value: "Outro", "Outro" }
+                                    }
+                                }
+                                div { class: "form-group",
+                                    label { "Nome do Procedimento *" }
+                                    input {
+                                        class: "form-input",
+                                        placeholder: "Ex: Restauração em Resina Composta",
+                                        value: "{form_procedure_name}",
+                                        oninput: move |e| form_procedure_name.set(e.value())
+                                    }
+                                }
                                 div { class: "form-group",
                                     label { "Dente / Região" }
                                     input {
@@ -204,35 +323,105 @@ pub fn PatientOdontogramTab(
                                     }
                                 }
                                 div { class: "form-group",
-                                    label { "Status" }
+                                    label { "Status do Procedimento" }
                                     select {
                                         class: "form-input",
                                         value: "{form_status}",
                                         onchange: move |e| form_status.set(e.value()),
-                                        option { value: "completed", "Concluído" }
-                                        option { value: "in_progress", "Em Andamento" }
-                                        option { value: "planned", "Planejado" }
+                                        option { value: "completed", "Concluído (Realizado)" }
+                                        option { value: "in_progress", "Em Andamento (Sessão)" }
+                                        option { value: "planned", "Planejado (Orçamento)" }
                                     }
                                 }
                             }
-                            div { class: "form-group",
-                                label { "Valor (R$)" }
-                                div { class: "currency-input-wrapper",
-                                    span { class: "currency-prefix", "R$" }
+
+                            // Faces / Superfícies Dentárias
+                            div { class: "form-group", style: "margin-top: 10px;",
+                                label { "Faces / Superfícies Tratadas" }
+                                div { style: "display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px;",
+                                    label { class: "anamnese-checkbox-label",
+                                        input {
+                                            r#type: "checkbox",
+                                            checked: form_surf_m(),
+                                            onchange: move |e| form_surf_m.set(e.checked()),
+                                        }
+                                        span { "Mesial (M)" }
+                                    }
+                                    label { class: "anamnese-checkbox-label",
+                                        input {
+                                            r#type: "checkbox",
+                                            checked: form_surf_d(),
+                                            onchange: move |e| form_surf_d.set(e.checked()),
+                                        }
+                                        span { "Distal (D)" }
+                                    }
+                                    label { class: "anamnese-checkbox-label",
+                                        input {
+                                            r#type: "checkbox",
+                                            checked: form_surf_o(),
+                                            onchange: move |e| form_surf_o.set(e.checked()),
+                                        }
+                                        span { "Oclusal/Incisal (O/I)" }
+                                    }
+                                    label { class: "anamnese-checkbox-label",
+                                        input {
+                                            r#type: "checkbox",
+                                            checked: form_surf_v(),
+                                            onchange: move |e| form_surf_v.set(e.checked()),
+                                        }
+                                        span { "Vestibular (V)" }
+                                    }
+                                    label { class: "anamnese-checkbox-label",
+                                        input {
+                                            r#type: "checkbox",
+                                            checked: form_surf_l(),
+                                            onchange: move |e| form_surf_l.set(e.checked()),
+                                        }
+                                        span { "Lingual/Palatina (L/P)" }
+                                    }
+                                }
+                            }
+
+                            div { class: "form-grid-2", style: "margin-top: 10px;",
+                                div { class: "form-group",
+                                    label { "Valor (R$)" }
+                                    div { class: "currency-input-wrapper",
+                                        span { class: "currency-prefix", "R$" }
+                                        input {
+                                            class: "form-input currency-input-field",
+                                            placeholder: "0,00",
+                                            value: "{form_cost}",
+                                            oninput: move |e| form_cost.set(e.value())
+                                        }
+                                    }
+                                }
+                                div { class: "form-group",
+                                    label { "Materiais Utilizados (separados por vírgula)" }
                                     input {
-                                        class: "form-input currency-input-field",
-                                        placeholder: "0,00",
-                                        value: "{form_cost}",
-                                        oninput: move |e| form_cost.set(e.value())
+                                        class: "form-input",
+                                        placeholder: "Ex: Resina Z350 A2, Adesivo Universal, Ácido Fosfórico",
+                                        value: "{form_materials}",
+                                        oninput: move |e| form_materials.set(e.value())
                                     }
                                 }
                             }
-                            div { class: "form-group",
-                                label { "Observações Clínicas" }
+
+                            div { class: "form-group", style: "margin-top: 10px;",
+                                label { "Orientações e Cuidados Pós-Operatórios" }
+                                input {
+                                    class: "form-input",
+                                    placeholder: "Ex: Evitar mastigar alimentos duros por 24h, higiene com escova macia...",
+                                    value: "{form_post_care}",
+                                    oninput: move |e| form_post_care.set(e.value())
+                                }
+                            }
+
+                            div { class: "form-group", style: "margin-top: 10px;",
+                                label { "Observações Clínicas e Evolução" }
                                 textarea {
                                     class: "form-input",
-                                    style: "min-height: 85px; resize: vertical;",
-                                    placeholder: "Ex: Procedimento realizado sob anestesia infiltrativa, isolamento relativo...",
+                                    style: "min-height: 75px; resize: vertical;",
+                                    placeholder: "Ex: Procedimento realizado sob anestesia infiltrativa, isolamento absoluto, paciente relatou conforto...",
                                     value: "{form_notes}",
                                     oninput: move |e| form_notes.set(e.value())
                                 }
@@ -250,6 +439,31 @@ pub fn PatientOdontogramTab(
                     }
                 }
             }
+
+            // Modal de Exclusão de Procedimento
+            if let Some((_, ref t_name)) = *delete_target_id.read() {
+                div { class: "modal-overlay",
+                    div { class: "action-modal delete-modal-card",
+                        div { class: "settings-header",
+                            h2 { class: "settings-title text-danger", "Remover Procedimento" }
+                            button { class: "close-btn", onclick: move |_| delete_target_id.set(None), "×" }
+                        }
+                        div { class: "settings-content",
+                            p { "Tem certeza que deseja excluir o registro de ", strong { "{t_name}" }, " do prontuário?" }
+                        }
+                        div { class: "modal-footer-actions",
+                            button { class: "btn-secondary", onclick: move |_| delete_target_id.set(None), "Cancelar" }
+                            button {
+                                class: "btn-danger",
+                                disabled: is_deleting(),
+                                onclick: move |e| handle_confirm_delete(e),
+                                if is_deleting() { "Removendo..." } else { "Confirmar Remoção" }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
+

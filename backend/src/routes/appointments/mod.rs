@@ -35,6 +35,7 @@ pub(crate) struct DbAppointmentRecord {
     pub appointment_type: String,
     pub financial_amount_cents: Option<i64>,
     pub financial_type: Option<String>,
+    pub notes: Option<String>,
     pub cancellation_reason: Option<String>,
 }
 
@@ -116,6 +117,8 @@ pub(crate) fn parse_status(s: &str) -> AppointmentStatus {
         "confirmed" => AppointmentStatus::Confirmed,
         "in_progress" => AppointmentStatus::InProgress,
         "completed" => AppointmentStatus::Completed,
+        "canceled_by_doctor" | "canceled_doctor" => AppointmentStatus::CanceledByDoctor,
+        "canceled_by_patient" | "canceled_patient" => AppointmentStatus::CanceledByPatient,
         "canceled" => AppointmentStatus::Canceled,
         "no_show" => AppointmentStatus::NoShow,
         _ => AppointmentStatus::Pending,
@@ -141,6 +144,8 @@ pub(crate) fn status_to_str(s: &AppointmentStatus) -> &'static str {
         AppointmentStatus::Confirmed => "confirmed",
         AppointmentStatus::InProgress => "in_progress",
         AppointmentStatus::Completed => "completed",
+        AppointmentStatus::CanceledByDoctor => "canceled_by_doctor",
+        AppointmentStatus::CanceledByPatient => "canceled_by_patient",
         AppointmentStatus::Canceled => "canceled",
         AppointmentStatus::NoShow => "no_show",
     }

@@ -99,7 +99,8 @@ pub async fn list_patients(
         } else {
             let matches_name = p.full_name.to_lowercase().contains(&search_term);
             let matches_phone = p.phone.contains(&search_term);
-            let matches_cpf = p.document_cpf.contains(&search_term);
+            let matches_cpf = p.document_cpf.as_deref().unwrap_or("").contains(&search_term);
+            let matches_rg = p.document_rg.as_deref().unwrap_or("").contains(&search_term);
             let matches_email = p
                 .email
                 .as_deref()
@@ -107,7 +108,7 @@ pub async fn list_patients(
                 .to_lowercase()
                 .contains(&search_term);
 
-            if matches_name || matches_phone || matches_cpf || matches_email {
+            if matches_name || matches_phone || matches_cpf || matches_rg || matches_email {
                 mapped_patients.push(p);
             }
         }
@@ -150,7 +151,7 @@ pub async fn create_patient(
 
     let clinic_rec = parse_record_id("clinic", &data.clinic_id);
 
-    let cpf_clean = data.document_cpf.trim();
+    let cpf_clean = data.document_cpf.as_deref().unwrap_or("").trim();
     let has_cpf = !cpf_clean.is_empty();
     let has_rg = data
         .document_rg
@@ -176,17 +177,7 @@ pub async fn create_patient(
         None
     };
 
-    let password_hash = if let Some(ref pwd) = data.signature_password {
-        if !pwd.trim().is_empty() {
-            Some(hash_password(pwd.trim()).map_err(|e| {
-                ApiError::Internal(format!("Erro ao gerar hash de senha: {}", e))
-            })?)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    let guardians_list = data.legal_guardians.unwrap_or_default();
 
     let mut res = db
         .query(
@@ -196,6 +187,7 @@ pub async fn create_patient(
             document_cpf_encrypted: $cpf_enc,
             document_cpf_hash: $cpf_hash,
             document_rg: $rg,
+            legal_guardians: $guardians,
             legal_guardian_name: $g_name,
             legal_guardian_cpf: $g_cpf,
             phone: $phone,
@@ -215,21 +207,22 @@ pub async fn create_patient(
             address_zip: $zip,
             insurance_plan: $ins_plan,
             insurance_number: $ins_num,
-            password_hash: $pwd_hash,
+            password_hash: NONE,
             created_at: time::now(),
             updated_at: time::now()
         };",
         )
-        .bind(("cid", clinic_rec))
+        .bind(("cid", clinic_rec.clone()))
         .bind(("full_name", data.full_name.trim().to_string()))
         .bind(("cpf_enc", cpf_encrypted))
         .bind(("cpf_hash", cpf_hash))
         .bind(("rg", data.document_rg.map(|s| s.trim().to_string())))
+        .bind(("guardians", serde_json::to_value(&guardians_list).unwrap_or_default()))
         .bind(("g_name", data.legal_guardian_name.map(|s| s.trim().to_string())))
         .bind(("g_cpf", data.legal_guardian_cpf.map(|s| s.trim().to_string())))
         .bind(("phone", data.phone.trim().to_string()))
         .bind(("email", data.email.map(|s| s.trim().to_string())))
-        .bind(("birth_date", data.birth_date))
+        .bind(("birth_date", data.birth_date.clone()))
         .bind(("gender", data.gender))
         .bind(("marital_status", data.marital_status))
         .bind(("profession", data.profession.map(|s| s.trim().to_string())))
@@ -262,7 +255,6 @@ pub async fn create_patient(
             "ins_num",
             data.insurance_number.map(|s| s.trim().to_string()),
         ))
-        .bind(("pwd_hash", password_hash))
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao criar paciente: {}", e)))?;
 
@@ -273,6 +265,76 @@ pub async fn create_patient(
             "Falha ao retornar paciente criado.".into(),
         ));
     };
+
+    // Auto-inicializar Ficha de Anamnese a partir do modelo da clínica
+    let is_minor = if let Some(ref bd) = data.birth_date {
+        if let Ok(naive) = chrono::NaiveDate::parse_from_str(bd, "%Y-%m-%d") {
+            let now = chrono::Local::now().date_naive();
+            now.years_since(naive).unwrap_or(0) < 18
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    let target_template_type = if is_minor { "minor" } else { "adult" };
+
+    let mut t_res = db
+        .query("SELECT * FROM anamnesis_template WHERE clinic_id = $cid AND template_type = $ttype LIMIT 1;")
+        .bind(("cid", clinic_rec.clone()))
+        .bind(("ttype", target_template_type.to_string()))
+        .await;
+
+    let custom_responses: Vec<shared::anamnesis::AnamnesisResponseItem> = if let Ok(ref mut res_set) = t_res {
+        let t_row: Option<super::DbAnamnesisTemplateRow> = res_set.take(0).unwrap_or(None);
+        if let Some(template) = t_row {
+            let questions: Vec<shared::anamnesis::AnamnesisQuestion> = template
+                .questions
+                .and_then(|v| serde_json::from_value(v).ok())
+                .unwrap_or_default();
+            questions.into_iter().map(|q| {
+                shared::anamnesis::AnamnesisResponseItem {
+                    question_id: q.id,
+                    category: q.category,
+                    question_text: q.question_text,
+                    question_type: q.question_type,
+                    answer_boolean: Some(false),
+                    answer_text: None,
+                    notes: None,
+                }
+            }).collect()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
+
+    let _ = db
+        .query(
+            "CREATE patient_anamnesis CONTENT {
+            patient_id: $pid,
+            clinic_id: $cid,
+            template_type: $ttype,
+            custom_responses: $responses,
+            allergies: [],
+            continuous_medications: NONE,
+            systemic_diseases: [],
+            is_pregnant: false,
+            has_bleeding_disorder: false,
+            smoker: false,
+            bruxism: false,
+            chief_complaint: NONE,
+            clinical_notes: NONE,
+            updated_at: time::now()
+        };",
+        )
+        .bind(("pid", row.id.clone()))
+        .bind(("cid", clinic_rec.clone()))
+        .bind(("ttype", target_template_type.to_string()))
+        .bind(("responses", serde_json::to_value(&custom_responses).unwrap_or_default()))
+        .await;
 
     Ok(HttpResponse::Created().json(map_patient(row)))
 }
@@ -315,11 +377,30 @@ pub async fn get_patient_details(
     };
     let patient = map_patient(row);
 
-    let anam_row: Option<DbAnamnesisRow> = res.take(1).unwrap_or(None);
+    let can_read_anamnese = check_permission(&db, &auth.id, &clinic_str, "anamnese:read")
+        .await
+        .unwrap_or(false);
+    let can_read_exams = check_permission(&db, &auth.id, &clinic_str, "exams:read")
+        .await
+        .unwrap_or(false);
+    let can_read_treatments = check_permission(&db, &auth.id, &clinic_str, "treatments:read")
+        .await
+        .unwrap_or(false);
+    let can_read_documents = check_permission(&db, &auth.id, &clinic_str, "documents:read")
+        .await
+        .unwrap_or(false);
+
+    let anam_row: Option<DbAnamnesisRow> = if can_read_anamnese {
+        res.take(1).unwrap_or(None)
+    } else {
+        None
+    };
     let anamnesis = anam_row.map(|a| PatientAnamnesis {
         id: a.id.map(|t| t.to_sql()),
         patient_id: a.patient_id.to_sql(),
         clinic_id: a.clinic_id.to_sql(),
+        template_type: a.template_type,
+        custom_responses: a.custom_responses.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default(),
         allergies: a.allergies.unwrap_or_default(),
         continuous_medications: a.continuous_medications,
         systemic_diseases: a.systemic_diseases.unwrap_or_default(),
@@ -332,7 +413,12 @@ pub async fn get_patient_details(
         updated_at: a.updated_at.map(|d| d.to_rfc3339()).unwrap_or_default(),
     });
 
-    let exam_rows: Vec<DbExamRow> = res.take(2).unwrap_or_default();
+
+    let exam_rows: Vec<DbExamRow> = if can_read_exams {
+        res.take(2).unwrap_or_default()
+    } else {
+        vec![]
+    };
     let exams: Vec<PatientExam> = exam_rows
         .into_iter()
         .map(|e| PatientExam {
@@ -352,7 +438,11 @@ pub async fn get_patient_details(
         })
         .collect();
 
-    let treat_rows: Vec<DbTreatmentRow> = res.take(3).unwrap_or_default();
+    let treat_rows: Vec<DbTreatmentRow> = if can_read_treatments {
+        res.take(3).unwrap_or_default()
+    } else {
+        vec![]
+    };
     let treatments: Vec<PatientTreatment> = treat_rows
         .into_iter()
         .map(|t| PatientTreatment {
@@ -362,16 +452,28 @@ pub async fn get_patient_details(
             dentist_user_id: t.dentist_user_id.map(|u| u.to_sql()),
             dentist_user_name: None,
             appointment_id: t.appointment_id.map(|a| a.to_sql()),
+            document_id: t.document_id.map(|d| d.to_sql()),
+            exam_id: t.exam_id.map(|e| e.to_sql()),
+            procedure_category: t.procedure_category,
             procedure_name: t.procedure_name,
             tooth_number: t.tooth_number,
+            surfaces: t.surfaces,
+            materials_used: t.materials_used,
             status: t.status.unwrap_or_else(|| "planned".into()),
             cost_cents: t.cost_cents.unwrap_or(0),
+            post_care_instructions: t.post_care_instructions,
             clinical_notes: t.clinical_notes,
+            performed_at: t.performed_at.map(|d| d.to_rfc3339()),
             created_at: t.created_at.to_rfc3339(),
         })
         .collect();
 
-    let doc_rows: Vec<DbDocumentRow> = res.take(4).unwrap_or_default();
+
+    let doc_rows: Vec<DbDocumentRow> = if can_read_documents {
+        res.take(4).unwrap_or_default()
+    } else {
+        vec![]
+    };
     let documents: Vec<PatientDocument> = doc_rows
         .into_iter()
         .map(|d| PatientDocument {
@@ -380,6 +482,7 @@ pub async fn get_patient_details(
             patient_id: d.patient_id.to_sql(),
             patient_name: Some(patient.full_name.clone()),
             template_id: d.template_id.map(|t| t.to_sql()),
+
             template_title: None,
             doctor_user_id: d.doctor_user_id.map(|u| u.to_sql()),
             doctor_user_name: None,
@@ -432,7 +535,7 @@ pub async fn update_patient(
         ));
     }
 
-    let cpf_clean = data.document_cpf.trim();
+    let cpf_clean = data.document_cpf.as_deref().unwrap_or("").trim();
     let has_cpf = !cpf_clean.is_empty();
     let has_rg = data
         .document_rg
@@ -458,11 +561,14 @@ pub async fn update_patient(
         None
     };
 
-    let mut query = "UPDATE type::record($pid) SET
+    let guardians_list = data.legal_guardians.unwrap_or_default();
+
+    let query = "UPDATE type::record($pid) SET
         full_name = $full_name,
         document_cpf_encrypted = $cpf_enc,
         document_cpf_hash = $cpf_hash,
         document_rg = $rg,
+        legal_guardians = $guardians,
         legal_guardian_name = $g_name,
         legal_guardian_cpf = $g_cpf,
         phone = $phone,
@@ -485,27 +591,14 @@ pub async fn update_patient(
         updated_at = time::now()"
         .to_string();
 
-    if let Some(ref pwd) = data.new_signature_password {
-        if !pwd.trim().is_empty() {
-            query.push_str(", password_hash = $pwd_hash");
-        }
-    }
-
-    let password_hash = data.new_signature_password.as_deref().and_then(|p| {
-        if !p.trim().is_empty() {
-            hash_password(p.trim()).ok()
-        } else {
-            None
-        }
-    });
-
-    let mut q_exec = db
+    let q_exec = db
         .query(&query)
         .bind(("pid", pat_rec))
         .bind(("full_name", data.full_name.trim().to_string()))
         .bind(("cpf_enc", cpf_encrypted))
         .bind(("cpf_hash", cpf_hash))
         .bind(("rg", data.document_rg.map(|s| s.trim().to_string())))
+        .bind(("guardians", serde_json::to_value(&guardians_list).unwrap_or_default()))
         .bind(("g_name", data.legal_guardian_name.map(|s| s.trim().to_string())))
         .bind(("g_cpf", data.legal_guardian_cpf.map(|s| s.trim().to_string())))
         .bind(("phone", data.phone.trim().to_string()))
@@ -544,13 +637,10 @@ pub async fn update_patient(
             data.insurance_number.map(|s| s.trim().to_string()),
         ));
 
-    if let Some(hash_str) = password_hash {
-        q_exec = q_exec.bind(("pwd_hash", hash_str));
-    }
-
     let mut res = q_exec
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao atualizar paciente: {}", e)))?;
+
 
     let updated: Option<DbPatientRow> =
         res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;

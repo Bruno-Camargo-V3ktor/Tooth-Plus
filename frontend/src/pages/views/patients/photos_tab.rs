@@ -3,8 +3,8 @@
 //! Exibe a galeria de imagens radiográficas, laudos e fotos odontológicas do paciente,
 //! com visualizador em tela cheia (zoom) e envio de novos arquivos.
 
-use crate::api::{create_patient_exam, upload_document_pdf};
-use crate::components::icons::{IconCheckCircle, IconEye, IconPlus, IconUpload};
+use crate::api::{create_patient_exam, delete_patient_exam, upload_document_pdf};
+use crate::components::icons::{IconCheckCircle, IconEye, IconPlus, IconTrash, IconUpload};
 use dioxus::prelude::*;
 use shared::patients::{CreatePatientExamRequest, PatientExam};
 
@@ -15,6 +15,7 @@ pub fn PatientPhotosTab(
     clinic_id: String,
     exams: Vec<PatientExam>,
     can_write: bool,
+    can_delete: bool,
     token: String,
     reload_patient_details: EventHandler<()>,
     toast_msg: Signal<Option<String>>,
@@ -22,12 +23,15 @@ pub fn PatientPhotosTab(
 ) -> Element {
     let mut is_create_modal_open = use_signal(|| false);
     let mut selected_preview_url = use_signal(|| None::<String>);
+    let mut deleting_exam_id = use_signal(|| None::<String>);
+    let mut is_deleting = use_signal(|| false);
 
     let mut exam_title = use_signal(String::new);
     let mut exam_type = use_signal(|| "Radiografia Panorâmica".to_string());
     let mut exam_notes = use_signal(String::new);
     let mut exam_file_url = use_signal(String::new);
     let mut is_uploading_file = use_signal(|| false);
+
     let mut uploaded_filename = use_signal(String::new);
     let mut is_submitting = use_signal(|| false);
 
@@ -176,15 +180,91 @@ pub fn PatientPhotosTab(
                                             p { class: "exam-notes font-xs mt-2", "{notes}" }
                                         }
                                     }
-                                    if has_file {
-                                        div { class: "p-3 pt-0",
+                                    div { class: "p-3 pt-0 flex gap-2",
+                                        if has_file {
                                             button {
-                                                class: "btn-secondary btn-sm w-full flex items-center justify-center gap-1",
+                                                class: "btn-secondary btn-sm flex-1 flex items-center justify-center gap-1",
                                                 onclick: move |_| selected_preview_url.set(first_url.clone()),
                                                 IconEye { size: 14, color: "currentColor".to_string() }
-                                                span { "Visualizar Imagem" }
+                                                span { "Visualizar" }
                                             }
                                         }
+                                        if can_delete {
+                                            {
+                                                let e_id = exam.id.clone();
+                                                rsx! {
+                                                    button {
+                                                        class: "btn-danger-ghost btn-sm",
+                                                        title: "Excluir exame",
+                                                        onclick: move |_| deleting_exam_id.set(Some(e_id.clone())),
+                                                        IconTrash { size: 14, color: "#ef4444".to_string() }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(ref e_id) = *deleting_exam_id.read() {
+                {
+                    let exam_id_val = e_id.clone();
+                    let t_del = token.clone();
+                    let p_del = patient_id.clone();
+                    let c_del = clinic_id.clone();
+                    let on_rel = reload_patient_details.clone();
+
+                    rsx! {
+                        div { class: "modal-overlay",
+                            div { class: "action-modal confirm-delete-modal", style: "max-width: 440px;",
+                                div { class: "confirm-delete-body",
+                                    div { class: "confirm-delete-icon-box", "🗑️" }
+                                    h3 { class: "confirm-delete-title", "Excluir Exame / Foto" }
+                                    p { class: "confirm-delete-text",
+                                        "Tem certeza que deseja excluir este exame do prontuário? Esta ação não pode ser desfeita."
+                                    }
+                                }
+                                div { class: "confirm-delete-actions",
+                                    button {
+                                        class: "btn-secondary",
+                                        disabled: is_deleting(),
+                                        onclick: move |_| deleting_exam_id.set(None),
+                                        "Cancelar"
+                                    }
+                                    button {
+                                        class: "btn-danger",
+                                        disabled: is_deleting(),
+                                        onclick: move |_| {
+                                            let mut is_del = is_deleting;
+                                            let mut del_id = deleting_exam_id;
+                                            let mut toast = toast_msg;
+                                            let mut err_sig = error_toast;
+                                            let rel = on_rel.clone();
+                                            let t = t_del.clone();
+                                            let p = p_del.clone();
+                                            let c = c_del.clone();
+                                            let eid = exam_id_val.clone();
+
+                                            is_del.set(true);
+                                            spawn(async move {
+                                                match delete_patient_exam(&t, &p, &eid, &c).await {
+                                                    Ok(_) => {
+                                                        del_id.set(None);
+                                                        toast.set(Some("Exame excluído com sucesso!".into()));
+                                                        rel.call(());
+                                                    }
+                                                    Err(e) => {
+                                                        err_sig.set(Some(format!("Erro ao excluir exame: {}", e)));
+                                                    }
+                                                }
+                                                is_del.set(false);
+                                            });
+                                        },
+                                        if is_deleting() { "Excluindo..." } else { "Sim, Excluir" }
                                     }
                                 }
                             }
@@ -204,6 +284,7 @@ pub fn PatientPhotosTab(
 
             // Modal Aprimorado: Anexar Exame / Foto ao Prontuário
             if is_create_modal_open() {
+
                 div { class: "modal-overlay",
                     div { class: "action-modal stock-custom-modal", style: "max-width: 620px;",
                         div { class: "settings-header",

@@ -64,8 +64,9 @@ pub fn StockView() -> Element {
 
     let can_read = has_permission(&sess, &clinic, "stock:read");
     let can_write = has_permission(&sess, &clinic, "stock:write");
-    let can_delete = has_permission(&sess, &clinic, "stock:delete") || can_write;
-    let can_movement = has_permission(&sess, &clinic, "stock:movement") || can_write;
+    let can_delete = has_permission(&sess, &clinic, "stock:delete");
+    let can_movement = has_permission(&sess, &clinic, "stock:movement");
+
 
     if !can_read {
         return rsx! {

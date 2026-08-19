@@ -20,9 +20,11 @@ pub fn AppointmentModal(
     default_time: String,
     resources: AgendaResourcesResponse,
     is_open: Signal<bool>,
+    can_finance: bool,
     on_success: EventHandler<()>,
     toast_msg: Signal<Option<String>>,
 ) -> Element {
+
     if !is_open() {
         return rsx! {};
     }
@@ -119,6 +121,20 @@ pub fn AppointmentModal(
             .unwrap_or_default()
     });
 
+    let mut notes = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .and_then(|a| a.notes.clone())
+            .unwrap_or_default()
+    });
+
+    let mut assigned_equipment = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .map(|a| a.assigned_equipment.clone())
+            .unwrap_or_default()
+    });
+
     let mut financial_amount_str = use_signal(|| {
         if let Some(ref a) = editing_appointment {
             if let Some(cents) = a.financial_amount_cents {
@@ -157,11 +173,13 @@ pub fn AppointmentModal(
             "%Y-%m-%d %H:%M:%S",
         ) {
             Ok(ndt) => {
-                let local_dt = chrono::Local
-                    .from_local_datetime(&ndt)
-                    .single()
-                    .unwrap_or_else(|| chrono::Local::now());
-                local_dt.to_rfc3339()
+                let local_dt = chrono::Local.from_local_datetime(&ndt).single();
+                if let Some(ldt) = local_dt {
+                    ldt.to_utc().to_rfc3339()
+                } else {
+                    chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(ndt, chrono::Utc)
+                        .to_rfc3339()
+                }
             }
             Err(_) => {
                 toast_msg.set(Some("Data ou horário inválido.".to_string()));
@@ -169,16 +187,20 @@ pub fn AppointmentModal(
             }
         };
 
-        let fin_amount_cents = if !financial_amount_str().trim().is_empty() {
-            let clean_str = financial_amount_str().replace(',', ".");
-            if let Ok(val_float) = clean_str.parse::<f64>() {
-                Some((val_float * 100.0).round() as i64)
+        let fin_amount_cents = if can_finance {
+            if let Ok(val) = financial_amount_str().replace(',', ".").parse::<f64>() {
+                if val > 0.0 {
+                    Some((val * 100.0).round() as i64)
+                } else {
+                    None
+                }
             } else {
                 None
             }
         } else {
             None
         };
+
 
         is_submitting.set(true);
         let t = tok.clone();
@@ -208,8 +230,10 @@ pub fn AppointmentModal(
                     } else {
                         None
                     },
+                    notes: if notes().trim().is_empty() { None } else { Some(notes()) },
                     assigned_users: Some(assigned_users()),
                     consumed_items: Some(consumed_items()),
+                    assigned_equipment: Some(assigned_equipment()),
                 };
 
                 match update_appointment(&t, &a.id, &c, req).await {
@@ -241,8 +265,10 @@ pub fn AppointmentModal(
                     } else {
                         None
                     },
+                    notes: if notes().trim().is_empty() { None } else { Some(notes()) },
                     assigned_users: assigned_users(),
                     consumed_items: consumed_items(),
+                    assigned_equipment: Some(assigned_equipment()),
                 };
 
                 match create_appointment(&t, req).await {
@@ -277,33 +303,30 @@ pub fn AppointmentModal(
 
     rsx! {
         div { class: "modal-overlay",
-            div { class: "action-modal stock-custom-modal", style: "max-width: 720px; max-height: 90vh; display: flex; flex-direction: column;",
+            div { class: "action-modal stock-custom-modal",
                 div { class: "settings-header",
-                    div {
-                        h2 { class: "settings-title", "{title_modal}" }
-                        p { class: "text-muted font-xs mt-1", "Defina paciente, data, horário, profissionais e rateio financeiro." }
-                    }
+                    h2 { class: "settings-title", "{title_modal}" }
                     button { class: "close-btn", onclick: move |_| is_open.set(false), "×" }
                 }
 
-                div { class: "settings-content", style: "overflow-y: auto; gap: 18px; padding: 22px 26px;",
-                    // 1. Título
-                    div { class: "form-group",
-                        label { "Título do Agendamento / Procedimento *" }
-                        input {
-                            class: "form-input",
-                            placeholder: "Ex: Consulta Inicial & Avaliação Estética, Restauração...",
-                            value: "{title}",
-                            oninput: move |e| title.set(e.value())
+                div { class: "settings-content",
+                    div { class: "form-grid",
+                        // 1. Título do Agendamento
+                        div { class: "input-group-wrapper full-width",
+                            label { "Título do Agendamento / Procedimento *" }
+                            input {
+                                class: "modern-input-field",
+                                placeholder: "Ex: Consulta Inicial & Avaliação Estética, Restauração...",
+                                value: "{title}",
+                                oninput: move |e| title.set(e.value())
+                            }
                         }
-                    }
 
-                    // 2. Tipo de Atendimento & Duração Estimada
-                    div { class: "form-grid-2",
-                        div { class: "form-group",
+                        // 2. Tipo de Atendimento & Duração Estimada
+                        div { class: "input-group-wrapper",
                             label { "Tipo de Atendimento" }
                             select {
-                                class: "form-input",
+                                class: "modern-input-field modern-select",
                                 value: match app_type() {
                                     AppointmentType::Consultation => "consultation",
                                     AppointmentType::Treatment => "treatment",
@@ -331,10 +354,10 @@ pub fn AppointmentModal(
                             }
                         }
 
-                        div { class: "form-group",
+                        div { class: "input-group-wrapper",
                             label { "Duração Estimada" }
                             select {
-                                class: "form-input",
+                                class: "modern-input-field modern-select",
                                 value: "{duration_minutes}",
                                 onchange: move |e: FormEvent| {
                                     if let Ok(v) = e.value().parse::<i32>() {
@@ -350,14 +373,12 @@ pub fn AppointmentModal(
                                 option { value: "180", "3 horas" }
                             }
                         }
-                    }
 
-                    // 3. Data do Atendimento & Horário de Início
-                    div { class: "form-grid-2",
-                        div { class: "form-group",
+                        // 3. Data do Atendimento & Horário de Início
+                        div { class: "input-group-wrapper",
                             label { "Data do Atendimento" }
                             input {
-                                class: "form-input",
+                                class: "modern-input-field",
                                 r#type: "date",
                                 value: "{scheduled_date}",
                                 oninput: move |e| scheduled_date.set(e.value())
@@ -392,10 +413,10 @@ pub fn AppointmentModal(
                             }
                         }
 
-                        div { class: "form-group",
+                        div { class: "input-group-wrapper",
                             label { "Horário de Início (Padrão 24h)" }
                             select {
-                                class: "form-input",
+                                class: "modern-input-field modern-select",
                                 value: "{scheduled_time}",
                                 onchange: move |e: FormEvent| scheduled_time.set(e.value()),
                                 for t in &standard_times {
@@ -403,118 +424,123 @@ pub fn AppointmentModal(
                                 }
                             }
                         }
-                    }
 
-                    // 4. Paciente
-                    div { class: "form-group",
-                        label { "Paciente (Opcional)" }
-                        select {
-                            class: "form-input",
-                            value: match patient_id() {
-                                Some(ref pid) => pid.as_str(),
-                                None => if !patient_name().is_empty() { "manual" } else { "" },
-                            },
-                            onchange: {
-                                let pats = resources.patients.clone();
-                                move |e: FormEvent| {
+                        // 4. Paciente Vinculado
+                        div { class: "input-group-wrapper full-width",
+                            label { "Paciente Vinculado" }
+                            select {
+                                class: "modern-input-field modern-select",
+                                value: match patient_id() {
+                                    Some(ref pid) => pid.as_str(),
+                                    None => if !patient_name().is_empty() { "manual" } else { "" },
+                                },
+                                onchange: move |e: FormEvent| {
                                     let val = e.value();
+                                    let pats = resources.patients.clone();
                                     if val.is_empty() {
                                         patient_id.set(None);
                                         patient_name.set(String::new());
                                     } else if val == "manual" {
                                         patient_id.set(None);
                                     } else {
+                                        patient_id.set(Some(val.clone()));
                                         if let Some(p) = pats.iter().find(|x| x.id == val) {
-                                            patient_id.set(Some(p.id.clone()));
                                             patient_name.set(p.name.clone());
                                         }
                                     }
+                                },
+                                option { value: "", "Sem paciente vinculado" }
+                                option { value: "manual", "Digitar nome avulso..." }
+                                for p in &resources.patients {
+                                    option { key: "{p.id}", value: "{p.id}", "{p.name} {p.extra_info.as_deref().unwrap_or(\"\")}" }
                                 }
-                            },
-                            option { value: "", "Sem paciente vinculado" }
-                            for pat in &resources.patients {
-                                option { value: "{pat.id}", "{pat.name} {pat.extra_info.as_deref().unwrap_or(\"\")}" }
                             }
-                            option { value: "manual", "Digitar nome de paciente não cadastrado..." }
-                        }
-                        if patient_id().is_none() && !patient_name().is_empty() {
-                            input {
-                                class: "form-input mt-2",
-                                placeholder: "Nome do paciente avulso / novo...",
-                                value: "{patient_name}",
-                                oninput: move |e| patient_name.set(e.value())
+
+                            if patient_id().is_none() && (!patient_name().is_empty() || patient_id().is_none()) {
+                                input {
+                                    class: "modern-input-field mt-1",
+                                    placeholder: "Nome do paciente avulso",
+                                    value: "{patient_name}",
+                                    oninput: move |e| patient_name.set(e.value())
+                                }
                             }
                         }
-                    }
 
-                    // 5. Profissionais Responsáveis (Sem campo redundante de nome/cargo)
-                    div { class: "form-group",
-                        label { "Profissionais Responsáveis & Rateio *" }
-                        if resources.team_members.is_empty() {
-                            div { class: "empty-state-card py-3",
-                                p { class: "text-muted font-xs", "Nenhum membro da equipe associado a esta unidade." }
-                            }
-                        } else {
-                            div { class: "agenda-assignment-box",
-                                for member in &resources.team_members {
-                                    {
-                                        let mid = member.id.clone();
-                                        let mname = member.name.clone();
-                                        let current_assigned = assigned_users();
-                                        let existing_entry = current_assigned.iter().find(|u| u.user_id == mid);
-                                        let is_assigned = existing_entry.is_some();
-                                        let split_val = existing_entry.map(|u| u.split_percentage).unwrap_or(100);
-                                        let role_val = existing_entry.map(|u| u.role_in_appointment.clone()).unwrap_or_else(|| member.extra_info.clone().unwrap_or_else(|| "Dentista".to_string()));
+                        // 5. Profissionais Responsáveis & Rateio
+                        div { class: "input-group-wrapper full-width",
+                            label { "Profissionais Responsáveis & Rateio *" }
+                            div { class: "agenda-resource-box",
+                                if resources.team_members.is_empty() {
+                                    div { class: "resource-empty-state",
+                                        span { "Nenhum membro da equipe associado a esta unidade." }
+                                    }
+                                } else {
+                                    for member in &resources.team_members {
+                                        {
+                                            let mid = member.id.clone();
+                                            let mname = member.name.clone();
+                                            let current_assigned = assigned_users();
+                                            let existing_entry = current_assigned.iter().find(|u| u.user_id == mid);
+                                            let is_assigned = existing_entry.is_some();
+                                            let split_val = existing_entry.map(|u| u.split_percentage).unwrap_or(100);
+                                            let role_val = existing_entry.map(|u| u.role_in_appointment.clone()).unwrap_or_else(|| member.extra_info.clone().unwrap_or_else(|| "Dentista".to_string()));
 
-                                        let mid_chk = mid.clone();
-                                        let mname_chk = mname.clone();
-                                        let role_chk = role_val.clone();
-                                        let mid_split = mid.clone();
+                                            let mid_chk = mid.clone();
+                                            let mname_chk = mname.clone();
+                                            let role_chk = role_val.clone();
+                                            let mid_split = mid.clone();
 
-                                        let role_class = match role_val.to_lowercase().as_str() {
-                                            "admin" => "role-badge role-admin",
-                                            _ => "role-badge role-dentist",
-                                        };
+                                            let role_class = match role_val.to_lowercase().as_str() {
+                                                "admin" => "role-badge role-admin",
+                                                _ => "role-badge role-dentist",
+                                            };
 
-                                        rsx! {
-                                            div { key: "{member.id}", class: "agenda-member-assign-row",
-                                                label { class: "perm-checkbox-item",
-                                                    input {
-                                                        r#type: "checkbox",
-                                                        checked: is_assigned,
-                                                        onchange: move |e: FormEvent| {
-                                                            let mut curr = assigned_users();
-                                                            if e.checked() {
-                                                                if !curr.iter().any(|u| u.user_id == mid_chk) {
-                                                                    curr.push(AssignedUserDto {
-                                                                        user_id: mid_chk.clone(),
-                                                                        user_name: Some(mname_chk.clone()),
-                                                                        role_in_appointment: role_chk.clone(),
-                                                                        split_percentage: 100,
-                                                                    });
-                                                                }
-                                                            } else {
-                                                                curr.retain(|u| u.user_id != mid_chk);
-                                                            }
-                                                            assigned_users.set(curr);
-                                                        }
-                                                    }
-                                                    span { class: "font-bold text-dark ml-1", "{member.name}" }
-                                                    span { class: "{role_class} ml-2 font-xs", "{role_val}" }
-                                                }
-
-                                                if is_assigned {
-                                                    div { class: "agenda-split-input-wrapper",
-                                                        label { class: "text-muted font-xs", "Rateio:" }
+                                            rsx! {
+                                                div { key: "{member.id}", class: "agenda-member-assign-row",
+                                                    label { class: "agenda-member-checkbox-label",
                                                         input {
-                                                            class: "form-input",
-                                                            style: "width: 70px; height: 36px; text-align: center;",
-                                                            r#type: "number",
-                                                            min: "0",
-                                                            max: "100",
-                                                            value: "{split_val}",
-                                                            oninput: move |e: FormEvent| {
-                                                                if let Ok(v) = e.value().parse::<i32>() {
+                                                            r#type: "checkbox",
+                                                            checked: is_assigned,
+                                                            onchange: move |e: FormEvent| {
+                                                                let mut curr = assigned_users();
+                                                                if e.checked() {
+                                                                    if !curr.iter().any(|u| u.user_id == mid_chk) {
+                                                                        curr.push(AssignedUserDto {
+                                                                            user_id: mid_chk.clone(),
+                                                                            user_name: Some(mname_chk.clone()),
+                                                                            role_in_appointment: role_chk.clone(),
+                                                                            split_percentage: 100,
+                                                                        });
+                                                                    }
+                                                                } else {
+                                                                    curr.retain(|u| u.user_id != mid_chk);
+                                                                }
+                                                                assigned_users.set(curr);
+                                                            }
+                                                        }
+                                                        span { class: "agenda-member-name", "{member.name}" }
+                                                        span { class: "{role_class} ml-2 font-xs flex-shrink-0", "{role_val}" }
+                                                    }
+
+                                                    if is_assigned && can_finance {
+                                                        div { class: "agenda-split-input-wrapper",
+
+                                                            label { class: "text-muted font-xs", "Rateio:" }
+                                                            input {
+                                                                class: "modern-input-field font-mono",
+                                                                style: "width: 52px; height: 32px; text-align: center; padding: 2px 4px;",
+                                                                r#type: "text",
+                                                                inputmode: "numeric",
+                                                                maxlength: "3",
+                                                                placeholder: "100",
+                                                                value: "{split_val}",
+                                                                oninput: move |e: FormEvent| {
+                                                                    let clean: String = e.value().chars().filter(|c| c.is_ascii_digit()).collect();
+                                                                    let v = if clean.is_empty() {
+                                                                        0
+                                                                    } else {
+                                                                        clean.parse::<i32>().unwrap_or(0).clamp(0, 100)
+                                                                    };
                                                                     let mut curr = assigned_users();
                                                                     if let Some(entry) = curr.iter_mut().find(|u| u.user_id == mid_split) {
                                                                         entry.split_percentage = v;
@@ -522,8 +548,8 @@ pub fn AppointmentModal(
                                                                     assigned_users.set(curr);
                                                                 }
                                                             }
+                                                            span { class: "font-bold font-xs text-muted", "%" }
                                                         }
-                                                        span { class: "font-bold font-xs text-muted", "%" }
                                                     }
                                                 }
                                             }
@@ -532,96 +558,142 @@ pub fn AppointmentModal(
                                 }
                             }
                         }
-                    }
 
-                    // 6. Financeiro & Faturamento Previsto
-                    div { class: "form-grid-2",
-                        div { class: "form-group",
-                            label { "Valor Previsto (R$)" }
-                            div { class: "currency-input-wrapper",
-                                span { class: "currency-prefix", "R$" }
-                                input {
-                                    class: "form-input currency-input-field",
-                                    placeholder: "0,00",
-                                    value: "{financial_amount_str}",
-                                    oninput: move |e| financial_amount_str.set(e.value())
+                        // 6. Equipamentos Odontológicos Alocados
+                        div { class: "input-group-wrapper full-width",
+                            div { class: "resource-section-header",
+                                label { "Equipamentos Alocados" }
+                                button {
+                                    class: "btn-secondary btn-sm flex items-center gap-1",
+                                    r#type: "button",
+                                    onclick: move |_| {
+                                        if let Some(first_eq) = resources.equipment_items.first() {
+                                            let mut curr = assigned_equipment();
+                                            curr.push(first_eq.name.clone());
+                                            assigned_equipment.set(curr);
+                                        }
+                                    },
+                                    IconPlus { size: 13, color: "currentColor".to_string() }
+                                    span { "Adicionar Equipamento" }
+                                }
+                            }
+
+                            div { class: "agenda-resource-box",
+                                if assigned_equipment().is_empty() {
+                                    div { class: "resource-empty-state",
+                                        span { "Nenhum equipamento alocado para este agendamento." }
+                                    }
+                                } else {
+                                    for (idx, eq_name) in assigned_equipment().iter().enumerate() {
+                                        {
+                                            let eq_name_val = eq_name.clone();
+
+                                            rsx! {
+                                                div { key: "{idx}", class: "stock-equipment-row",
+                                                    select {
+                                                        class: "modern-input-field modern-select",
+                                                        value: "{eq_name_val}",
+                                                        onchange: move |e: FormEvent| {
+                                                            let new_name = e.value();
+                                                            let mut curr = assigned_equipment();
+                                                            if let Some(c) = curr.get_mut(idx) {
+                                                                *c = new_name;
+                                                            }
+                                                            assigned_equipment.set(curr);
+                                                        },
+                                                        for item in &resources.equipment_items {
+                                                            option { value: "{item.name}", "{item.name} {item.extra_info.as_deref().unwrap_or(\"\")}" }
+                                                        }
+                                                    }
+                                                    button {
+                                                        class: "btn-action-icon btn-action-danger",
+                                                        r#type: "button",
+                                                        title: "Remover equipamento",
+                                                        onclick: move |_| {
+                                                            let mut curr = assigned_equipment();
+                                                            curr.remove(idx);
+                                                            assigned_equipment.set(curr);
+                                                        },
+                                                        IconTrash { size: 14, color: "#ef4444".to_string() }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                        div { class: "form-group",
-                            label { "Tipo de Lançamento" }
-                            select {
-                                class: "form-input",
-                                value: "{financial_type}",
-                                onchange: move |e| financial_type.set(e.value()),
-                                option { value: "income", "Receita (Entrada)" }
-                                option { value: "expense", "Despesa (Saída)" }
-                            }
-                        }
-                    }
 
-                    // 7. Consumo de Materiais de Estoque
-                    div { class: "form-group",
-                        div { class: "stock-consumption-header",
-                            label { class: "m-0 font-bold", "Consumo de Materiais de Estoque" }
-                            button {
-                                class: "btn-secondary btn-sm flex items-center gap-1",
-                                r#type: "button",
-                                onclick: move |_| {
-                                    if let Some(first_item) = resources.inventory_items.first() {
-                                        let mut curr = consumed_items();
-                                        curr.push(ConsumedItemDto {
-                                            item_id: first_item.id.clone(),
-                                            item_name: Some(first_item.name.clone()),
-                                            quantity_planned: 1,
-                                            quantity_used: Some(1),
-                                        });
-                                        consumed_items.set(curr);
+                        // 7. Consumo de Materiais de Estoque
+                        div { class: "input-group-wrapper full-width",
+                            div { class: "resource-section-header",
+                                label { "Consumo de Materiais de Estoque" }
+                                button {
+                                    class: "btn-secondary btn-sm flex items-center gap-1",
+                                    r#type: "button",
+                                    onclick: move |_| {
+                                        if let Some(first_item) = resources.inventory_items.first() {
+                                            let mut curr = consumed_items();
+                                            curr.push(ConsumedItemDto {
+                                                item_id: first_item.id.clone(),
+                                                item_name: Some(first_item.name.clone()),
+                                                quantity_planned: 1,
+                                                quantity_used: Some(1),
+                                            });
+                                            consumed_items.set(curr);
+                                        }
+                                    },
+                                    IconPlus { size: 13, color: "currentColor".to_string() }
+                                    span { "Adicionar Material" }
+                                }
+                            }
+
+                            div { class: "agenda-resource-box",
+                                if consumed_items().is_empty() {
+                                    div { class: "resource-empty-state",
+                                        span { "Nenhum material de estoque associado a este agendamento." }
                                     }
-                                },
-                                IconPlus { size: 13, color: "currentColor".to_string() }
-                                span { "Adicionar Item" }
-                            }
-                        }
+                                } else {
+                                    for (idx, consumed) in consumed_items().iter().enumerate() {
+                                        {
+                                            let item_id_val = consumed.item_id.clone();
+                                            let qty_val = consumed.quantity_planned;
+                                            let inventory_items = resources.inventory_items.clone();
 
-                        if consumed_items().is_empty() {
-                            p { class: "text-muted font-xs m-0", "Nenhum material de estoque associado a este agendamento." }
-                        } else {
-                            div { class: "flex flex-col gap-2 mt-1",
-                                for (idx, consumed) in consumed_items().iter().enumerate() {
-                                    {
-                                        let item_id_val = consumed.item_id.clone();
-                                        let qty_val = consumed.quantity_planned;
-                                        let inventory_items = resources.inventory_items.clone();
-
-                                        rsx! {
-                                            div { key: "{idx}", class: "stock-consumed-row",
-                                                select {
-                                                    class: "form-input",
-                                                    value: "{item_id_val}",
-                                                    onchange: move |e: FormEvent| {
-                                                        let new_id = e.value();
-                                                        let mut curr = consumed_items();
-                                                        if let Some(c) = curr.get_mut(idx) {
-                                                            c.item_id = new_id.clone();
-                                                            if let Some(s) = inventory_items.iter().find(|x| x.id == new_id) {
-                                                                c.item_name = Some(s.name.clone());
+                                            rsx! {
+                                                div { key: "{idx}", class: "stock-consumed-row",
+                                                    select {
+                                                        class: "modern-input-field modern-select",
+                                                        value: "{item_id_val}",
+                                                        onchange: move |e: FormEvent| {
+                                                            let new_id = e.value();
+                                                            let mut curr = consumed_items();
+                                                            if let Some(c) = curr.get_mut(idx) {
+                                                                c.item_id = new_id.clone();
+                                                                if let Some(s) = inventory_items.iter().find(|x| x.id == new_id) {
+                                                                    c.item_name = Some(s.name.clone());
+                                                                }
                                                             }
+                                                            consumed_items.set(curr);
+                                                        },
+                                                        for item in &resources.inventory_items {
+                                                            option { value: "{item.id}", "{item.name} {item.extra_info.as_deref().unwrap_or(\"\")}" }
                                                         }
-                                                        consumed_items.set(curr);
-                                                    },
-                                                    for item in &resources.inventory_items {
-                                                        option { value: "{item.id}", "{item.name} {item.extra_info.as_deref().unwrap_or(\"\")}" }
                                                     }
-                                                }
-                                                input {
-                                                    class: "form-input",
-                                                    style: "text-align: center;",
-                                                    r#type: "number",
-                                                    min: "1",
-                                                    value: "{qty_val}",
-                                                    oninput: move |e: FormEvent| {
-                                                        if let Ok(q) = e.value().parse::<i32>() {
+                                                    input {
+                                                        class: "modern-input-field font-mono",
+                                                        style: "text-align: center; padding: 2px 4px;",
+                                                        r#type: "text",
+                                                        inputmode: "numeric",
+                                                        maxlength: "4",
+                                                        value: "{qty_val}",
+                                                        oninput: move |e: FormEvent| {
+                                                            let clean: String = e.value().chars().filter(|c| c.is_ascii_digit()).collect();
+                                                            let q = if clean.is_empty() {
+                                                                1
+                                                            } else {
+                                                                clean.parse::<i32>().unwrap_or(1).max(1)
+                                                            };
                                                             let mut curr = consumed_items();
                                                             if let Some(c) = curr.get_mut(idx) {
                                                                 c.quantity_planned = q;
@@ -630,22 +702,62 @@ pub fn AppointmentModal(
                                                             consumed_items.set(curr);
                                                         }
                                                     }
-                                                }
-                                                button {
-                                                    class: "btn-action-icon btn-action-danger",
-                                                    r#type: "button",
-                                                    title: "Remover item",
-                                                    onclick: move |_| {
-                                                        let mut curr = consumed_items();
-                                                        curr.remove(idx);
-                                                        consumed_items.set(curr);
-                                                    },
-                                                    IconTrash { size: 14, color: "#ef4444".to_string() }
+                                                    button {
+                                                        class: "btn-action-icon btn-action-danger",
+                                                        r#type: "button",
+                                                        title: "Remover item",
+                                                        onclick: move |_| {
+                                                            let mut curr = consumed_items();
+                                                            curr.remove(idx);
+                                                            consumed_items.set(curr);
+                                                        },
+                                                        IconTrash { size: 14, color: "#ef4444".to_string() }
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        // 8. Financeiro & Faturamento Previsto
+                        if can_finance {
+                            div { class: "input-group-wrapper",
+                                label { "Valor Previsto (R$)" }
+                                div { class: "currency-input-wrapper",
+                                    span { class: "currency-prefix", "R$" }
+                                    input {
+                                        class: "modern-input-field font-mono currency-input-field",
+                                        placeholder: "0,00",
+                                        value: "{financial_amount_str}",
+                                        oninput: move |e| financial_amount_str.set(e.value())
+                                    }
+                                }
+                            }
+
+                            div { class: "input-group-wrapper",
+                                label { "Tipo de Lançamento" }
+                                select {
+                                    class: "modern-input-field modern-select",
+                                    value: "{financial_type}",
+                                    onchange: move |e: FormEvent| financial_type.set(e.value()),
+                                    option { value: "income", "Receita (Entrada)" }
+                                    option { value: "expense", "Despesa (Saída)" }
+                                }
+                            }
+                        }
+
+
+                        // 9. Observações Clínicas & Recomendações
+                        div { class: "input-group-wrapper full-width",
+                            label { "Observações Clínicas & Recomendações Pré-Consulta" }
+                            textarea {
+                                class: "modern-input-field modern-textarea",
+                                rows: "3",
+                                placeholder: "Ex: Paciente com sensibilidade; necessita de profilaxia antes do procedimento...",
+                                value: "{notes}",
+                                oninput: move |e| notes.set(e.value())
                             }
                         }
                     }

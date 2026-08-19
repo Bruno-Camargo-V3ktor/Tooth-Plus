@@ -13,9 +13,12 @@ pub fn TransactionModal(
     initial_direction: TransactionDirection,
     token: String,
     clinic_id: String,
+    can_write_income: bool,
+    can_write_expense: bool,
     reload_counter: Signal<i32>,
     toast_msg: Signal<Option<String>>,
 ) -> Element {
+
     if !is_open() {
         return rsx! {};
     }
@@ -150,9 +153,14 @@ pub fn TransactionModal(
                                         form_category.set("Procedimento Clínico".to_string());
                                     }
                                 },
-                                option { value: "income", "Entrada (Receita)" }
-                                option { value: "expense", "Saída (Despesa)" }
+                                if can_write_income {
+                                    option { value: "income", "Entrada (Receita)" }
+                                }
+                                if can_write_expense {
+                                    option { value: "expense", "Saída (Despesa)" }
+                                }
                             }
+
                         }
 
                         div { class: "input-group-wrapper",

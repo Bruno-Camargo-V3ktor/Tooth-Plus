@@ -16,11 +16,36 @@ pub const ALL_PERMISSION_GROUPS: &[PermGroup] = &[
         ],
     },
     PermGroup {
-        label: "Módulo: Pacientes",
+        label: "Módulo: Pacientes e Cadastro",
         items: &[
-            ("patients:read", "Visualizar Prontuários"),
-            ("patients:write", "Editar Fichas Clínicas"),
+            ("patients:read", "Visualizar Lista de Pacientes"),
+            ("patients:write", "Cadastrar e Editar Pacientes"),
             ("patients:delete", "Excluir Pacientes"),
+        ],
+    },
+    PermGroup {
+        label: "Módulo: Anamnese Clínica",
+        items: &[
+            ("anamnese:read", "Visualizar Ficha de Anamnese"),
+            ("anamnese:write", "Editar Respostas de Anamnese"),
+            ("anamnese:manage_templates", "Gerenciar Modelos de Anamnese (Adulto/Infantil)"),
+        ],
+    },
+    PermGroup {
+        label: "Módulo: Exames e Laudos",
+        items: &[
+            ("exams:read", "Visualizar Exames e Fotos"),
+            ("exams:upload", "Enviar e Anexar Novos Exames"),
+            ("exams:edit", "Editar Laudos e Diagnósticos"),
+            ("exams:delete", "Excluir Exames"),
+        ],
+    },
+    PermGroup {
+        label: "Módulo: Procedimentos e Evolução",
+        items: &[
+            ("treatments:read", "Visualizar Histórico de Procedimentos"),
+            ("treatments:write", "Registrar e Evoluir Procedimentos"),
+            ("treatments:delete", "Excluir Registros de Procedimentos"),
         ],
     },
     PermGroup {
@@ -128,3 +153,4 @@ pub fn has_any_permission(
 ) -> bool {
     perms.iter().any(|p| has_permission(session, active, p))
 }
+

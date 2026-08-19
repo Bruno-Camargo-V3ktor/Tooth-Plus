@@ -105,9 +105,21 @@ pub fn FinanceView() -> Element {
     let sess = session();
     let clinic = active_clinic();
 
-    let can_read = has_permission(&sess, &clinic, "finance:read");
-    let can_write = has_permission(&sess, &clinic, "finance:write");
-    let can_delete = has_permission(&sess, &clinic, "finance:delete") || can_write;
+    let can_read_all = has_permission(&sess, &clinic, "finance:read_all")
+        || has_permission(&sess, &clinic, "finance:read");
+    let can_read_income = can_read_all || has_permission(&sess, &clinic, "finance:read_income");
+    let can_read_expense = can_read_all || has_permission(&sess, &clinic, "finance:read_expense");
+    let can_read_pending = can_read_all || has_permission(&sess, &clinic, "finance:read_pending");
+    let can_read = can_read_all || can_read_income || can_read_expense || can_read_pending;
+
+    let can_write_income = has_permission(&sess, &clinic, "finance:write_income")
+        || has_permission(&sess, &clinic, "finance:write");
+    let can_write_expense = has_permission(&sess, &clinic, "finance:write_expense")
+        || has_permission(&sess, &clinic, "finance:write");
+    let can_write = can_write_income || can_write_expense;
+
+    let can_update_status = has_permission(&sess, &clinic, "finance:update_status");
+    let can_delete = has_permission(&sess, &clinic, "finance:delete");
 
     if !can_read {
         return rsx! {
@@ -125,7 +137,18 @@ pub fn FinanceView() -> Element {
         .unwrap_or_default();
     let token = sess.as_ref().map(|s| s.token.clone()).unwrap_or_default();
 
-    let mut active_tab = use_signal(|| FinanceTab::All);
+    let mut active_tab = use_signal(move || {
+        if can_read_all {
+            FinanceTab::All
+        } else if can_read_income {
+            FinanceTab::Income
+        } else if can_read_expense {
+            FinanceTab::Expense
+        } else {
+            FinanceTab::Pending
+        }
+    });
+
     let mut active_preset = use_signal(|| DateFilterPreset::Month);
 
     let current_dt = chrono::Local::now();
@@ -460,58 +483,104 @@ pub fn FinanceView() -> Element {
                     let pending_count = all_txs.iter().filter(|t| t.status == TransactionStatus::Pending).count();
 
                     rsx! {
-                        // 1. TOP: 4 Compact Horizontal KPIs (Invertido para o topo)
-                        div { class: "agenda-kpi-row",
-                            // 1. ENTRADAS REALIZADAS
-                            div { class: "agenda-kpi-card",
-                                div { class: "agenda-kpi-icon-wrapper kpi-icon-completed",
+                        // 1. TOP: Main Tabs Switcher (Padrão Underline de Estoque e Documentos)
+                        div { class: "documents-tab-bar",
+                            if can_read_all {
+                                button {
+                                    class: if active_tab() == FinanceTab::All { "doc-main-tab active" } else { "doc-main-tab" },
+                                    onclick: move |_| active_tab.set(FinanceTab::All),
+                                    IconFinance { size: 16, color: "currentColor".to_string() }
+                                    span { " Todas as Movimentações ({all_count})" }
+                                }
+                            }
+                            if can_read_income {
+                                button {
+                                    class: if active_tab() == FinanceTab::Income { "doc-main-tab active" } else { "doc-main-tab" },
+                                    onclick: move |_| active_tab.set(FinanceTab::Income),
                                     span { class: "type-card-arrow-icon text-income", "↓" }
+                                    span { " Receitas ({income_count})" }
                                 }
-                                div { class: "agenda-kpi-text-col",
-                                    span { class: "agenda-kpi-lbl", "Entradas Realizadas" }
-                                    span { class: "agenda-kpi-sublbl", "Receitas liquidadas" }
-                                }
-                                div { class: "agenda-kpi-val kpi-completed", "{format_currency(summary.total_income_cents)}" }
                             }
-
-                            // 2. SAÍDAS REALIZADAS
-                            div { class: "agenda-kpi-card",
-                                div { class: "agenda-kpi-icon-wrapper kpi-icon-expense",
+                            if can_read_expense {
+                                button {
+                                    class: if active_tab() == FinanceTab::Expense { "doc-main-tab active" } else { "doc-main-tab" },
+                                    onclick: move |_| active_tab.set(FinanceTab::Expense),
                                     span { class: "type-card-arrow-icon text-expense", "↑" }
+                                    span { " Despesas ({expense_count})" }
                                 }
-                                div { class: "agenda-kpi-text-col",
-                                    span { class: "agenda-kpi-lbl", "Saídas Realizadas" }
-                                    span { class: "agenda-kpi-sublbl", "Despesas pagas" }
-                                }
-                                div { class: "agenda-kpi-val kpi-expense", "{format_currency(summary.total_expense_cents)}" }
                             }
-
-                            // 3. SALDO EM CAIXA
-                            div { class: "agenda-kpi-card",
-                                div { class: "agenda-kpi-icon-wrapper kpi-icon-total",
-                                    span { class: "font-bold", "$" }
-                                }
-                                div { class: "agenda-kpi-text-col",
-                                    span { class: "agenda-kpi-lbl", "Saldo em Caixa" }
-                                    span { class: "agenda-kpi-sublbl", "Diferença líquida" }
-                                }
-                                div { class: "agenda-kpi-val", "{format_currency(summary.net_balance_cents)}" }
-                            }
-
-                            // 4. PREVISÃO PENDENTE
-                            div { class: "agenda-kpi-card",
-                                div { class: "agenda-kpi-icon-wrapper kpi-icon-pending",
+                            if can_read_pending {
+                                button {
+                                    class: if active_tab() == FinanceTab::Pending { "doc-main-tab active" } else { "doc-main-tab" },
+                                    onclick: move |_| active_tab.set(FinanceTab::Pending),
                                     IconClock { size: 16, color: "currentColor".to_string() }
+                                    span { " Pendentes ({pending_count})" }
                                 }
-                                div { class: "agenda-kpi-text-col",
-                                    span { class: "agenda-kpi-lbl", "Previsão Pendente" }
-                                    span { class: "agenda-kpi-sublbl", "A receber da agenda" }
-                                }
-                                div { class: "agenda-kpi-val kpi-pending", "{format_currency(summary.pending_income_cents)}" }
                             }
                         }
 
-                        // 2. MIDDLE: Preset Filters on Left, Action Buttons on Right (Invertido para baixo dos KPIs)
+
+                        // 2. 4 Compact Horizontal KPIs
+                        div { class: "agenda-kpi-row",
+                            // 1. ENTRADAS REALIZADAS
+                            if can_read_income {
+                                div { class: "agenda-kpi-card",
+                                    div { class: "agenda-kpi-icon-wrapper kpi-icon-completed",
+                                        span { class: "type-card-arrow-icon text-income", "↓" }
+                                    }
+                                    div { class: "agenda-kpi-text-col",
+                                        span { class: "agenda-kpi-lbl", "Entradas Realizadas" }
+                                        span { class: "agenda-kpi-sublbl", "Receitas liquidadas" }
+                                    }
+                                    div { class: "agenda-kpi-val kpi-completed", "{format_currency(summary.total_income_cents)}" }
+                                }
+                            }
+
+                            // 2. SAÍDAS REALIZADAS
+                            if can_read_expense {
+                                div { class: "agenda-kpi-card",
+                                    div { class: "agenda-kpi-icon-wrapper kpi-icon-expense",
+                                        span { class: "type-card-arrow-icon text-expense", "↑" }
+                                    }
+                                    div { class: "agenda-kpi-text-col",
+                                        span { class: "agenda-kpi-lbl", "Saídas Realizadas" }
+                                        span { class: "agenda-kpi-sublbl", "Despesas pagas" }
+                                    }
+                                    div { class: "agenda-kpi-val kpi-expense", "{format_currency(summary.total_expense_cents)}" }
+                                }
+                            }
+
+                            // 3. SALDO EM CAIXA
+                            if can_read_all || (can_read_income && can_read_expense) {
+                                div { class: "agenda-kpi-card",
+                                    div { class: "agenda-kpi-icon-wrapper kpi-icon-total",
+                                        span { class: "font-bold", "$" }
+                                    }
+                                    div { class: "agenda-kpi-text-col",
+                                        span { class: "agenda-kpi-lbl", "Saldo em Caixa" }
+                                        span { class: "agenda-kpi-sublbl", "Diferença líquida" }
+                                    }
+                                    div { class: "agenda-kpi-val", "{format_currency(summary.net_balance_cents)}" }
+                                }
+                            }
+
+                            // 4. PREVISÃO PENDENTE
+                            if can_read_pending {
+                                div { class: "agenda-kpi-card",
+                                    div { class: "agenda-kpi-icon-wrapper kpi-icon-pending",
+                                        IconClock { size: 16, color: "currentColor".to_string() }
+                                    }
+                                    div { class: "agenda-kpi-text-col",
+                                        span { class: "agenda-kpi-lbl", "Previsão Pendente" }
+                                        span { class: "agenda-kpi-sublbl", "A receber da agenda" }
+                                    }
+                                    div { class: "agenda-kpi-val kpi-pending", "{format_currency(summary.pending_income_cents)}" }
+                                }
+                            }
+                        }
+
+
+                        // 3. MIDDLE: Preset Filters on Left, Action Buttons on Right
                         div { class: "fin-top-header-row",
                             div { class: "fin-presets-group",
                                 button {
@@ -541,31 +610,36 @@ pub fn FinanceView() -> Element {
                                 }
                             }
 
-                            if can_write {
+                            if can_write_income || can_write_expense {
                                 div { class: "fin-top-actions-group",
-                                    button {
-                                        class: "btn-primary",
-                                        onclick: move |_| {
-                                            create_initial_dir.set(TransactionDirection::Income);
-                                            is_create_modal_open.set(true);
-                                        },
-                                        IconPlus { size: 16, color: "currentColor".to_string() }
-                                        span { " Nova Entrada" }
+                                    if can_write_income {
+                                        button {
+                                            class: "btn-primary",
+                                            onclick: move |_| {
+                                                create_initial_dir.set(TransactionDirection::Income);
+                                                is_create_modal_open.set(true);
+                                            },
+                                            IconPlus { size: 16, color: "currentColor".to_string() }
+                                            span { " Nova Entrada" }
+                                        }
                                     }
-                                    button {
-                                        class: "btn-secondary btn-nova-saida",
-                                        onclick: move |_| {
-                                            create_initial_dir.set(TransactionDirection::Expense);
-                                            is_create_modal_open.set(true);
-                                        },
-                                        IconPlus { size: 16, color: "currentColor".to_string() }
-                                        span { " Nova Saída" }
+                                    if can_write_expense {
+                                        button {
+                                            class: "btn-secondary btn-nova-saida",
+                                            onclick: move |_| {
+                                                create_initial_dir.set(TransactionDirection::Expense);
+                                                is_create_modal_open.set(true);
+                                            },
+                                            IconPlus { size: 16, color: "currentColor".to_string() }
+                                            span { " Nova Saída" }
+                                        }
                                     }
                                 }
                             }
                         }
 
-                        // 3. Controls Toolbar (Date Navigator + Search + Category Select + Refresh)
+
+                        // 4. Controls Toolbar (Date Navigator + Search + Category Select + Refresh)
                         div { class: "view-toolbar",
                             if active_preset() == DateFilterPreset::Month {
                                 div { class: "fin-date-navigator",
@@ -685,38 +759,10 @@ pub fn FinanceView() -> Element {
                             }
                         }
 
-                        // 4. Main Tabs Switcher (Padrão Underline de Documentos)
-                        div { class: "documents-tab-bar",
-                            button {
-                                class: if active_tab() == FinanceTab::All { "doc-main-tab active" } else { "doc-main-tab" },
-                                onclick: move |_| active_tab.set(FinanceTab::All),
-                                IconFinance { size: 16, color: "currentColor".to_string() }
-                                span { " Todas as Movimentações ({all_count})" }
-                            }
-                            button {
-                                class: if active_tab() == FinanceTab::Income { "doc-main-tab active" } else { "doc-main-tab" },
-                                onclick: move |_| active_tab.set(FinanceTab::Income),
-                                span { class: "type-card-arrow-icon text-income", "↓" }
-                                span { " Receitas ({income_count})" }
-                            }
-                            button {
-                                class: if active_tab() == FinanceTab::Expense { "doc-main-tab active" } else { "doc-main-tab" },
-                                onclick: move |_| active_tab.set(FinanceTab::Expense),
-                                span { class: "type-card-arrow-icon text-expense", "↑" }
-                                span { " Despesas ({expense_count})" }
-                            }
-                            button {
-                                class: if active_tab() == FinanceTab::Pending { "doc-main-tab active" } else { "doc-main-tab" },
-                                onclick: move |_| active_tab.set(FinanceTab::Pending),
-                                IconClock { size: 16, color: "currentColor".to_string() }
-                                span { " Pendentes ({pending_count})" }
-                            }
-                        }
-
                         // 5. Lista de Lançamentos
                         TransactionsTableSection {
                             transactions: filtered_txs,
-                            can_update_status: can_write,
+                            can_update_status,
                             can_delete,
                             on_settle: move |tx: Transaction| {
                                 settle_target_tx.set(Some(tx));
@@ -737,10 +783,13 @@ pub fn FinanceView() -> Element {
                     initial_direction: create_initial_dir(),
                     token: token.clone(),
                     clinic_id: clinic_id.clone(),
+                    can_write_income,
+                    can_write_expense,
                     reload_counter,
                     toast_msg,
                 }
             }
+
 
             if is_settle_modal_open() {
                 if let Some(ref tx) = *settle_target_tx.read() {

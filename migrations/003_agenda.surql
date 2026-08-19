@@ -40,10 +40,12 @@ DEFINE FIELD OVERWRITE patient_name ON appointment TYPE option<string>;
 DEFINE FIELD OVERWRITE title ON appointment TYPE string;
 DEFINE FIELD OVERWRITE scheduled_for ON appointment TYPE datetime;
 DEFINE FIELD OVERWRITE duration_minutes ON appointment TYPE int DEFAULT 30;
-DEFINE FIELD OVERWRITE status ON appointment TYPE string ASSERT $value INSIDE ['pending', 'confirmed', 'in_progress', 'completed', 'canceled', 'no_show'];
+DEFINE FIELD OVERWRITE status ON appointment TYPE string ASSERT $value INSIDE ['pending', 'confirmed', 'in_progress', 'completed', 'canceled_by_doctor', 'canceled_by_patient', 'canceled', 'no_show'];
 DEFINE FIELD OVERWRITE appointment_type ON appointment TYPE string ASSERT $value INSIDE ['consultation', 'treatment', 'surgery', 'return', 'meeting', 'other'];
 DEFINE FIELD OVERWRITE financial_amount_cents ON appointment TYPE option<int>;
 DEFINE FIELD OVERWRITE financial_type ON appointment TYPE option<string> ASSERT $value == NONE OR $value INSIDE ['income', 'expense'];
+DEFINE FIELD OVERWRITE room ON appointment TYPE option<string>;
+DEFINE FIELD OVERWRITE notes ON appointment TYPE option<string>;
 DEFINE FIELD OVERWRITE cancellation_reason ON appointment TYPE option<string>;
 DEFINE FIELD OVERWRITE created_at ON appointment TYPE datetime DEFAULT time::now();
 
@@ -55,5 +57,8 @@ DEFINE FIELD OVERWRITE assigned_at ON assigned_to TYPE datetime DEFAULT time::no
 DEFINE TABLE OVERWRITE consumes SCHEMAFULL TYPE RELATION FROM appointment TO inventory_item;
 DEFINE FIELD OVERWRITE quantity_planned ON consumes TYPE int ASSERT $value >= 0;
 DEFINE FIELD OVERWRITE quantity_used ON consumes TYPE option<int>;
+
+DEFINE TABLE OVERWRITE uses_equipment SCHEMAFULL TYPE RELATION FROM appointment TO inventory_item;
+DEFINE FIELD OVERWRITE allocated_at ON uses_equipment TYPE datetime DEFAULT time::now();
 
 COMMIT TRANSACTION;

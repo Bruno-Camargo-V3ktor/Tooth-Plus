@@ -31,7 +31,9 @@ pub fn AgendaView() -> Element {
 
     let can_read = has_permission(&sess, &clinic, "appointments:read");
     let can_write = has_permission(&sess, &clinic, "appointments:write");
-    let can_delete = has_permission(&sess, &clinic, "appointments:delete") || can_write;
+    let can_delete = has_permission(&sess, &clinic, "appointments:delete");
+    let can_finance = has_permission(&sess, &clinic, "appointments:finance");
+
 
     if !can_read {
         return rsx! {
@@ -94,12 +96,14 @@ pub fn AgendaView() -> Element {
                     team_members: vec![],
                     patients: vec![],
                     inventory_items: vec![],
+                    equipment_items: vec![],
                 }
             } else {
                 fetch_agenda_resources(&t, &cid).await.unwrap_or(AgendaResourcesResponse {
                     team_members: vec![],
                     patients: vec![],
                     inventory_items: vec![],
+                    equipment_items: vec![],
                 })
             }
         }
@@ -110,6 +114,7 @@ pub fn AgendaView() -> Element {
         team_members: vec![],
         patients: vec![],
         inventory_items: vec![],
+        equipment_items: vec![],
     });
 
     let s_query = search_query().to_lowercase();
@@ -148,7 +153,9 @@ pub fn AgendaView() -> Element {
                     "confirmed" => app.status == AppointmentStatus::Confirmed,
                     "in_progress" => app.status == AppointmentStatus::InProgress,
                     "completed" => app.status == AppointmentStatus::Completed,
-                    "canceled" => app.status == AppointmentStatus::Canceled,
+                    "canceled_by_doctor" => app.status == AppointmentStatus::CanceledByDoctor,
+                    "canceled_by_patient" => app.status == AppointmentStatus::CanceledByPatient,
+                    "canceled" => app.status.is_canceled(),
                     "no_show" => app.status == AppointmentStatus::NoShow,
                     _ => true,
                 };
@@ -290,6 +297,8 @@ pub fn AgendaView() -> Element {
                 appointments: filtered_appointments,
                 can_write,
                 can_delete,
+                can_finance,
+
                 on_slot_click: move |h| {
                     if can_write {
                         selected_appointment.set(None);
@@ -320,6 +329,7 @@ pub fn AgendaView() -> Element {
                     default_time: selected_time(),
                     resources: agenda_resources.clone(),
                     is_open: is_form_modal_open,
+                    can_finance,
                     on_success: move |_| {
                         is_form_modal_open.set(false);
                         appointments_resource.restart();
@@ -327,6 +337,7 @@ pub fn AgendaView() -> Element {
                     toast_msg,
                 }
             }
+
 
             if is_status_modal_open() {
                 AppointmentStatusModal {

@@ -4,6 +4,7 @@
 //! do prontuário integrado (Visão Geral, Anamnese, Tratamentos, Exames e Documentos Digitais).
 
 pub mod anamnese_tab;
+pub mod anamnese_templates_modal;
 pub mod documents_tab;
 pub mod odontogram_tab;
 pub mod overview_tab;
@@ -12,6 +13,7 @@ pub mod patient_list;
 pub mod photos_tab;
 
 pub use anamnese_tab::*;
+pub use anamnese_templates_modal::*;
 pub use documents_tab::*;
 pub use odontogram_tab::*;
 pub use overview_tab::*;
@@ -53,6 +55,22 @@ pub fn PatientsView() -> Element {
     let can_write = permissions::has_permission(&sess, &clinic, "patients:write");
     let can_delete = permissions::has_permission(&sess, &clinic, "patients:delete");
 
+    let can_read_anamnese = permissions::has_permission(&sess, &clinic, "anamnese:read");
+    let can_write_anamnese = permissions::has_permission(&sess, &clinic, "anamnese:write");
+    let can_manage_templates = permissions::has_permission(&sess, &clinic, "anamnese:manage_templates");
+
+    let can_read_exams = permissions::has_permission(&sess, &clinic, "exams:read");
+    let can_upload_exams = permissions::has_permission(&sess, &clinic, "exams:upload");
+    let can_delete_exams = permissions::has_permission(&sess, &clinic, "exams:delete");
+
+    let can_read_treatments = permissions::has_permission(&sess, &clinic, "treatments:read");
+    let can_write_treatments = permissions::has_permission(&sess, &clinic, "treatments:write");
+    let can_delete_treatments = permissions::has_permission(&sess, &clinic, "treatments:delete");
+
+    let can_read_documents = permissions::has_permission(&sess, &clinic, "documents:read");
+    let can_write_documents = permissions::has_permission(&sess, &clinic, "documents:write");
+    let can_delete_documents = permissions::has_permission(&sess, &clinic, "documents:delete");
+
     let token = sess.as_ref().map(|s| s.token.clone()).unwrap_or_default();
     let clinic_id = clinic
         .as_ref()
@@ -68,6 +86,7 @@ pub fn PatientsView() -> Element {
             }
         };
     }
+
 
     let mut search_query = use_signal(String::new);
     let mut reload_trigger = use_signal(|| 0usize);
@@ -133,6 +152,7 @@ pub fn PatientsView() -> Element {
     let mut details_loading = use_signal(|| false);
     let mut active_patient_tab = use_signal(|| "overview".to_string());
     let mut is_create_patient_open = use_signal(|| false);
+    let mut is_templates_modal_open = use_signal(|| false);
     let mut is_emit_contract_open = use_signal(|| false);
 
     let load_patient_details = {
@@ -193,6 +213,14 @@ pub fn PatientsView() -> Element {
                         let plan_name = det.patient.insurance_plan.as_deref().unwrap_or("Particular");
                         let is_particular = plan_name.eq_ignore_ascii_case("Particular");
 
+                        let doc_str = if let Some(ref cpf) = det.patient.document_cpf {
+                            format!("CPF: {}", cpf)
+                        } else if let Some(ref rg) = det.patient.document_rg {
+                            format!("RG: {}", rg)
+                        } else {
+                            "Doc: Não informado".to_string()
+                        };
+
                         rsx! {
                             div { class: "patient-details-page",
                                 // Top Action Row
@@ -221,7 +249,7 @@ pub fn PatientsView() -> Element {
                                     }
                                     span { class: "patient-profile-meta-item",
                                         IconLock { size: 13, color: "#64748b".to_string() }
-                                        span { "CPF: {det.patient.document_cpf}" }
+                                        span { "{doc_str}" }
                                     }
                                     span { class: "patient-profile-meta-item",
                                         IconPhone { size: 13, color: "#64748b".to_string() }
@@ -249,86 +277,144 @@ pub fn PatientsView() -> Element {
                                         IconUsers { size: 15, color: "currentColor".to_string() }
                                         span { " Visão Geral" }
                                     }
-                                    button {
-                                        class: if active_patient_tab() == "anamnese" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
-                                        onclick: move |_| active_patient_tab.set("anamnese".to_string()),
-                                        IconHeartPulse { size: 15, color: "currentColor".to_string() }
-                                        span { " Anamnese & Ficha Médica" }
+                                    if can_read_anamnese {
+                                        button {
+                                            class: if active_patient_tab() == "anamnese" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
+                                            onclick: move |_| active_patient_tab.set("anamnese".to_string()),
+                                            IconHeartPulse { size: 15, color: "currentColor".to_string() }
+                                            span { " Anamnese & Ficha Médica" }
+                                        }
                                     }
-                                    button {
-                                        class: if active_patient_tab() == "photos" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
-                                        onclick: move |_| active_patient_tab.set("photos".to_string()),
-                                        IconEye { size: 15, color: "currentColor".to_string() }
-                                        span { " Exames & Laudos ({det.exams.len()})" }
+                                    if can_read_exams {
+                                        button {
+                                            class: if active_patient_tab() == "photos" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
+                                            onclick: move |_| active_patient_tab.set("photos".to_string()),
+                                            IconEye { size: 15, color: "currentColor".to_string() }
+                                            span { " Exames & Laudos ({det.exams.len()})" }
+                                        }
                                     }
-                                    button {
-                                        class: if active_patient_tab() == "odontogram" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
-                                        onclick: move |_| active_patient_tab.set("odontogram".to_string()),
-                                        IconTooth { size: 15, color: "currentColor".to_string() }
-                                        span { " Histórico de Tratamentos ({det.treatments.len()})" }
+                                    if can_read_treatments {
+                                        button {
+                                            class: if active_patient_tab() == "odontogram" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
+                                            onclick: move |_| active_patient_tab.set("odontogram".to_string()),
+                                            IconTooth { size: 15, color: "currentColor".to_string() }
+                                            span { " Histórico de Tratamentos ({det.treatments.len()})" }
+                                        }
                                     }
-                                    button {
-                                        class: if active_patient_tab() == "documents" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
-                                        onclick: move |_| active_patient_tab.set("documents".to_string()),
-                                        IconSignature { size: 15, color: "currentColor".to_string() }
-                                        span { " Contratos & Documentos ({det.documents.len()})" }
+                                    if can_read_documents {
+                                        button {
+                                            class: if active_patient_tab() == "documents" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
+                                            onclick: move |_| active_patient_tab.set("documents".to_string()),
+                                            IconSignature { size: 15, color: "currentColor".to_string() }
+                                            span { " Contratos & Documentos ({det.documents.len()})" }
+                                        }
                                     }
                                 }
 
                                 // Active Subtab Content
                                 match active_patient_tab().as_str() {
-                                    "anamnese" => rsx! {
-                                        PatientAnamneseTab {
-                                            patient_id: det.patient.id.clone(),
-                                            clinic_id: clinic_id.clone(),
-                                            token: token.clone(),
-                                            anamnesis: det.anamnesis.clone(),
-                                            can_write,
-                                            reload_patient_details: reload_fn.clone(),
-                                            toast_msg,
-                                            error_toast,
+                                    "anamnese" => {
+                                        if can_read_anamnese {
+                                            rsx! {
+                                                PatientAnamneseTab {
+                                                    patient_id: det.patient.id.clone(),
+                                                    clinic_id: clinic_id.clone(),
+                                                    token: token.clone(),
+                                                    anamnesis: det.anamnesis.clone(),
+                                                    can_write: can_write_anamnese,
+                                                    reload_patient_details: reload_fn.clone(),
+                                                    toast_msg,
+                                                    error_toast,
+                                                }
+                                            }
+                                        } else {
+                                            rsx! {
+                                                div { class: "permission-denied-state", style: "margin: 40px auto; max-width: 500px;",
+                                                    div { class: "permission-denied-icon", "🔒" }
+                                                    h3 { class: "permission-denied-title", "Acesso Restrito à Anamnese" }
+                                                    p { class: "permission-denied-desc", "Você não possui a permissão 'anamnese:read' para visualizar a ficha médica." }
+                                                }
+                                            }
                                         }
                                     },
-                                    "odontogram" => rsx! {
-                                        PatientOdontogramTab {
-                                            patient_id: det.patient.id.clone(),
-                                            clinic_id: clinic_id.clone(),
-                                            token: token.clone(),
-                                            treatments: det.treatments.clone(),
-                                            can_write,
-                                            reload_patient_details: reload_fn.clone(),
-                                            toast_msg,
-                                            error_toast,
+                                    "odontogram" => {
+                                        if can_read_treatments {
+                                            rsx! {
+                                                PatientOdontogramTab {
+                                                    patient_id: det.patient.id.clone(),
+                                                    clinic_id: clinic_id.clone(),
+                                                    token: token.clone(),
+                                                    treatments: det.treatments.clone(),
+                                                    can_write: can_write_treatments,
+                                                    can_delete: can_delete_treatments,
+                                                    reload_patient_details: reload_fn.clone(),
+                                                    toast_msg,
+                                                    error_toast,
+                                                }
+                                            }
+                                        } else {
+                                            rsx! {
+                                                div { class: "permission-denied-state", style: "margin: 40px auto; max-width: 500px;",
+                                                    div { class: "permission-denied-icon", "🔒" }
+                                                    h3 { class: "permission-denied-title", "Acesso Restrito aos Tratamentos" }
+                                                    p { class: "permission-denied-desc", "Você não possui a permissão 'treatments:read' para visualizar os procedimentos." }
+                                                }
+                                            }
                                         }
                                     },
-                                    "photos" => rsx! {
-                                        PatientPhotosTab {
-                                            patient_id: det.patient.id.clone(),
-                                            clinic_id: clinic_id.clone(),
-                                            token: token.clone(),
-                                            exams: det.exams.clone(),
-                                            can_write,
-                                            reload_patient_details: reload_fn.clone(),
-                                            toast_msg,
-                                            error_toast,
+                                    "photos" => {
+                                        if can_read_exams {
+                                            rsx! {
+                                                PatientPhotosTab {
+                                                    patient_id: det.patient.id.clone(),
+                                                    clinic_id: clinic_id.clone(),
+                                                    token: token.clone(),
+                                                    exams: det.exams.clone(),
+                                                    can_write: can_upload_exams,
+                                                    can_delete: can_delete_exams,
+                                                    reload_patient_details: reload_fn.clone(),
+                                                    toast_msg,
+                                                    error_toast,
+                                                }
+                                            }
+                                        } else {
+                                            rsx! {
+                                                div { class: "permission-denied-state", style: "margin: 40px auto; max-width: 500px;",
+                                                    div { class: "permission-denied-icon", "🔒" }
+                                                    h3 { class: "permission-denied-title", "Acesso Restrito aos Exames" }
+                                                    p { class: "permission-denied-desc", "Você não possui a permissão 'exams:read' para visualizar os exames e laudos." }
+                                                }
+                                            }
                                         }
                                     },
-                                    "documents" => rsx! {
-                                        PatientDocumentsTab {
-                                            patient_id: det.patient.id.clone(),
-                                            patient_name: det.patient.full_name.clone(),
-                                            patient_cpf: Some(det.patient.document_cpf.clone()),
-                                            patient_phone: Some(det.patient.phone.clone()),
-                                            patient_insurance: det.patient.insurance_plan.clone(),
-                                            clinic_id: clinic_id.clone(),
-                                            token: token.clone(),
-                                            documents: det.documents.clone(),
-                                            templates: templates_list.clone(),
-                                            can_write,
-                                            reload_patient_details: reload_fn.clone(),
-                                            toast_msg,
-                                            error_toast,
-                                            is_emit_modal_open: is_emit_contract_open,
+                                    "documents" => {
+                                        if can_read_documents {
+                                            rsx! {
+                                                PatientDocumentsTab {
+                                                    patient_id: det.patient.id.clone(),
+                                                    patient_name: det.patient.full_name.clone(),
+                                                    patient_cpf: det.patient.document_cpf.clone(),
+                                                    patient_phone: Some(det.patient.phone.clone()),
+                                                    patient_insurance: det.patient.insurance_plan.clone(),
+                                                    clinic_id: clinic_id.clone(),
+                                                    token: token.clone(),
+                                                    documents: det.documents.clone(),
+                                                    templates: templates_list.clone(),
+                                                    can_write: can_write_documents,
+                                                    reload_patient_details: reload_fn.clone(),
+                                                    toast_msg,
+                                                    error_toast,
+                                                    is_emit_modal_open: is_emit_contract_open,
+                                                }
+                                            }
+                                        } else {
+                                            rsx! {
+                                                div { class: "permission-denied-state", style: "margin: 40px auto; max-width: 500px;",
+                                                    div { class: "permission-denied-icon", "🔒" }
+                                                    h3 { class: "permission-denied-title", "Acesso Restrito aos Documentos" }
+                                                    p { class: "permission-denied-desc", "Você não possui a permissão 'documents:read' para visualizar os contratos e termos." }
+                                                }
+                                            }
                                         }
                                     },
                                     _ => rsx! {
@@ -356,6 +442,7 @@ pub fn PatientsView() -> Element {
                     reload_trigger,
                     can_write,
                     can_delete,
+                    can_manage_templates,
                     token: token.clone(),
                     clinic_id: clinic_id.clone(),
                     on_select_patient: move |p_id: String| {
@@ -366,10 +453,14 @@ pub fn PatientsView() -> Element {
                     on_open_create_modal: move |()| {
                         is_create_patient_open.set(true);
                     },
+                    on_open_templates_modal: move |()| {
+                        is_templates_modal_open.set(true);
+                    },
                     toast_msg,
                     error_toast,
                 }
             }
+
 
             if is_create_patient_open() {
                 PatientFormModal {
@@ -381,6 +472,17 @@ pub fn PatientsView() -> Element {
                     error_toast,
                 }
             }
+
+            if is_templates_modal_open() {
+                AnamneseTemplatesModal {
+                    is_open: is_templates_modal_open,
+                    token: token.clone(),
+                    clinic_id: clinic_id.clone(),
+                    toast_msg,
+                    error_toast,
+                }
+            }
         }
     }
 }
+
