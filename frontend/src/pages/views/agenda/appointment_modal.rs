@@ -1,41 +1,16 @@
-//! # Modal de Cadastro e Edição de Agendamentos (Frontend)
+//! # Modal de Criação e Edição de Agendamentos (Frontend)
 //!
-//! Controla o formulário de marcação de consultas odontológicas, seleção de
-//! profissionais responsáveis, divisões percentuais de repasse e materiais planejados.
+//! Exibe o formulário completo de agendamento de consultas com seleção de
+//! paciente, procedimentos, profissionais responsáveis, materiais de estoque e financeiro.
 
 use crate::api::{create_appointment, update_appointment};
-use crate::components::icons::{IconCheck, IconPlus, IconTrash};
+use crate::components::icons::{IconPlus, IconTrash, IconUsers};
 use dioxus::prelude::*;
 use shared::appointments::{
-    AgendaResourcesResponse, AppointmentResponse, AppointmentType, AssignedUserDto, ConsumedItemDto,
-    CreateAppointmentRequest, UpdateAppointmentRequest,
+    AgendaResourcesResponse, AppointmentResponse, AppointmentType, AssignedUserDto,
+    ConsumedItemDto, CreateAppointmentRequest, UpdateAppointmentRequest,
 };
 
-/// Converte enum `AppointmentType` em string.
-fn type_to_str(t: &AppointmentType) -> &'static str {
-    match t {
-        AppointmentType::Consultation => "consultation",
-        AppointmentType::Treatment => "treatment",
-        AppointmentType::Surgery => "surgery",
-        AppointmentType::Return => "return",
-        AppointmentType::Meeting => "meeting",
-        AppointmentType::Other => "other",
-    }
-}
-
-/// Converte string em enum `AppointmentType`.
-fn str_to_type(s: &str) -> AppointmentType {
-    match s {
-        "treatment" => AppointmentType::Treatment,
-        "surgery" => AppointmentType::Surgery,
-        "return" => AppointmentType::Return,
-        "meeting" => AppointmentType::Meeting,
-        "other" => AppointmentType::Other,
-        _ => AppointmentType::Consultation,
-    }
-}
-
-/// Modal de agendamento e edição de consultas.
 #[component]
 pub fn AppointmentModal(
     token: String,
@@ -45,166 +20,239 @@ pub fn AppointmentModal(
     default_time: String,
     resources: AgendaResourcesResponse,
     is_open: Signal<bool>,
-    on_success: EventHandler<String>,
+    on_success: EventHandler<()>,
     toast_msg: Signal<Option<String>>,
 ) -> Element {
-    let initial_app = editing_appointment.clone();
-    let is_editing = initial_app.is_some();
-    let edit_id = initial_app.as_ref().map(|a| a.id.clone()).unwrap_or_default();
-
-    let mut form_title = use_signal(|| initial_app.as_ref().map(|a| a.title.clone()).unwrap_or_default());
-    let mut form_patient_id = use_signal(|| initial_app.as_ref().and_then(|a| a.patient_id.clone()).unwrap_or_default());
-    let mut form_patient_name = use_signal(|| initial_app.as_ref().and_then(|a| a.patient_name.clone()).unwrap_or_default());
-    let mut form_date = use_signal(|| {
-        initial_app
-            .as_ref()
-            .map(|a| a.scheduled_for.chars().take(10).collect::<String>())
-            .unwrap_or_else(|| default_date.clone())
-    });
-    let mut form_time = use_signal(|| {
-        initial_app
-            .as_ref()
-            .map(|a| {
-                if a.scheduled_for.len() >= 16 {
-                    a.scheduled_for[11..16].to_string()
-                } else {
-                    "09:00".to_string()
-                }
-            })
-            .unwrap_or_else(|| default_time.clone())
-    });
-    let mut form_duration = use_signal(|| initial_app.as_ref().map(|a| a.duration_minutes).unwrap_or(30));
-    let mut form_type = use_signal(|| {
-        initial_app
-            .as_ref()
-            .map(|a| type_to_str(&a.appointment_type).to_string())
-            .unwrap_or_else(|| "consultation".into())
-    });
-    let mut form_financial_reais = use_signal(|| {
-        initial_app
-            .as_ref()
-            .and_then(|a| a.financial_amount_cents)
-            .map(|cents| format!("{:.2}", (cents as f64) / 100.0))
-            .unwrap_or_else(|| "0,00".into())
-    });
-    let mut form_assigned_users = use_signal(|| {
-        initial_app
-            .as_ref()
-            .map(|a| a.assigned_users.clone())
-            .unwrap_or_else(|| {
-                if let Some(first_member) = resources.team_members.first() {
-                    vec![AssignedUserDto {
-                        user_id: first_member.id.clone(),
-                        user_name: Some(first_member.name.clone()),
-                        role_in_appointment: "Dentista Principal".into(),
-                        split_percentage: 100,
-                    }]
-                } else {
-                    vec![]
-                }
-            })
-    });
-    let mut form_consumed_items = use_signal(|| {
-        initial_app
-            .as_ref()
-            .map(|a| a.consumed_items.clone())
-            .unwrap_or_default()
-    });
-    let mut is_submitting = use_signal(|| false);
-
     if !is_open() {
         return rsx! {};
     }
 
+    let is_edit = editing_appointment.is_some();
+    let title_modal = if is_edit {
+        "Editar Agendamento"
+    } else {
+        "Novo Agendamento"
+    };
+
+    let mut title = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .map(|a| a.title.clone())
+            .unwrap_or_default()
+    });
+
+    let mut app_type = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .map(|a| a.appointment_type)
+            .unwrap_or(AppointmentType::Consultation)
+    });
+
+    let mut scheduled_date = use_signal(|| {
+        if let Some(ref a) = editing_appointment {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&a.scheduled_for) {
+                return dt.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string();
+            }
+        }
+        if !default_date.is_empty() {
+            default_date.clone()
+        } else {
+            chrono::Local::now().format("%Y-%m-%d").to_string()
+        }
+    });
+
+    let mut scheduled_time = use_signal(|| {
+        if let Some(ref a) = editing_appointment {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&a.scheduled_for) {
+                return dt.with_timezone(&chrono::Local).format("%H:%M").to_string();
+            }
+        }
+        if !default_time.is_empty() {
+            default_time.clone()
+        } else {
+            "09:00".to_string()
+        }
+    });
+
+    let mut duration_minutes = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .map(|a| a.duration_minutes)
+            .unwrap_or(30)
+    });
+
+    let mut patient_id = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .and_then(|a| a.patient_id.clone())
+    });
+
+    let mut patient_name = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .and_then(|a| a.patient_name.clone())
+            .unwrap_or_default()
+    });
+
+    let mut assigned_users = use_signal(|| {
+        if let Some(ref a) = editing_appointment {
+            a.assigned_users.clone()
+        } else if let Some(first_member) = resources.team_members.first() {
+            vec![AssignedUserDto {
+                user_id: first_member.id.clone(),
+                user_name: Some(first_member.name.clone()),
+                role_in_appointment: first_member
+                    .extra_info
+                    .clone()
+                    .unwrap_or_else(|| "Dentista".to_string()),
+                split_percentage: 100,
+            }]
+        } else {
+            vec![]
+        }
+    });
+
+    let mut consumed_items = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .map(|a| a.consumed_items.clone())
+            .unwrap_or_default()
+    });
+
+    let mut financial_amount_str = use_signal(|| {
+        if let Some(ref a) = editing_appointment {
+            if let Some(cents) = a.financial_amount_cents {
+                return format!("{:.2}", cents as f64 / 100.0);
+            }
+        }
+        String::new()
+    });
+
+    let mut financial_type = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .and_then(|a| a.financial_type.clone())
+            .unwrap_or_else(|| "income".to_string())
+    });
+
+    let mut is_submitting = use_signal(|| false);
+
     let tok = token.clone();
     let cid = clinic_id.clone();
-    let res_clone = resources.clone();
+    let editing_app_clone = editing_appointment.clone();
 
     let mut handle_submit = move |_| {
-        let title = form_title().trim().to_string();
-        if title.is_empty() {
-            let mut toast = toast_msg;
-            toast.set(Some("Informe o título do agendamento.".into()));
+        if title().trim().is_empty() {
+            toast_msg.set(Some("Por favor, preencha o título do agendamento.".to_string()));
             return;
         }
 
-        if form_assigned_users().is_empty() {
-            let mut toast = toast_msg;
-            toast.set(Some("Vincule ao menos um profissional responsável.".into()));
+        if assigned_users().is_empty() {
+            toast_msg.set(Some("Selecione pelo menos um profissional responsável.".to_string()));
             return;
         }
 
-        let datetime_str = format!("{}T{}:00Z", form_date(), form_time());
-        let amount_clean = form_financial_reais().replace("R$", "").replace(".", "").replace(",", "").trim().to_string();
-        let amount_cents = amount_clean.parse::<i64>().unwrap_or(0);
-
-        let patient_id_opt = if form_patient_id().trim().is_empty() {
-            None
-        } else {
-            Some(form_patient_id().trim().to_string())
+        let scheduled_for = match chrono::NaiveDateTime::parse_from_str(
+            &format!("{} {}:00", scheduled_date(), scheduled_time()),
+            "%Y-%m-%d %H:%M:%S",
+        ) {
+            Ok(ndt) => {
+                let local_dt = chrono::Local
+                    .from_local_datetime(&ndt)
+                    .single()
+                    .unwrap_or_else(|| chrono::Local::now());
+                local_dt.to_rfc3339()
+            }
+            Err(_) => {
+                toast_msg.set(Some("Data ou horário inválido.".to_string()));
+                return;
+            }
         };
 
-        let patient_name_opt = if form_patient_name().trim().is_empty() {
-            None
+        let fin_amount_cents = if !financial_amount_str().trim().is_empty() {
+            let clean_str = financial_amount_str().replace(',', ".");
+            if let Ok(val_float) = clean_str.parse::<f64>() {
+                Some((val_float * 100.0).round() as i64)
+            } else {
+                None
+            }
         } else {
-            Some(form_patient_name().trim().to_string())
+            None
         };
 
+        is_submitting.set(true);
         let t = tok.clone();
         let c = cid.clone();
-        let e_id = edit_id.clone();
+        let edit_app = editing_app_clone.clone();
         let mut open_sig = is_open;
         let mut sub_sig = is_submitting;
         let mut toast = toast_msg;
         let on_succ = on_success.clone();
 
-        sub_sig.set(true);
         spawn(async move {
-            if is_editing {
+            if let Some(ref a) = edit_app {
                 let req = UpdateAppointmentRequest {
-                    patient_id: patient_id_opt,
-                    patient_name: patient_name_opt,
-                    title: Some(title),
-                    scheduled_for: Some(datetime_str),
-                    duration_minutes: Some(form_duration()),
-                    appointment_type: Some(str_to_type(&form_type())),
-                    financial_amount_cents: Some(amount_cents),
-                    financial_type: Some(if amount_cents > 0 { "income".into() } else { "none".into() }),
-                    assigned_users: Some(form_assigned_users()),
-                    consumed_items: Some(form_consumed_items()),
+                    patient_id: patient_id(),
+                    patient_name: if patient_name().trim().is_empty() {
+                        None
+                    } else {
+                        Some(patient_name())
+                    },
+                    title: Some(title()),
+                    scheduled_for: Some(scheduled_for),
+                    duration_minutes: Some(duration_minutes()),
+                    appointment_type: Some(app_type()),
+                    financial_amount_cents: fin_amount_cents,
+                    financial_type: if fin_amount_cents.is_some() {
+                        Some(financial_type())
+                    } else {
+                        None
+                    },
+                    assigned_users: Some(assigned_users()),
+                    consumed_items: Some(consumed_items()),
                 };
-                match update_appointment(&t, &e_id, &c, req).await {
+
+                match update_appointment(&t, &a.id, &c, req).await {
                     Ok(_) => {
                         open_sig.set(false);
-                        toast.set(Some("Agendamento atualizado com sucesso!".into()));
-                        on_succ.call("Atualizado".into());
+                        toast.set(Some("Agendamento atualizado com sucesso!".to_string()));
+                        on_succ.call(());
                     }
                     Err(e) => {
-                        toast.set(Some(format!("Erro ao atualizar: {}", e)));
+                        toast.set(Some(format!("Erro ao atualizar agendamento: {}", e)));
                     }
                 }
             } else {
                 let req = CreateAppointmentRequest {
-                    clinic_id: c,
-                    patient_id: patient_id_opt,
-                    patient_name: patient_name_opt,
-                    title,
-                    scheduled_for: datetime_str,
-                    duration_minutes: form_duration(),
-                    appointment_type: str_to_type(&form_type()),
-                    financial_amount_cents: Some(amount_cents),
-                    financial_type: Some(if amount_cents > 0 { "income".into() } else { "none".into() }),
-                    assigned_users: form_assigned_users(),
-                    consumed_items: form_consumed_items(),
+                    clinic_id: c.clone(),
+                    patient_id: patient_id(),
+                    patient_name: if patient_name().trim().is_empty() {
+                        None
+                    } else {
+                        Some(patient_name())
+                    },
+                    title: title(),
+                    scheduled_for,
+                    duration_minutes: duration_minutes(),
+                    appointment_type: app_type(),
+                    financial_amount_cents: fin_amount_cents,
+                    financial_type: if fin_amount_cents.is_some() {
+                        Some(financial_type())
+                    } else {
+                        None
+                    },
+                    assigned_users: assigned_users(),
+                    consumed_items: consumed_items(),
                 };
+
                 match create_appointment(&t, req).await {
                     Ok(_) => {
                         open_sig.set(false);
-                        toast.set(Some("Agendamento criado com sucesso!".into()));
-                        on_succ.call("Criado".into());
+                        toast.set(Some("Agendamento criado com sucesso!".to_string()));
+                        on_succ.call(());
                     }
                     Err(e) => {
-                        toast.set(Some(format!("Erro ao criar: {}", e)));
+                        toast.set(Some(format!("Erro ao criar agendamento: {}", e)));
                     }
                 }
             }
@@ -212,178 +260,272 @@ pub fn AppointmentModal(
         });
     };
 
+    use chrono::TimeZone;
+
+    // Horários disponíveis com inserção do horário atual se customizado
+    let mut standard_times: Vec<String> = Vec::new();
+    for h in 7..=21 {
+        for m in [0, 15, 30, 45] {
+            standard_times.push(format!("{:02}:{:02}", h, m));
+        }
+    }
+    let cur_time = scheduled_time();
+    if !cur_time.is_empty() && !standard_times.contains(&cur_time) {
+        standard_times.push(cur_time.clone());
+        standard_times.sort();
+    }
+
     rsx! {
         div { class: "modal-overlay",
-            div { class: "action-modal modal-large",
-                div { class: "modal-header",
+            div { class: "action-modal stock-custom-modal", style: "max-width: 720px; max-height: 90vh; display: flex; flex-direction: column;",
+                div { class: "settings-header",
                     div {
-                        h2 { class: "modal-title", if is_editing { "Editar Agendamento" } else { "Novo Agendamento na Agenda" } }
-                        p { class: "modal-subtitle", "Preencha os dados do agendamento, selecione o paciente e profissionais responsáveis." }
+                        h2 { class: "settings-title", "{title_modal}" }
+                        p { class: "text-muted font-xs mt-1", "Defina paciente, data, horário, profissionais e rateio financeiro." }
                     }
-                    button { class: "modal-close", onclick: move |_| { let mut o = is_open; o.set(false); }, "×" }
+                    button { class: "close-btn", onclick: move |_| is_open.set(false), "×" }
                 }
-                div { class: "modal-body scrollable",
-                    div { class: "form-grid-2",
-                        div { class: "form-group",
-                            label { "Título / Procedimento *" }
-                            input {
-                                class: "form-input",
-                                placeholder: "Ex: Consulta Inicial / Avaliação Ortodôntica",
-                                value: "{form_title}",
-                                oninput: move |e| form_title.set(e.value())
-                            }
+
+                div { class: "settings-content", style: "overflow-y: auto; gap: 18px; padding: 22px 26px;",
+                    // 1. Título
+                    div { class: "form-group",
+                        label { "Título do Agendamento / Procedimento *" }
+                        input {
+                            class: "form-input",
+                            placeholder: "Ex: Consulta Inicial & Avaliação Estética, Restauração...",
+                            value: "{title}",
+                            oninput: move |e| title.set(e.value())
                         }
+                    }
+
+                    // 2. Tipo de Atendimento & Duração Estimada
+                    div { class: "form-grid-2",
                         div { class: "form-group",
                             label { "Tipo de Atendimento" }
                             select {
                                 class: "form-input",
-                                value: "{form_type}",
-                                onchange: move |e| form_type.set(e.value()),
-                                option { value: "consultation", "Consulta / Avaliação" }
-                                option { value: "treatment", "Tratamento / Procedimento" }
-                                option { value: "surgery", "Cirurgia Odontológica" }
-                                option { value: "return", "Retorno / Revisão" }
-                                option { value: "meeting", "Reunião / Outro" }
+                                value: match app_type() {
+                                    AppointmentType::Consultation => "consultation",
+                                    AppointmentType::Treatment => "treatment",
+                                    AppointmentType::Surgery => "surgery",
+                                    AppointmentType::Return => "return",
+                                    AppointmentType::Meeting => "meeting",
+                                    AppointmentType::Other => "other",
+                                },
+                                onchange: move |e: FormEvent| {
+                                    app_type.set(match e.value().as_str() {
+                                        "treatment" => AppointmentType::Treatment,
+                                        "surgery" => AppointmentType::Surgery,
+                                        "return" => AppointmentType::Return,
+                                        "meeting" => AppointmentType::Meeting,
+                                        "other" => AppointmentType::Other,
+                                        _ => AppointmentType::Consultation,
+                                    });
+                                },
+                                option { value: "consultation", "Consulta" }
+                                option { value: "treatment", "Tratamento" }
+                                option { value: "surgery", "Cirurgia" }
+                                option { value: "return", "Retorno" }
+                                option { value: "meeting", "Reunião" }
+                                option { value: "other", "Outro" }
                             }
                         }
-                    }
 
-                    div { class: "form-grid-2",
                         div { class: "form-group",
-                            label { "Paciente Cadastrado" }
+                            label { "Duração Estimada" }
                             select {
                                 class: "form-input",
-                                value: "{form_patient_id}",
-                                onchange: move |e| {
-                                    let val = e.value();
-                                    form_patient_id.set(val.clone());
-                                    if let Some(p) = res_clone.patients.iter().find(|p| p.id == val) {
-                                        form_patient_name.set(p.name.clone());
+                                value: "{duration_minutes}",
+                                onchange: move |e: FormEvent| {
+                                    if let Ok(v) = e.value().parse::<i32>() {
+                                        duration_minutes.set(v);
                                     }
                                 },
-                                option { value: "", "Paciente não cadastrado / Avulso" }
-                                for p in &res_clone.patients {
-                                    option { value: "{p.id}", "{p.name} ({p.extra_info.as_deref().unwrap_or(\"\")})" }
-                                }
-                            }
-                        }
-                        div { class: "form-group",
-                            label { "Nome do Paciente Avulso" }
-                            input {
-                                class: "form-input",
-                                placeholder: "Ex: Maria Santos",
-                                value: "{form_patient_name}",
-                                oninput: move |e| form_patient_name.set(e.value())
-                            }
-                        }
-                    }
-
-                    div { class: "form-grid-3",
-                        div { class: "form-group",
-                            label { "Data *" }
-                            input {
-                                class: "form-input",
-                                r#type: "date",
-                                value: "{form_date}",
-                                oninput: move |e| form_date.set(e.value())
-                            }
-                        }
-                        div { class: "form-group",
-                            label { "Horário *" }
-                            input {
-                                class: "form-input",
-                                r#type: "time",
-                                value: "{form_time}",
-                                oninput: move |e| form_time.set(e.value())
-                            }
-                        }
-                        div { class: "form-group",
-                            label { "Duração (minutos)" }
-                            select {
-                                class: "form-input",
-                                value: "{form_duration}",
-                                onchange: move |e| form_duration.set(e.value().parse::<i32>().unwrap_or(30)),
                                 option { value: "15", "15 minutos" }
                                 option { value: "30", "30 minutos" }
                                 option { value: "45", "45 minutos" }
-                                option { value: "60", "1 hora (60 min)" }
-                                option { value: "90", "1 hora e meia (90 min)" }
-                                option { value: "120", "2 horas (120 min)" }
+                                option { value: "60", "1 hora" }
+                                option { value: "90", "1 hora e 30 min" }
+                                option { value: "120", "2 horas" }
+                                option { value: "180", "3 horas" }
                             }
                         }
                     }
 
+                    // 3. Data do Atendimento & Horário de Início
+                    div { class: "form-grid-2",
+                        div { class: "form-group",
+                            label { "Data do Atendimento" }
+                            input {
+                                class: "form-input",
+                                r#type: "date",
+                                value: "{scheduled_date}",
+                                oninput: move |e| scheduled_date.set(e.value())
+                            }
+                            div { class: "date-quick-buttons mt-1",
+                                button {
+                                    r#type: "button",
+                                    class: "quick-date-btn",
+                                    onclick: move |_| {
+                                        scheduled_date.set(chrono::Local::now().format("%Y-%m-%d").to_string());
+                                    },
+                                    "Hoje"
+                                }
+                                button {
+                                    r#type: "button",
+                                    class: "quick-date-btn",
+                                    onclick: move |_| {
+                                        let tomorrow = chrono::Local::now() + chrono::Duration::days(1);
+                                        scheduled_date.set(tomorrow.format("%Y-%m-%d").to_string());
+                                    },
+                                    "Amanhã"
+                                }
+                                button {
+                                    r#type: "button",
+                                    class: "quick-date-btn",
+                                    onclick: move |_| {
+                                        let next_week = chrono::Local::now() + chrono::Duration::days(7);
+                                        scheduled_date.set(next_week.format("%Y-%m-%d").to_string());
+                                    },
+                                    "+7 dias"
+                                }
+                            }
+                        }
+
+                        div { class: "form-group",
+                            label { "Horário de Início (Padrão 24h)" }
+                            select {
+                                class: "form-input",
+                                value: "{scheduled_time}",
+                                onchange: move |e: FormEvent| scheduled_time.set(e.value()),
+                                for t in &standard_times {
+                                    option { key: "{t}", value: "{t}", "{t}" }
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. Paciente
                     div { class: "form-group",
-                        label { "Valor Financeiro Previsto (R$)" }
-                        input {
+                        label { "Paciente (Opcional)" }
+                        select {
                             class: "form-input",
-                            placeholder: "0,00",
-                            value: "{form_financial_reais}",
-                            oninput: move |e| form_financial_reais.set(e.value())
+                            value: match patient_id() {
+                                Some(ref pid) => pid.as_str(),
+                                None => if !patient_name().is_empty() { "manual" } else { "" },
+                            },
+                            onchange: {
+                                let pats = resources.patients.clone();
+                                move |e: FormEvent| {
+                                    let val = e.value();
+                                    if val.is_empty() {
+                                        patient_id.set(None);
+                                        patient_name.set(String::new());
+                                    } else if val == "manual" {
+                                        patient_id.set(None);
+                                    } else {
+                                        if let Some(p) = pats.iter().find(|x| x.id == val) {
+                                            patient_id.set(Some(p.id.clone()));
+                                            patient_name.set(p.name.clone());
+                                        }
+                                    }
+                                }
+                            },
+                            option { value: "", "Sem paciente vinculado" }
+                            for pat in &resources.patients {
+                                option { value: "{pat.id}", "{pat.name} {pat.extra_info.as_deref().unwrap_or(\"\")}" }
+                            }
+                            option { value: "manual", "Digitar nome de paciente não cadastrado..." }
+                        }
+                        if patient_id().is_none() && !patient_name().is_empty() {
+                            input {
+                                class: "form-input mt-2",
+                                placeholder: "Nome do paciente avulso / novo...",
+                                value: "{patient_name}",
+                                oninput: move |e| patient_name.set(e.value())
+                            }
                         }
                     }
 
-                    div { class: "form-section-title mt-4", "Profissionais Responsáveis" }
-                    div { class: "team-assignment-list",
-                        for (idx, user) in form_assigned_users().iter().enumerate() {
-                            {
-                                let u_id = user.user_id.clone();
-                                let u_role = user.role_in_appointment.clone();
-                                let u_split = user.split_percentage;
+                    // 5. Profissionais Responsáveis (Sem campo redundante de nome/cargo)
+                    div { class: "form-group",
+                        label { "Profissionais Responsáveis & Rateio *" }
+                        if resources.team_members.is_empty() {
+                            div { class: "empty-state-card py-3",
+                                p { class: "text-muted font-xs", "Nenhum membro da equipe associado a esta unidade." }
+                            }
+                        } else {
+                            div { class: "agenda-assignment-box",
+                                for member in &resources.team_members {
+                                    {
+                                        let mid = member.id.clone();
+                                        let mname = member.name.clone();
+                                        let current_assigned = assigned_users();
+                                        let existing_entry = current_assigned.iter().find(|u| u.user_id == mid);
+                                        let is_assigned = existing_entry.is_some();
+                                        let split_val = existing_entry.map(|u| u.split_percentage).unwrap_or(100);
+                                        let role_val = existing_entry.map(|u| u.role_in_appointment.clone()).unwrap_or_else(|| member.extra_info.clone().unwrap_or_else(|| "Dentista".to_string()));
 
-                                rsx! {
-                                    div { key: "{u_id}", class: "form-grid-3 mb-2",
-                                        select {
-                                            class: "form-input",
-                                            value: "{u_id}",
-                                            onchange: move |e| {
-                                                let mut users = form_assigned_users();
-                                                if let Some(u) = users.get_mut(idx) {
-                                                    u.user_id = e.value();
-                                                }
-                                                form_assigned_users.set(users);
-                                            },
-                                            for m in &res_clone.team_members {
-                                                option { value: "{m.id}", "{m.name} ({m.extra_info.as_deref().unwrap_or(\"\")})" }
-                                            }
-                                        }
-                                        input {
-                                            class: "form-input",
-                                            placeholder: "Papel (Ex: Dentista Principal)",
-                                            value: "{u_role}",
-                                            oninput: move |e| {
-                                                let mut users = form_assigned_users();
-                                                if let Some(u) = users.get_mut(idx) {
-                                                    u.role_in_appointment = e.value();
-                                                }
-                                                form_assigned_users.set(users);
-                                            }
-                                        }
-                                        div { class: "flex items-center gap-2",
-                                            input {
-                                                class: "form-input",
-                                                r#type: "number",
-                                                min: "0",
-                                                max: "100",
-                                                placeholder: "% Repasse",
-                                                value: "{u_split}",
-                                                oninput: move |e| {
-                                                    let val = e.value().parse::<i32>().unwrap_or(0);
-                                                    let mut users = form_assigned_users();
-                                                    if let Some(u) = users.get_mut(idx) {
-                                                        u.split_percentage = val;
+                                        let mid_chk = mid.clone();
+                                        let mname_chk = mname.clone();
+                                        let role_chk = role_val.clone();
+                                        let mid_split = mid.clone();
+
+                                        let role_class = match role_val.to_lowercase().as_str() {
+                                            "admin" => "role-badge role-admin",
+                                            _ => "role-badge role-dentist",
+                                        };
+
+                                        rsx! {
+                                            div { key: "{member.id}", class: "agenda-member-assign-row",
+                                                label { class: "perm-checkbox-item",
+                                                    input {
+                                                        r#type: "checkbox",
+                                                        checked: is_assigned,
+                                                        onchange: move |e: FormEvent| {
+                                                            let mut curr = assigned_users();
+                                                            if e.checked() {
+                                                                if !curr.iter().any(|u| u.user_id == mid_chk) {
+                                                                    curr.push(AssignedUserDto {
+                                                                        user_id: mid_chk.clone(),
+                                                                        user_name: Some(mname_chk.clone()),
+                                                                        role_in_appointment: role_chk.clone(),
+                                                                        split_percentage: 100,
+                                                                    });
+                                                                }
+                                                            } else {
+                                                                curr.retain(|u| u.user_id != mid_chk);
+                                                            }
+                                                            assigned_users.set(curr);
+                                                        }
                                                     }
-                                                    form_assigned_users.set(users);
+                                                    span { class: "font-bold text-dark ml-1", "{member.name}" }
+                                                    span { class: "{role_class} ml-2 font-xs", "{role_val}" }
                                                 }
-                                            }
-                                            button {
-                                                class: "btn-icon text-danger",
-                                                onclick: move |_| {
-                                                    let mut users = form_assigned_users();
-                                                    users.remove(idx);
-                                                    form_assigned_users.set(users);
-                                                },
-                                                IconTrash { size: 14, color: "currentColor".to_string() }
+
+                                                if is_assigned {
+                                                    div { class: "agenda-split-input-wrapper",
+                                                        label { class: "text-muted font-xs", "Rateio:" }
+                                                        input {
+                                                            class: "form-input",
+                                                            style: "width: 70px; height: 36px; text-align: center;",
+                                                            r#type: "number",
+                                                            min: "0",
+                                                            max: "100",
+                                                            value: "{split_val}",
+                                                            oninput: move |e: FormEvent| {
+                                                                if let Ok(v) = e.value().parse::<i32>() {
+                                                                    let mut curr = assigned_users();
+                                                                    if let Some(entry) = curr.iter_mut().find(|u| u.user_id == mid_split) {
+                                                                        entry.split_percentage = v;
+                                                                    }
+                                                                    assigned_users.set(curr);
+                                                                }
+                                                            }
+                                                        }
+                                                        span { class: "font-bold font-xs text-muted", "%" }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -392,90 +534,130 @@ pub fn AppointmentModal(
                         }
                     }
 
-                    div { class: "form-section-title mt-4", "Planejamento de Insumos / Estoque" }
-                    div { class: "consumed-planning-list",
-                        for (idx, item) in form_consumed_items().iter().enumerate() {
-                            {
-                                let item_id = item.item_id.clone();
-                                let planned_qty = item.quantity_planned;
-
-                                rsx! {
-                                    div { key: "{item_id}", class: "form-grid-3 mb-2",
-                                        select {
-                                            class: "form-input",
-                                            value: "{item_id}",
-                                            onchange: move |e| {
-                                                let mut items = form_consumed_items();
-                                                if let Some(it) = items.get_mut(idx) {
-                                                    it.item_id = e.value();
-                                                }
-                                                form_consumed_items.set(items);
-                                            },
-                                            for inv in &res_clone.inventory_items {
-                                                option { value: "{inv.id}", "{inv.name} ({inv.extra_info.as_deref().unwrap_or(\"\")})" }
-                                            }
-                                        }
-                                        input {
-                                            class: "form-input",
-                                            r#type: "number",
-                                            min: "1",
-                                            placeholder: "Qtd. Planejada",
-                                            value: "{planned_qty}",
-                                            oninput: move |e| {
-                                                let val = e.value().parse::<i32>().unwrap_or(1);
-                                                let mut items = form_consumed_items();
-                                                if let Some(it) = items.get_mut(idx) {
-                                                    it.quantity_planned = val;
-                                                }
-                                                form_consumed_items.set(items);
-                                            }
-                                        }
-                                        button {
-                                            class: "btn-icon text-danger",
-                                            onclick: move |_| {
-                                                let mut items = form_consumed_items();
-                                                items.remove(idx);
-                                                form_consumed_items.set(items);
-                                            },
-                                            IconTrash { size: 14, color: "currentColor".to_string() }
-                                        }
-                                    }
+                    // 6. Financeiro & Faturamento Previsto
+                    div { class: "form-grid-2",
+                        div { class: "form-group",
+                            label { "Valor Previsto (R$)" }
+                            div { class: "currency-input-wrapper",
+                                span { class: "currency-prefix", "R$" }
+                                input {
+                                    class: "form-input currency-input-field",
+                                    placeholder: "0,00",
+                                    value: "{financial_amount_str}",
+                                    oninput: move |e| financial_amount_str.set(e.value())
                                 }
                             }
                         }
-                        if let Some(first_inv) = res_clone.inventory_items.first() {
-                            {
-                                let f_id = first_inv.id.clone();
-                                let f_name = first_inv.name.clone();
-                                rsx! {
-                                    button {
-                                        class: "btn-secondary btn-sm mt-2",
-                                        onclick: move |_| {
-                                            let mut items = form_consumed_items();
-                                            items.push(ConsumedItemDto {
-                                                item_id: f_id.clone(),
-                                                item_name: Some(f_name.clone()),
-                                                quantity_planned: 1,
-                                                quantity_used: None,
-                                            });
-                                            form_consumed_items.set(items);
-                                        },
-                                        IconPlus { size: 12, color: "currentColor".to_string() }
-                                        span { "Adicionar Item de Estoque" }
+                        div { class: "form-group",
+                            label { "Tipo de Lançamento" }
+                            select {
+                                class: "form-input",
+                                value: "{financial_type}",
+                                onchange: move |e| financial_type.set(e.value()),
+                                option { value: "income", "Receita (Entrada)" }
+                                option { value: "expense", "Despesa (Saída)" }
+                            }
+                        }
+                    }
+
+                    // 7. Consumo de Materiais de Estoque
+                    div { class: "form-group",
+                        div { class: "stock-consumption-header",
+                            label { class: "m-0 font-bold", "Consumo de Materiais de Estoque" }
+                            button {
+                                class: "btn-secondary btn-sm flex items-center gap-1",
+                                r#type: "button",
+                                onclick: move |_| {
+                                    if let Some(first_item) = resources.inventory_items.first() {
+                                        let mut curr = consumed_items();
+                                        curr.push(ConsumedItemDto {
+                                            item_id: first_item.id.clone(),
+                                            item_name: Some(first_item.name.clone()),
+                                            quantity_planned: 1,
+                                            quantity_used: Some(1),
+                                        });
+                                        consumed_items.set(curr);
+                                    }
+                                },
+                                IconPlus { size: 13, color: "currentColor".to_string() }
+                                span { "Adicionar Item" }
+                            }
+                        }
+
+                        if consumed_items().is_empty() {
+                            p { class: "text-muted font-xs m-0", "Nenhum material de estoque associado a este agendamento." }
+                        } else {
+                            div { class: "flex flex-col gap-2 mt-1",
+                                for (idx, consumed) in consumed_items().iter().enumerate() {
+                                    {
+                                        let item_id_val = consumed.item_id.clone();
+                                        let qty_val = consumed.quantity_planned;
+                                        let inventory_items = resources.inventory_items.clone();
+
+                                        rsx! {
+                                            div { key: "{idx}", class: "stock-consumed-row",
+                                                select {
+                                                    class: "form-input",
+                                                    value: "{item_id_val}",
+                                                    onchange: move |e: FormEvent| {
+                                                        let new_id = e.value();
+                                                        let mut curr = consumed_items();
+                                                        if let Some(c) = curr.get_mut(idx) {
+                                                            c.item_id = new_id.clone();
+                                                            if let Some(s) = inventory_items.iter().find(|x| x.id == new_id) {
+                                                                c.item_name = Some(s.name.clone());
+                                                            }
+                                                        }
+                                                        consumed_items.set(curr);
+                                                    },
+                                                    for item in &resources.inventory_items {
+                                                        option { value: "{item.id}", "{item.name} {item.extra_info.as_deref().unwrap_or(\"\")}" }
+                                                    }
+                                                }
+                                                input {
+                                                    class: "form-input",
+                                                    style: "text-align: center;",
+                                                    r#type: "number",
+                                                    min: "1",
+                                                    value: "{qty_val}",
+                                                    oninput: move |e: FormEvent| {
+                                                        if let Ok(q) = e.value().parse::<i32>() {
+                                                            let mut curr = consumed_items();
+                                                            if let Some(c) = curr.get_mut(idx) {
+                                                                c.quantity_planned = q;
+                                                                c.quantity_used = Some(q);
+                                                            }
+                                                            consumed_items.set(curr);
+                                                        }
+                                                    }
+                                                }
+                                                button {
+                                                    class: "btn-action-icon btn-action-danger",
+                                                    r#type: "button",
+                                                    title: "Remover item",
+                                                    onclick: move |_| {
+                                                        let mut curr = consumed_items();
+                                                        curr.remove(idx);
+                                                        consumed_items.set(curr);
+                                                    },
+                                                    IconTrash { size: 14, color: "#ef4444".to_string() }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-                div { class: "modal-footer",
-                    button { class: "btn-secondary", onclick: move |_| { let mut o = is_open; o.set(false); }, "Cancelar" }
+
+                div { class: "modal-footer-actions",
+                    button { class: "btn-secondary", onclick: move |_| is_open.set(false), "Cancelar" }
                     button {
                         class: "btn-primary",
                         disabled: is_submitting(),
                         onclick: move |e| handle_submit(e),
-                        IconCheck { size: 16, color: "currentColor".to_string() }
-                        span { if is_submitting() { "Salvando..." } else { "Salvar Agendamento" } }
+                        if is_submitting() { "Salvando..." } else { "Salvar Agendamento" }
                     }
                 }
             }

@@ -1,25 +1,10 @@
-//! # Modal de Movimentação de Estoque (Frontend)
-//!
-//! Controla os lançamentos de entrada por compra, saídas manuais, perdas e
-//! ajustes de saldo com justificativa e número de nota fiscal.
+//! # Modal de Registro de Movimentação de Estoque (Frontend)
 
 use crate::api::create_stock_movement;
-use crate::components::icons::IconCheck;
+use crate::components::icons::{IconAlertTriangle, IconRefresh, IconUpload};
 use dioxus::prelude::*;
 use shared::stock::{CreateStockMovementRequest, InventoryItem, MovementType};
 
-/// Converte enum `MovementType` em string.
-fn mov_type_to_str(m: &MovementType) -> &'static str {
-    match m {
-        MovementType::PurchaseIn => "purchase_in",
-        MovementType::ManualOut => "manual_out",
-        MovementType::AppointmentOut => "appointment_out",
-        MovementType::Adjustment => "adjustment",
-        MovementType::Loss => "loss",
-    }
-}
-
-/// Converte string em enum `MovementType`.
 fn str_to_mov_type(s: &str) -> MovementType {
     match s {
         "manual_out" => MovementType::ManualOut,
@@ -30,7 +15,6 @@ fn str_to_mov_type(s: &str) -> MovementType {
     }
 }
 
-/// Modal para registro de movimentação de entrada/saída no estoque.
 #[component]
 pub fn StockMovementModal(
     token: String,
@@ -38,7 +22,7 @@ pub fn StockMovementModal(
     items: Vec<InventoryItem>,
     target_item: Option<InventoryItem>,
     is_open: Signal<bool>,
-    reload_counter: Signal<usize>,
+    reload_counter: Signal<i32>,
     toast_msg: Signal<Option<String>>,
 ) -> Element {
     if !is_open() {
@@ -54,7 +38,7 @@ pub fn StockMovementModal(
     let mut form_item_id = use_signal(|| default_item_id);
     let mut form_mov_type = use_signal(|| "purchase_in".to_string());
     let mut form_qty = use_signal(|| 1);
-    let mut form_unit_cost = use_signal(|| "0,00".to_string());
+    let mut form_unit_cost = use_signal(|| "R$ 0,00".to_string());
     let mut form_invoice = use_signal(String::new);
     let mut form_notes = use_signal(String::new);
     let mut is_submitting = use_signal(|| false);
@@ -71,24 +55,28 @@ pub fn StockMovementModal(
         }
 
         let qty: i32 = form_qty();
-        if qty == 0 {
+        if qty <= 0 {
             let mut toast = toast_msg;
-            toast.set(Some("A quantidade deve ser diferente de zero.".into()));
+            toast.set(Some("A quantidade deve ser maior que zero.".into()));
             return;
         }
 
         let mov_type = str_to_mov_type(&form_mov_type());
-        let qty_change: i32 = if mov_type == MovementType::PurchaseIn {
+        let qty_change: i32 = if mov_type == MovementType::PurchaseIn || mov_type == MovementType::Adjustment {
             qty.abs()
         } else {
             -qty.abs()
         };
 
-        let cost_clean = form_unit_cost().replace("R$", "").replace(".", "").replace(",", "").trim().to_string();
-        let cost_cents = if cost_clean.is_empty() {
-            None
-        } else {
-            Some(cost_clean.parse::<i64>().unwrap_or(0))
+        let cost_clean = form_unit_cost()
+            .replace("R$", "")
+            .replace(".", "")
+            .replace(",", ".")
+            .trim()
+            .to_string();
+        let cost_cents = match cost_clean.parse::<f64>() {
+            Ok(v) if v > 0.0 => Some((v * 100.0).round() as i64),
+            _ => None,
         };
 
         let invoice_opt = if form_invoice().trim().is_empty() {
@@ -125,7 +113,7 @@ pub fn StockMovementModal(
                 Ok(_) => {
                     open_sig.set(false);
                     rel_sig.set(rel_sig() + 1);
-                    toast.set(Some("Movimentação registrada com sucesso!".into()));
+                    toast.set(Some("Movimentação de estoque registrada com sucesso!".into()));
                 }
                 Err(e) => {
                     toast.set(Some(format!("Erro ao registrar movimentação: {}", e)));
@@ -137,93 +125,124 @@ pub fn StockMovementModal(
 
     rsx! {
         div { class: "modal-overlay",
-            div { class: "action-modal",
-                div { class: "modal-header",
-                    div {
-                        h2 { class: "modal-title", "Registrar Movimentação de Estoque" }
-                        p { class: "modal-subtitle", "Entrada de compras, saídas manuais, perdas ou ajustes de balanço." }
-                    }
-                    button { class: "modal-close", onclick: move |_| { let mut o = is_open; o.set(false); }, "×" }
+            div { class: "action-modal stock-custom-modal",
+                div { class: "settings-header",
+                    h2 { class: "settings-title", "Registrar Movimentação de Estoque" }
+                    button { class: "close-btn", onclick: move |_| is_open.set(false), "×" }
                 }
-                div { class: "modal-body",
-                    div { class: "form-group",
-                        label { "Item de Estoque *" }
-                        select {
-                            class: "form-input",
-                            value: "{form_item_id}",
-                            onchange: move |e| form_item_id.set(e.value()),
-                            for it in &items {
-                                option { value: "{it.id}", "{it.name} (Atual: {it.current_stock} {it.unit_type})" }
-                            }
-                        }
-                    }
-
-                    div { class: "form-grid-2",
-                        div { class: "form-group",
-                            label { "Tipo de Movimentação *" }
+                div { class: "settings-content",
+                    div { class: "form-grid",
+                        // 1. Item Selecionado
+                        div { class: "input-group-wrapper full-width",
+                            label { "Item *" }
                             select {
-                                class: "form-input",
-                                value: "{form_mov_type}",
-                                onchange: move |e| form_mov_type.set(e.value()),
-                                option { value: "purchase_in", "Entrada por Compra (+)" }
-                                option { value: "manual_out", "Saída Manual / Consumo (-)" }
-                                option { value: "loss", "Perda / Avaria / Descarte (-)" }
-                                option { value: "adjustment", "Ajuste de Balanço" }
+                                class: "modern-input-field modern-select",
+                                value: "{form_item_id}",
+                                onchange: move |e: FormEvent| form_item_id.set(e.value()),
+                                for it in &items {
+                                    option { value: "{it.id}", "{it.name} (Atual: {it.current_stock} {it.unit_type})" }
+                                }
                             }
                         }
-                        div { class: "form-group",
+
+                        // 2. Tipo de Movimentação (Cards com botões selecionáveis)
+                        div { class: "input-group-wrapper full-width",
+                            label { "Tipo de Movimentação *" }
+                            div { class: "stock-modal-type-grid",
+                                button {
+                                    r#type: "button",
+                                    class: if form_mov_type() == "purchase_in" { "stock-type-card active" } else { "stock-type-card" },
+                                    onclick: move |_| form_mov_type.set("purchase_in".to_string()),
+                                    span { class: "type-card-arrow-icon", "↓" }
+                                    span { "Entrada / Compra" }
+                                }
+                                button {
+                                    r#type: "button",
+                                    class: if form_mov_type() == "manual_out" { "stock-type-card active" } else { "stock-type-card" },
+                                    onclick: move |_| form_mov_type.set("manual_out".to_string()),
+                                    span { class: "type-card-arrow-icon", "↑" }
+                                    div { class: "type-card-text",
+                                        span { "Saída Manual" }
+                                        span { class: "type-card-sub", "(Consumo)" }
+                                    }
+                                }
+                                button {
+                                    r#type: "button",
+                                    class: if form_mov_type() == "loss" { "stock-type-card active" } else { "stock-type-card" },
+                                    onclick: move |_| form_mov_type.set("loss".to_string()),
+                                    IconAlertTriangle { size: 14, color: "currentColor".to_string() }
+                                    span { "Avaria / Perda" }
+                                }
+                                button {
+                                    r#type: "button",
+                                    class: if form_mov_type() == "adjustment" { "stock-type-card active" } else { "stock-type-card" },
+                                    onclick: move |_| form_mov_type.set("adjustment".to_string()),
+                                    IconRefresh { size: 14, color: "currentColor".to_string() }
+                                    span { "Ajuste de Balanço" }
+                                }
+                            }
+                        }
+
+                        // 3. Quantidade e Custo Unitário
+                        div { class: "input-group-wrapper",
                             label { "Quantidade *" }
                             input {
-                                class: "form-input",
+                                class: "modern-input-field font-mono",
                                 r#type: "number",
                                 min: "1",
                                 value: "{form_qty}",
-                                oninput: move |e| form_qty.set(e.value().parse::<i32>().unwrap_or(1))
+                                oninput: move |e: FormEvent| form_qty.set(e.value().parse::<i32>().unwrap_or(1))
                             }
                         }
-                    }
 
-                    if form_mov_type() == "purchase_in" {
-                        div { class: "form-grid-2",
-                            div { class: "form-group",
-                                label { "Custo Unitário (R$)" }
-                                input {
-                                    class: "form-input",
-                                    placeholder: "0,00",
-                                    value: "{form_unit_cost}",
-                                    oninput: move |e| form_unit_cost.set(e.value())
-                                }
-                            }
-                            div { class: "form-group",
-                                label { "Nº da Nota Fiscal" }
-                                input {
-                                    class: "form-input",
-                                    placeholder: "Ex: NF-e 12345",
-                                    value: "{form_invoice}",
-                                    oninput: move |e| form_invoice.set(e.value())
-                                }
+                        div { class: "input-group-wrapper",
+                            label { "Custo Unitário (R$)" }
+                            input {
+                                class: "modern-input-field font-mono",
+                                placeholder: "R$ 0,00",
+                                value: "{form_unit_cost}",
+                                oninput: move |e: FormEvent| form_unit_cost.set(e.value())
                             }
                         }
-                    }
 
-                    div { class: "form-group",
-                        label { "Observações / Justificativa" }
-                        textarea {
-                            class: "form-textarea",
-                            placeholder: "Ex: Reposição de estoque semanal ou motivo de descarte...",
-                            value: "{form_notes}",
-                            oninput: move |e| form_notes.set(e.value())
+                        // 4. Nota Fiscal / Recibo e Observações
+                        div { class: "input-group-wrapper",
+                            label { "Nota Fiscal / Recibo" }
+                            input {
+                                class: "modern-input-field",
+                                placeholder: "Ex: NF-10492...",
+                                value: "{form_invoice}",
+                                oninput: move |e: FormEvent| form_invoice.set(e.value())
+                            }
+                        }
+
+                        div { class: "input-group-wrapper",
+                            label { "Observações" }
+                            input {
+                                class: "modern-input-field",
+                                placeholder: "Ex: Reposição periódica, quebra de frasc...",
+                                value: "{form_notes}",
+                                oninput: move |e: FormEvent| form_notes.set(e.value())
+                            }
+                        }
+
+                        // 5. Upload de Nota Fiscal
+                        div { class: "input-group-wrapper full-width",
+                            label { "Comprovante / PDF de Nota Fiscal" }
+                            div { class: "stock-upload-dropzone",
+                                IconUpload { size: 16, color: "#0052cc".to_string() }
+                                span { class: "stock-upload-title", "Clique para anexar arquivo da NF" }
+                            }
                         }
                     }
                 }
-                div { class: "modal-footer",
-                    button { class: "btn-secondary", onclick: move |_| { let mut o = is_open; o.set(false); }, "Cancelar" }
+                div { class: "modal-footer-actions",
+                    button { class: "btn-secondary", onclick: move |_| is_open.set(false), "Cancelar" }
                     button {
                         class: "btn-primary",
                         disabled: is_submitting(),
                         onclick: move |e| handle_submit(e),
-                        IconCheck { size: 16, color: "currentColor".to_string() }
-                        span { if is_submitting() { "Registrando..." } else { "Salvar Movimentação" } }
+                        span { if is_submitting() { "Confirmando..." } else { "Confirmar Movimentação" } }
                     }
                 }
             }

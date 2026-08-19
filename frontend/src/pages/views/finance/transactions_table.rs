@@ -1,9 +1,9 @@
-//! # Tabela de Transações e Resumo Financeiro (Frontend)
+//! # Listagem de Transações e Lançamentos Financeiros (Frontend)
 //!
-//! Exibe a listagem de lançamentos de receitas e despesas, indicadores de saldo líquido,
-//! liquidação de contas a pagar/receber e exclusão de lançamentos.
+//! Exibe os lançamentos de receitas e despesas em cards modernos com badges
+//! de categoria em português, status de liquidação e ações contextuais.
 
-use crate::components::icons::{IconFinance, IconTrash};
+use crate::components::icons::{IconCheck, IconClock, IconFinance, IconTrash};
 use dioxus::prelude::*;
 use shared::finance::{Transaction, TransactionDirection, TransactionStatus};
 
@@ -14,13 +14,37 @@ fn format_currency(cents: i64) -> String {
     let reals = abs_cents / 100;
     let centavos = abs_cents % 100;
     if is_negative {
-        format!("-R$ {}.{:02}", reals, centavos)
+        format!("- R$ {}.{:02}", reals, centavos)
     } else {
         format!("R$ {}.{:02}", reals, centavos)
     }
 }
 
-/// Seção da tabela de transações com ações de liquidação e remoção.
+/// Normaliza e traduz nomes de categorias para exibição amigável em português.
+pub fn format_category_display(cat: &str) -> String {
+    match cat.trim().to_lowercase().as_str() {
+        "consultation" => "Procedimento Clínico".to_string(),
+        "treatment" => "Tratamento Odontológico".to_string(),
+        "surgery" => "Cirurgia".to_string(),
+        "return" => "Retorno".to_string(),
+        "supplies" => "Insumos & Estoque".to_string(),
+        "rent" => "Custos Fixos / Aluguel".to_string(),
+        "utilities" => "Água / Luz / Internet".to_string(),
+        "commission" => "Salários & Repasses".to_string(),
+        "maintenance" => "Manutenção & Equipamentos".to_string(),
+        "other_income" => "Outra Receita".to_string(),
+        "other_expense" => "Outra Despesa".to_string(),
+        _ => {
+            if cat.is_empty() {
+                "Geral".to_string()
+            } else {
+                cat.to_string()
+            }
+        }
+    }
+}
+
+/// Seção da listagem de transações com cards modernos e ações de liquidação e remoção.
 #[component]
 pub fn TransactionsTableSection(
     transactions: Vec<Transaction>,
@@ -32,96 +56,116 @@ pub fn TransactionsTableSection(
     if transactions.is_empty() {
         return rsx! {
             div { class: "empty-state-card",
-                IconFinance { size: 48, color: "var(--text-muted, #8c8c8c)".to_string() }
-                h3 { "Nenhum lançamento financeiro localizado" }
-                p { "Utilize os filtros acima ou crie uma nova receita/despesa." }
+                div { class: "empty-state-icon-box",
+                    IconFinance { size: 32, color: "#64748b".to_string() }
+                }
+                h3 { "Nenhuma movimentação encontrada" }
+                p { "Não há lançamentos financeiros registrados para este período. Altere os filtros de data ou registre uma nova entrada/saída." }
             }
         };
     }
 
     rsx! {
-        div { class: "table-responsive",
-            table { class: "data-table",
-                thead {
-                    tr {
-                        th { "Data" }
-                        th { "Descrição / Paciente" }
-                        th { "Categoria" }
-                        th { "Forma de Pagto" }
-                        th { "Status" }
-                        th { "Valor" }
-                        th { "Ações" }
-                    }
-                }
-                tbody {
-                    for tx in &transactions {
-                        {
-                            let tx_clone = tx.clone();
-                            let tx_clone_del = tx.clone();
-                            let is_income = tx.direction == TransactionDirection::Income;
-                            let val_badge = if is_income { "text-success font-mono font-weight-bold" } else { "text-danger font-mono font-weight-bold" };
-                            let val_prefix = if is_income { "+" } else { "-" };
+        div { class: "finance-list-container",
+            for tx in &transactions {
+                {
+                    let tx_clone = tx.clone();
+                    let tx_clone_del = tx.clone();
+                    let is_income = tx.direction == TransactionDirection::Income;
+                    let is_pending = tx.status == TransactionStatus::Pending;
+                    let val_prefix = if is_income { "+ " } else { "- " };
+                    let amount_color_cls = if is_income { "text-success" } else { "text-danger" };
 
-                            let status_badge = match tx.status {
-                                TransactionStatus::Paid => "badge-success",
-                                TransactionStatus::Pending => "badge-warning",
-                                TransactionStatus::Canceled => "badge-danger",
-                                TransactionStatus::Refunded => "badge-outline",
-                            };
-                            let status_label = match tx.status {
-                                TransactionStatus::Paid => "Liquidado",
-                                TransactionStatus::Pending => "Pendente",
-                                TransactionStatus::Canceled => "Cancelado",
-                                TransactionStatus::Refunded => "Estornado",
-                            };
+                    let status_cls = match tx.status {
+                        TransactionStatus::Paid => "status-paid",
+                        TransactionStatus::Pending => "status-pending",
+                        TransactionStatus::Canceled => "status-canceled",
+                        TransactionStatus::Refunded => "status-refunded",
+                    };
+                    let status_label = match tx.status {
+                        TransactionStatus::Paid => "Liquidado",
+                        TransactionStatus::Pending => "Pendente",
+                        TransactionStatus::Canceled => "Cancelado",
+                        TransactionStatus::Refunded => "Estornado",
+                    };
 
-                            let date_display = if !tx.due_date.is_empty() {
-                                tx.due_date.chars().take(10).collect::<String>()
-                            } else {
-                                "-".to_string()
-                            };
+                    let date_display = if !tx.due_date.is_empty() {
+                        if let Ok(ndt) = chrono::NaiveDate::parse_from_str(
+                            tx.due_date.chars().take(10).collect::<String>().as_str(),
+                            "%Y-%m-%d",
+                        ) {
+                            ndt.format("%d/%m/%Y").to_string()
+                        } else {
+                            tx.due_date.chars().take(10).collect::<String>()
+                        }
+                    } else {
+                        "-".to_string()
+                    };
 
-                            rsx! {
-                                tr { key: "{tx.id}",
-                                    td { class: "font-mono font-xs",
-                                        "{date_display}"
+                    let category_label = format_category_display(&tx.category);
+
+                    rsx! {
+                        div { key: "{tx.id}", class: "finance-item-card",
+                            div { class: "finance-card-left",
+                                div {
+                                    class: if is_pending {
+                                        "fin-dir-indicator dir-pending"
+                                    } else if is_income {
+                                        "fin-dir-indicator dir-income"
+                                    } else {
+                                        "fin-dir-indicator dir-expense"
+                                    },
+                                    if is_pending {
+                                        IconClock { size: 18, color: "currentColor".to_string() }
+                                    } else if is_income {
+                                        span { "↓" }
+                                    } else {
+                                        span { "↑" }
                                     }
-                                    td {
-                                        strong { "{tx.description}" }
+                                }
+                                div { class: "fin-card-info",
+                                    div { class: "fin-card-title-row",
+                                        span { class: "fin-tx-description", "{tx.description}" }
+                                        span { class: "fin-category-badge", "{category_label}" }
+                                        if tx.appointment_id.is_some() || tx.is_calculated_pending {
+                                            span { class: "fin-simulated-badge", "Agenda Automática" }
+                                        }
+                                    }
+                                    div { class: "fin-card-meta-row",
+                                        span { class: "fin-meta-item", "Vencimento: {date_display}" }
                                         if let Some(ref p_name) = tx.patient_name {
-                                            div { class: "text-muted font-xs", "Paciente: {p_name}" }
+                                            span { class: "fin-meta-item", "Paciente: {p_name}" }
+                                        }
+                                        if let Some(ref method) = tx.payment_method {
+                                            span { class: "fin-meta-item fin-meta-method", "{method}" }
                                         }
                                     }
-                                    td {
-                                        span { class: "badge-outline", "{tx.category}" }
+                                }
+                            }
+
+                            div { class: "finance-card-right",
+                                div { class: "fin-amount-col",
+                                    span { class: "fin-amount-text {amount_color_cls}",
+                                        "{val_prefix}{format_currency(tx.amount_cents)}"
                                     }
-                                    td {
-                                        span { class: "font-xs", "{tx.payment_method.as_deref().unwrap_or(\"-\")}" }
-                                    }
-                                    td {
-                                        span { class: "{status_badge}", "{status_label}" }
-                                    }
-                                    td {
-                                        span { class: "{val_badge}",
-                                            "{val_prefix} {format_currency(tx.amount_cents)}"
+                                    span { class: "fin-status-pill {status_cls}", "{status_label}" }
+                                }
+                                div { class: "fin-card-actions",
+                                    if is_pending && can_update_status {
+                                        button {
+                                            class: "btn-liquidar-action",
+                                            title: "Confirmar recebimento / pagamento",
+                                            onclick: move |_| on_settle.call(tx_clone.clone()),
+                                            IconCheck { size: 14, color: "currentColor".to_string() }
+                                            span { " Liquidar" }
                                         }
                                     }
-                                    td { class: "actions-cell",
-                                        if tx.status == TransactionStatus::Pending && can_update_status {
-                                            button {
-                                                class: "btn-secondary btn-sm",
-                                                title: "Liquidar / Confirmar Pagamento",
-                                                onclick: move |_| on_settle.call(tx_clone.clone()),
-                                                "Liquidar"
-                                            }
-                                        }
-                                        if can_delete {
-                                            button {
-                                                class: "btn-icon text-danger",
-                                                title: "Excluir Lançamento",
-                                                onclick: move |_| on_delete.call(tx_clone_del.clone()),
-                                                IconTrash { size: 14, color: "currentColor".to_string() }
-                                            }
+                                    if can_delete {
+                                        button {
+                                            class: "item-action-icon-btn btn-danger-icon",
+                                            title: "Excluir Lançamento Financeiro",
+                                            onclick: move |_| on_delete.call(tx_clone_del.clone()),
+                                            IconTrash { size: 14, color: "currentColor".to_string() }
                                         }
                                     }
                                 }

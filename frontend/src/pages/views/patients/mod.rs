@@ -21,12 +21,24 @@ pub use photos_tab::*;
 
 use crate::api::{fetch_patient_details, fetch_patients, fetch_templates};
 use crate::components::icons::{
-    IconChevronLeft, IconFile, IconFolder, IconHeartPulse, IconSignature, IconTooth,
+    IconCalendar, IconChevronLeft, IconEdit, IconEye, IconFile, IconFolder, IconHeartPulse,
+    IconLock, IconMail, IconPhone, IconSignature, IconTooth, IconUsers, 
 };
 use crate::permissions;
 use crate::{ActiveClinicState, SessionState};
 use dioxus::prelude::*;
 use shared::patients::{PatientDetailsResponse, PatientKpis};
+
+/// Formata a data ISO para o padrão brasileiro DD/MM/YYYY.
+fn format_br_date_short(date_str: &str) -> String {
+    if date_str.len() >= 10 {
+        let parts: Vec<&str> = date_str[0..10].split('-').collect();
+        if parts.len() == 3 {
+            return format!("{}/{}/{}", parts[2], parts[1], parts[0]);
+        }
+    }
+    date_str.to_string()
+}
 
 /// Componente principal da tela de Gestão de Pacientes e Prontuário Clínico.
 #[component]
@@ -95,15 +107,16 @@ pub fn PatientsView() -> Element {
     let templates_resource = use_resource(move || {
         let t = tok_tpl.clone();
         let cid = cid_tpl.clone();
+        let _ = reload_trigger();
         async move {
-            if t.is_empty() || cid.is_empty() || !can_read {
+            if t.is_empty() || cid.is_empty() {
                 return Ok(vec![]);
             }
             fetch_templates(&t, &cid).await
         }
     });
 
-    let (patients_list, kpis, is_loading) = match &*patients_resource.read() {
+    let (patients_list, kpis, is_patients_loading) = match &*patients_resource.read() {
         Some(Ok(resp)) => (resp.items.clone(), resp.kpis.clone(), false),
         Some(Err(_e)) => (vec![], PatientKpis::default(), false),
         None => (vec![], PatientKpis::default(), true),
@@ -114,12 +127,13 @@ pub fn PatientsView() -> Element {
         _ => vec![],
     };
 
-    // Dedicated Full-Page Patient View State
+    // Estado do Prontuário Detalhado
     let mut selected_patient_id = use_signal(|| None::<String>);
     let mut patient_details = use_signal(|| None::<PatientDetailsResponse>);
     let mut details_loading = use_signal(|| false);
     let mut active_patient_tab = use_signal(|| "overview".to_string());
     let mut is_create_patient_open = use_signal(|| false);
+    let mut is_emit_contract_open = use_signal(|| false);
 
     let load_patient_details = {
         let tok = token.clone();
@@ -147,7 +161,7 @@ pub fn PatientsView() -> Element {
     };
 
     rsx! {
-        div { class: "patients-main-wrapper",
+        div { class: "patients-view-container",
             if let Some(ref toast) = *toast_msg.read() {
                 div { class: "toast toast-success",
                     span { "{toast}" }
@@ -163,7 +177,10 @@ pub fn PatientsView() -> Element {
 
             if let Some(ref sel_id) = *selected_patient_id.read() {
                 if details_loading() {
-                    div { class: "loading-state p-8", "Carregando prontuário completo..." }
+                    div { class: "loading-card",
+                        div { class: "loading-spinner" }
+                        p { "Carregando prontuário completo..." }
+                    }
                 } else if let Some(ref det) = *patient_details.read() {
                     {
                         let reload_fn = {
@@ -172,76 +189,93 @@ pub fn PatientsView() -> Element {
                             move |()| loader(p_id.clone())
                         };
 
+                        let initial = det.patient.full_name.chars().next().unwrap_or('P');
+                        let plan_name = det.patient.insurance_plan.as_deref().unwrap_or("Particular");
+                        let is_particular = plan_name.eq_ignore_ascii_case("Particular");
+
                         rsx! {
-                            div { class: "patient-details-view",
-                                div { class: "details-topbar",
+                            div { class: "patient-details-page",
+                                // Top Action Row
+                                div { class: "prontuario-top-nav-row",
                                     button {
-                                        class: "btn-back",
+                                        class: "btn-back-to-list",
                                         onclick: move |_| {
                                             selected_patient_id.set(None);
                                             patient_details.set(None);
                                             reload_trigger.set(reload_trigger() + 1);
                                         },
-                                        IconChevronLeft { size: 16, color: "currentColor".to_string() }
-                                        span { "Voltar para Lista de Pacientes" }
+                                        span { "← Voltar para Lista de Pacientes" }
                                     }
                                 }
 
-                                div { class: "patient-header-banner",
-                                    div { class: "patient-banner-avatar",
-                                        "{det.patient.full_name.chars().next().unwrap_or('P')}"
+                                // Patient Profile Card (Single Row)
+                                div { class: "patient-profile-card-single-row",
+                                    div { class: "patient-profile-avatar",
+                                        "{initial}"
                                     }
-                                    div { class: "patient-banner-info",
-                                        div { class: "patient-banner-title-row",
-                                            h2 { class: "patient-banner-name", "{det.patient.full_name}" }
-                                            span { class: "badge-insurance",
-                                                "{det.patient.insurance_plan.as_deref().unwrap_or(\"Particular\")}"
-                                            }
+                                    h2 { class: "patient-hero-name", "{det.patient.full_name}" }
+                                    if is_particular {
+                                        span { class: "badge-insurance-particular", "Particular" }
+                                    } else {
+                                        span { class: "badge-insurance-plan", "{plan_name}" }
+                                    }
+                                    span { class: "patient-profile-meta-item",
+                                        IconLock { size: 13, color: "#64748b".to_string() }
+                                        span { "CPF: {det.patient.document_cpf}" }
+                                    }
+                                    span { class: "patient-profile-meta-item",
+                                        IconPhone { size: 13, color: "#64748b".to_string() }
+                                        span { "{det.patient.phone}" }
+                                    }
+                                    if let Some(ref email) = det.patient.email {
+                                        span { class: "patient-profile-meta-item",
+                                            IconMail { size: 13, color: "#64748b".to_string() }
+                                            span { "{email}" }
                                         }
-                                        div { class: "patient-banner-meta",
-                                            span { "CPF: {det.patient.document_cpf}" }
-                                            span { " • " }
-                                            span { "Tel: {det.patient.phone}" }
-                                            if let Some(ref bdate) = det.patient.birth_date {
-                                                span { " • " }
-                                                span { "Nascimento: {bdate}" }
-                                            }
+                                    }
+                                    if let Some(ref bdate) = det.patient.birth_date {
+                                        span { class: "patient-profile-meta-item",
+                                            IconCalendar { size: 13, color: "#64748b".to_string() }
+                                            span { "Nasc: {format_br_date_short(bdate)}" }
                                         }
                                     }
                                 }
 
-                                div { class: "patient-nav-tabs",
+                                // Subtabs Switcher
+                                div { class: "patient-subtabs-bar",
                                     button {
-                                        class: if active_patient_tab() == "overview" { "nav-tab-btn active" } else { "nav-tab-btn" },
+                                        class: if active_patient_tab() == "overview" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
                                         onclick: move |_| active_patient_tab.set("overview".to_string()),
-                                        "Visão Geral"
+                                        IconUsers { size: 15, color: "currentColor".to_string() }
+                                        span { " Visão Geral" }
                                     }
                                     button {
-                                        class: if active_patient_tab() == "anamnese" { "nav-tab-btn active" } else { "nav-tab-btn" },
+                                        class: if active_patient_tab() == "anamnese" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
                                         onclick: move |_| active_patient_tab.set("anamnese".to_string()),
-                                        IconHeartPulse { size: 14, color: "currentColor".to_string() }
-                                        span { class: "ml-1", "Anamnese" }
+                                        IconHeartPulse { size: 15, color: "currentColor".to_string() }
+                                        span { " Anamnese & Ficha Médica" }
                                     }
                                     button {
-                                        class: if active_patient_tab() == "odontogram" { "nav-tab-btn active" } else { "nav-tab-btn" },
-                                        onclick: move |_| active_patient_tab.set("odontogram".to_string()),
-                                        IconTooth { size: 14, color: "currentColor".to_string() }
-                                        span { class: "ml-1", "Tratamentos ({det.treatments.len()})" }
-                                    }
-                                    button {
-                                        class: if active_patient_tab() == "photos" { "nav-tab-btn active" } else { "nav-tab-btn" },
+                                        class: if active_patient_tab() == "photos" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
                                         onclick: move |_| active_patient_tab.set("photos".to_string()),
-                                        IconFolder { size: 14, color: "currentColor".to_string() }
-                                        span { class: "ml-1", "Exames & Fotos ({det.exams.len()})" }
+                                        IconEye { size: 15, color: "currentColor".to_string() }
+                                        span { " Exames & Laudos ({det.exams.len()})" }
                                     }
                                     button {
-                                        class: if active_patient_tab() == "documents" { "nav-tab-btn active" } else { "nav-tab-btn" },
+                                        class: if active_patient_tab() == "odontogram" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
+                                        onclick: move |_| active_patient_tab.set("odontogram".to_string()),
+                                        IconTooth { size: 15, color: "currentColor".to_string() }
+                                        span { " Histórico de Tratamentos ({det.treatments.len()})" }
+                                    }
+                                    button {
+                                        class: if active_patient_tab() == "documents" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
                                         onclick: move |_| active_patient_tab.set("documents".to_string()),
-                                        IconSignature { size: 14, color: "currentColor".to_string() }
-                                        span { class: "ml-1", "Contratos & Termos ({det.documents.len()})" }
+                                        IconSignature { size: 15, color: "currentColor".to_string() }
+                                        span { " Contratos & Documentos ({det.documents.len()})" }
                                     }
                                 }
 
+                                // Active Subtab Content
                                 match active_patient_tab().as_str() {
                                     "anamnese" => rsx! {
                                         PatientAnamneseTab {
@@ -250,7 +284,7 @@ pub fn PatientsView() -> Element {
                                             token: token.clone(),
                                             anamnesis: det.anamnesis.clone(),
                                             can_write,
-                                            reload_patient_details: reload_fn,
+                                            reload_patient_details: reload_fn.clone(),
                                             toast_msg,
                                             error_toast,
                                         }
@@ -262,7 +296,7 @@ pub fn PatientsView() -> Element {
                                             token: token.clone(),
                                             treatments: det.treatments.clone(),
                                             can_write,
-                                            reload_patient_details: reload_fn,
+                                            reload_patient_details: reload_fn.clone(),
                                             toast_msg,
                                             error_toast,
                                         }
@@ -274,7 +308,7 @@ pub fn PatientsView() -> Element {
                                             token: token.clone(),
                                             exams: det.exams.clone(),
                                             can_write,
-                                            reload_patient_details: reload_fn,
+                                            reload_patient_details: reload_fn.clone(),
                                             toast_msg,
                                             error_toast,
                                         }
@@ -283,23 +317,27 @@ pub fn PatientsView() -> Element {
                                         PatientDocumentsTab {
                                             patient_id: det.patient.id.clone(),
                                             patient_name: det.patient.full_name.clone(),
+                                            patient_cpf: Some(det.patient.document_cpf.clone()),
+                                            patient_phone: Some(det.patient.phone.clone()),
+                                            patient_insurance: det.patient.insurance_plan.clone(),
                                             clinic_id: clinic_id.clone(),
                                             token: token.clone(),
                                             documents: det.documents.clone(),
                                             templates: templates_list.clone(),
                                             can_write,
-                                            reload_patient_details: reload_fn,
+                                            reload_patient_details: reload_fn.clone(),
                                             toast_msg,
                                             error_toast,
+                                            is_emit_modal_open: is_emit_contract_open,
                                         }
                                     },
                                     _ => rsx! {
                                         PatientOverviewTab {
                                             patient: det.patient.clone(),
-                                            token: token.clone(),
                                             clinic_id: clinic_id.clone(),
+                                            token: token.clone(),
                                             can_write,
-                                            reload_patient_details: reload_fn,
+                                            reload_patient_details: reload_fn.clone(),
                                             toast_msg,
                                             error_toast,
                                         }
@@ -311,33 +349,37 @@ pub fn PatientsView() -> Element {
                 }
             } else {
                 PatientListSection {
-                    patients: patients_list,
                     kpis,
-                    is_loading,
+                    patients: patients_list,
+                    is_loading: is_patients_loading,
                     search_query,
+                    reload_trigger,
                     can_write,
                     can_delete,
                     token: token.clone(),
                     clinic_id: clinic_id.clone(),
-                    on_open_create_modal: move |_| is_create_patient_open.set(true),
                     on_select_patient: move |p_id: String| {
-                        selected_patient_id.set(Some(p_id.clone()));
                         let mut loader = load_patient_details.clone();
+                        selected_patient_id.set(Some(p_id.clone()));
                         loader(p_id);
                     },
-                    reload_trigger,
+                    on_open_create_modal: move |()| {
+                        is_create_patient_open.set(true);
+                    },
                     toast_msg,
                     error_toast,
                 }
             }
 
-            PatientFormModal {
-                token: token.clone(),
-                clinic_id: clinic_id.clone(),
-                is_open: is_create_patient_open,
-                reload_trigger,
-                toast_msg,
-                error_toast,
+            if is_create_patient_open() {
+                PatientFormModal {
+                    is_open: is_create_patient_open,
+                    token: token.clone(),
+                    clinic_id: clinic_id.clone(),
+                    reload_trigger,
+                    toast_msg,
+                    error_toast,
+                }
             }
         }
     }

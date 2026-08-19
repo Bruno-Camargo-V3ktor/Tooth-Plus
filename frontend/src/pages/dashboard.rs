@@ -31,7 +31,15 @@ pub fn DashboardLayout() -> Element {
         }
     });
 
-    if session().is_none() || active_clinic().is_none() {
+    let is_expired = session()
+        .as_ref()
+        .map(|s| crate::utils::is_token_expired(&s.token))
+        .unwrap_or(true);
+
+    if session().is_none() || active_clinic().is_none() || is_expired {
+        crate::utils::clear_session();
+        session.set(None);
+        active_clinic.set(None);
         spawn(async move {
             navigator.replace(Route::LoginScreen {});
         });

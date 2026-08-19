@@ -1,21 +1,19 @@
-//! # Modal de Lançamento de Transações Financeiras (Frontend)
+//! # Modal de Lançamento Financeiro (Frontend)
 //!
-//! Controla os lançamentos de receitas de consultas/procedimentos,
-//! despesas operacionais da clínica, comissões de dentistas e formas de pagamento.
+//! Formulário para criação e edição de entradas (receitas) e saídas (despesas),
+//! com seleção de categorias odontológicas padronizadas, datas rápidas, status e formas de pagamento.
 
 use crate::api::create_transaction;
-use crate::components::icons::IconCheck;
 use dioxus::prelude::*;
 use shared::finance::{CreateTransactionRequest, TransactionDirection, TransactionStatus};
 
-/// Modal para inserção de receitas ou despesas no fluxo financeiro da clínica.
 #[component]
 pub fn TransactionModal(
+    is_open: Signal<bool>,
+    initial_direction: TransactionDirection,
     token: String,
     clinic_id: String,
-    initial_direction: TransactionDirection,
-    is_open: Signal<bool>,
-    reload_counter: Signal<usize>,
+    reload_counter: Signal<i32>,
     toast_msg: Signal<Option<String>>,
 ) -> Element {
     if !is_open() {
@@ -26,46 +24,62 @@ pub fn TransactionModal(
         TransactionDirection::Expense => "expense".to_string(),
         _ => "income".to_string(),
     });
-    let mut form_category = use_signal(|| "consultation".to_string());
-    let mut form_amount = use_signal(|| "0,00".to_string());
+
+    let is_expense = form_direction() == "expense";
+    let modal_title = if is_expense {
+        "Nova Saída / Despesa"
+    } else {
+        "Nova Entrada Financeira"
+    };
+
+    let mut form_category = use_signal(|| {
+        if initial_direction == TransactionDirection::Expense {
+            "Insumos & Estoque".to_string()
+        } else {
+            "Procedimento Clínico".to_string()
+        }
+    });
+
+    let mut form_amount = use_signal(String::new);
     let mut form_desc = use_signal(String::new);
-    let mut form_payment_method = use_signal(|| "Pix".to_string());
-    let mut form_status = use_signal(|| "paid".to_string());
     let mut form_due_date = use_signal(|| chrono::Local::now().format("%Y-%m-%d").to_string());
+    let mut is_paid_now = use_signal(|| true);
+    let mut form_payment_method = use_signal(|| "Pix".to_string());
     let mut is_submitting = use_signal(|| false);
 
     let tok = token.clone();
     let cid = clinic_id.clone();
 
     let mut handle_submit = move |_| {
-        let desc = form_desc().trim().to_string();
-        if desc.is_empty() {
-            let mut toast = toast_msg;
-            toast.set(Some("Informe a descrição do lançamento financeiro.".into()));
-            return;
-        }
-
-        let amount_clean = form_amount().replace("R$", "").replace(".", "").replace(",", "").trim().to_string();
-        let amount_cents = amount_clean.parse::<i64>().unwrap_or(0);
-        if amount_cents <= 0 {
-            let mut toast = toast_msg;
-            toast.set(Some("O valor deve ser maior que zero.".into()));
-            return;
-        }
-
-        let dir = match form_direction().as_str() {
-            "expense" => TransactionDirection::Expense,
-            _ => TransactionDirection::Income,
+        let clean_amount = form_amount().replace(',', ".").trim().to_string();
+        let amount_cents = match clean_amount.parse::<f64>() {
+            Ok(v) if v > 0.0 => (v * 100.0).round() as i64,
+            _ => {
+                toast_msg.set(Some("Informe um valor numérico válido maior que zero.".into()));
+                return;
+            }
         };
 
-        let status = match form_status().as_str() {
-            "pending" => TransactionStatus::Pending,
-            "canceled" => TransactionStatus::Canceled,
-            _ => TransactionStatus::Paid,
+        let desc = form_desc().trim().to_string();
+        if desc.is_empty() {
+            toast_msg.set(Some("Informe a descrição do lançamento financeiro.".into()));
+            return;
+        }
+
+        let dir = if form_direction() == "expense" {
+            TransactionDirection::Expense
+        } else {
+            TransactionDirection::Income
+        };
+
+        let status = if is_paid_now() {
+            TransactionStatus::Paid
+        } else {
+            TransactionStatus::Pending
         };
 
         let today_str = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let paid_date_opt = if status == TransactionStatus::Paid {
+        let paid_date_opt = if is_paid_now() {
             Some(today_str)
         } else {
             None
@@ -114,112 +128,196 @@ pub fn TransactionModal(
     rsx! {
         div { class: "modal-overlay",
             div { class: "action-modal",
-                div { class: "modal-header",
-                    div {
-                        h2 { class: "modal-title", "Novo Lançamento Financeiro" }
-                        p { class: "modal-subtitle", "Registre receitas de consultas ou despesas operacionais da clínica." }
-                    }
-                    button { class: "modal-close", onclick: move |_| { let mut o = is_open; o.set(false); }, "×" }
+                div { class: "settings-header",
+                    h2 { class: "settings-title", "{modal_title}" }
+                    button { class: "close-btn", onclick: move |_| is_open.set(false), "×" }
                 }
-                div { class: "modal-body",
-                    div { class: "form-grid-2",
-                        div { class: "form-group",
-                            label { "Tipo de Movimentação *" }
+
+                div { class: "settings-content",
+                    div { class: "form-grid",
+                        // 1. Tipo de Movimentação & Categoria
+                        div { class: "input-group-wrapper",
+                            label { "Tipo de Movimentação" }
                             select {
-                                class: "form-input",
+                                class: "modern-input-field modern-select",
                                 value: "{form_direction}",
-                                onchange: move |e| form_direction.set(e.value()),
-                                option { value: "income", "Receita (Entrada +)" }
-                                option { value: "expense", "Despesa (Saída -)" }
+                                onchange: move |e: FormEvent| {
+                                    let val = e.value();
+                                    form_direction.set(val.clone());
+                                    if val == "expense" {
+                                        form_category.set("Insumos & Estoque".to_string());
+                                    } else {
+                                        form_category.set("Procedimento Clínico".to_string());
+                                    }
+                                },
+                                option { value: "income", "Entrada (Receita)" }
+                                option { value: "expense", "Saída (Despesa)" }
                             }
                         }
-                        div { class: "form-group",
+
+                        div { class: "input-group-wrapper",
                             label { "Categoria" }
                             select {
-                                class: "form-input",
+                                class: "modern-input-field modern-select",
                                 value: "{form_category}",
-                                onchange: move |e| form_category.set(e.value()),
+                                onchange: move |e: FormEvent| form_category.set(e.value()),
                                 if form_direction() == "income" {
-                                    option { value: "consultation", "Receita de Atendimento" }
-                                    option { value: "procedure", "Procedimento / Cirurgia" }
-                                    option { value: "other_income", "Outra Receita" }
+                                    optgroup { label: "Receitas Clínicas & Procedimentos",
+                                        option { value: "Procedimento Clínico", "Procedimento Clínico" }
+                                        option { value: "Tratamento Odontológico", "Tratamento Odontológico" }
+                                        option { value: "Cirurgia", "Cirurgia" }
+                                        option { value: "Retorno", "Retorno" }
+                                        option { value: "Avaliação / Consulta", "Avaliação / Consulta" }
+                                        option { value: "Ortodontia / Mensalidade", "Ortodontia / Mensalidade" }
+                                        option { value: "Prótese & Implante", "Prótese & Implante" }
+                                        option { value: "Outra Receita", "Outra Receita" }
+                                    }
+                                    optgroup { label: "Outras Categorias",
+                                        option { value: "Insumos & Estoque", "Insumos & Estoque" }
+                                        option { value: "Custos Fixos / Aluguel", "Custos Fixos / Aluguel" }
+                                        option { value: "Salários & Repasses", "Salários & Repasses" }
+                                        option { value: "Água / Luz / Internet", "Água / Luz / Internet" }
+                                        option { value: "Manutenção & Equipamentos", "Manutenção & Equipamentos" }
+                                        option { value: "Marketing & Divulgação", "Marketing & Divulgação" }
+                                        option { value: "Impostos & Taxas", "Impostos & Taxas" }
+                                        option { value: "Outra Despesa", "Outra Despesa" }
+                                    }
                                 } else {
-                                    option { value: "commission", "Comissão de Dentista" }
-                                    option { value: "supplies", "Compra de Materiais" }
-                                    option { value: "rent", "Aluguel / Condomínio" }
-                                    option { value: "utilities", "Água / Luz / Internet" }
-                                    option { value: "other_expense", "Outra Despesa" }
+                                    optgroup { label: "Despesas Operacionais & Custos",
+                                        option { value: "Insumos & Estoque", "Insumos & Estoque" }
+                                        option { value: "Custos Fixos / Aluguel", "Custos Fixos / Aluguel" }
+                                        option { value: "Salários & Repasses", "Salários & Repasses" }
+                                        option { value: "Água / Luz / Internet", "Água / Luz / Internet" }
+                                        option { value: "Manutenção & Equipamentos", "Manutenção & Equipamentos" }
+                                        option { value: "Marketing & Divulgação", "Marketing & Divulgação" }
+                                        option { value: "Impostos & Taxas", "Impostos & Taxas" }
+                                        option { value: "Outra Despesa", "Outra Despesa" }
+                                    }
+                                    optgroup { label: "Outras Categorias",
+                                        option { value: "Procedimento Clínico", "Procedimento Clínico" }
+                                        option { value: "Tratamento Odontológico", "Tratamento Odontológico" }
+                                        option { value: "Cirurgia", "Cirurgia" }
+                                        option { value: "Retorno", "Retorno" }
+                                        option { value: "Avaliação / Consulta", "Avaliação / Consulta" }
+                                        option { value: "Ortodontia / Mensalidade", "Ortodontia / Mensalidade" }
+                                        option { value: "Prótese & Implante", "Prótese & Implante" }
+                                        option { value: "Outra Receita", "Outra Receita" }
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    div { class: "form-grid-2",
-                        div { class: "form-group",
-                            label { "Valor (R$) *" }
+                        // 2. Descrição do Lançamento
+                        div { class: "input-group-wrapper full-width",
+                            label { "Descrição do Lançamento" }
                             input {
-                                class: "form-input font-mono",
+                                class: "modern-input-field",
+                                placeholder: "Ex: Clareamento a Laser, Dental Cremer, etc.",
+                                value: "{form_desc}",
+                                oninput: move |e| form_desc.set(e.value())
+                            }
+                        }
+
+                        // 3. Valor (R$) & Data de Vencimento
+                        div { class: "input-group-wrapper",
+                            label { "Valor (R$)" }
+                            input {
+                                class: "modern-input-field font-mono",
                                 placeholder: "0,00",
                                 value: "{form_amount}",
                                 oninput: move |e| form_amount.set(e.value())
                             }
                         }
-                        div { class: "form-group",
-                            label { "Forma de Pagamento" }
+
+                        div { class: "input-group-wrapper",
+                            label { "Data de Vencimento" }
+                            input {
+                                class: "modern-input-field",
+                                r#type: "date",
+                                value: "{form_due_date}",
+                                oninput: move |e| form_due_date.set(e.value())
+                            }
+                            div { class: "date-quick-buttons",
+                                button {
+                                    r#type: "button",
+                                    class: "quick-date-btn",
+                                    onclick: move |_| {
+                                        form_due_date.set(chrono::Local::now().format("%Y-%m-%d").to_string());
+                                    },
+                                    "Hoje"
+                                }
+                                button {
+                                    r#type: "button",
+                                    class: "quick-date-btn",
+                                    onclick: move |_| {
+                                        let tomorrow = chrono::Local::now() + chrono::Duration::days(1);
+                                        form_due_date.set(tomorrow.format("%Y-%m-%d").to_string());
+                                    },
+                                    "Amanhã"
+                                }
+                                button {
+                                    r#type: "button",
+                                    class: "quick-date-btn",
+                                    onclick: move |_| {
+                                        let next_week = chrono::Local::now() + chrono::Duration::days(7);
+                                        form_due_date.set(next_week.format("%Y-%m-%d").to_string());
+                                    },
+                                    "+7 dias"
+                                }
+                                button {
+                                    r#type: "button",
+                                    class: "quick-date-btn",
+                                    onclick: move |_| {
+                                        let next_month = chrono::Local::now() + chrono::Duration::days(30);
+                                        form_due_date.set(next_month.format("%Y-%m-%d").to_string());
+                                    },
+                                    "+30 dias"
+                                }
+                            }
+                        }
+
+                        // 4. Status do Pagamento (Checkbox)
+                        div { class: "input-group-wrapper full-width",
+                            label { "Status do Pagamento" }
+                            label { class: "perm-checkbox-item",
+                                input {
+                                    r#type: "checkbox",
+                                    checked: is_paid_now(),
+                                    onchange: move |e: FormEvent| is_paid_now.set(e.checked()),
+                                }
+                                span { "Já foi pago / liquidado agora" }
+                            }
+                        }
+
+                        // 5. Forma de Pagamento
+                        div { class: "input-group-wrapper full-width",
+                            label { "Forma de Pagamento Utilizada" }
                             select {
-                                class: "form-input",
+                                class: "modern-input-field modern-select",
                                 value: "{form_payment_method}",
-                                onchange: move |e| form_payment_method.set(e.value()),
+                                onchange: move |e: FormEvent| form_payment_method.set(e.value()),
                                 option { value: "Pix", "Pix" }
                                 option { value: "Cartão de Crédito", "Cartão de Crédito" }
                                 option { value: "Cartão de Débito", "Cartão de Débito" }
-                                option { value: "Dinheiro", "Dinheiro em Espécie" }
+                                option { value: "Dinheiro", "Dinheiro" }
                                 option { value: "Boleto", "Boleto Bancário" }
                                 option { value: "Transferência", "Transferência TED/DOC" }
                             }
                         }
                     }
-
-                    div { class: "form-group",
-                        label { "Descrição do Lançamento *" }
-                        input {
-                            class: "form-input",
-                            placeholder: "Ex: Pagamento do tratamento ortodôntico - Paciente João",
-                            value: "{form_desc}",
-                            oninput: move |e| form_desc.set(e.value())
-                        }
-                    }
-
-                    div { class: "form-grid-2",
-                        div { class: "form-group",
-                            label { "Status do Lançamento" }
-                            select {
-                                class: "form-input",
-                                value: "{form_status}",
-                                onchange: move |e| form_status.set(e.value()),
-                                option { value: "paid", "Liquidado / Pago Agora" }
-                                option { value: "pending", "Pendente / A Receber / A Pagar" }
-                            }
-                        }
-                        div { class: "form-group",
-                            label { "Data de Vencimento / Competência *" }
-                            input {
-                                class: "form-input",
-                                r#type: "date",
-                                value: "{form_due_date}",
-                                oninput: move |e| form_due_date.set(e.value())
-                            }
-                        }
-                    }
                 }
-                div { class: "modal-footer",
-                    button { class: "btn-secondary", onclick: move |_| { let mut o = is_open; o.set(false); }, "Cancelar" }
+
+                div { class: "modal-footer-actions",
+                    button {
+                        class: "btn-secondary",
+                        onclick: move |_| is_open.set(false),
+                        "Cancelar"
+                    }
                     button {
                         class: "btn-primary",
                         disabled: is_submitting(),
                         onclick: move |e| handle_submit(e),
-                        IconCheck { size: 16, color: "currentColor".to_string() }
-                        span { if is_submitting() { "Salvando..." } else { "Salvar Lançamento" } }
+                        if is_submitting() { "Salvando..." } else { "Salvar Lançamento" }
                     }
                 }
             }

@@ -24,7 +24,7 @@ pub fn PatientPhotosTab(
     let mut selected_preview_url = use_signal(|| None::<String>);
 
     let mut exam_title = use_signal(String::new);
-    let mut exam_type = use_signal(|| "radiography".to_string());
+    let mut exam_type = use_signal(|| "Radiografia Panorâmica".to_string());
     let mut exam_notes = use_signal(String::new);
     let mut exam_file_url = use_signal(String::new);
     let mut is_uploading_file = use_signal(|| false);
@@ -78,17 +78,11 @@ pub fn PatientPhotosTab(
             return;
         }
 
-        let file_url = exam_file_url();
-        let urls = if file_url.is_empty() {
+        let file_url = exam_file_url().trim().to_string();
+        let file_urls = if file_url.is_empty() {
             vec![]
         } else {
             vec![file_url]
-        };
-
-        let notes_opt = if exam_notes().trim().is_empty() {
-            None
-        } else {
-            Some(exam_notes().trim().to_string())
         };
 
         let req = CreatePatientExamRequest {
@@ -97,28 +91,28 @@ pub fn PatientPhotosTab(
             exam_type: exam_type(),
             requested_date: Some(chrono::Local::now().format("%Y-%m-%d").to_string()),
             result_date: Some(chrono::Local::now().format("%Y-%m-%d").to_string()),
-            file_urls: urls,
-            clinical_interpretation: notes_opt,
+            file_urls,
+            clinical_interpretation: if exam_notes().trim().is_empty() { None } else { Some(exam_notes().trim().to_string()) },
         };
 
         let t = tok_sub.clone();
-        let p_id = pat_id_sub.clone();
+        let p = pat_id_sub.clone();
         let mut open_sig = is_create_modal_open;
         let mut toast = toast_msg;
         let mut err_sig = error_toast;
         let mut sub_sig = is_submitting;
-        let reload_cb = on_reload.clone();
+        let reload = on_reload.clone();
 
         sub_sig.set(true);
         spawn(async move {
-            match create_patient_exam(&t, &p_id, req).await {
+            match create_patient_exam(&t, &p, req).await {
                 Ok(_) => {
                     open_sig.set(false);
-                    reload_cb.call(());
-                    toast.set(Some("Exame adicionado ao prontuário com sucesso!".into()));
+                    toast.set(Some("Exame anexado com sucesso!".into()));
+                    reload.call(());
                 }
                 Err(e) => {
-                    err_sig.set(Some(format!("Erro ao cadastrar exame: {}", e)));
+                    err_sig.set(Some(format!("Erro ao registrar exame: {}", e)));
                 }
             }
             sub_sig.set(false);
@@ -126,27 +120,29 @@ pub fn PatientPhotosTab(
     };
 
     rsx! {
-        div { class: "tab-photos-container",
-            div { class: "tab-header-row",
-                div {
-                    h3 { class: "section-title", "Exames, Radiografias e Fotos Clínicas" }
-                    p { class: "section-subtitle", "Documentação radiográfica, fotografias intraorais e laudos laboratoriais." }
+        div { class: "patient-tab-content",
+            div { class: "tab-header-actions-row",
+                div { class: "tab-header-title-group",
+                    h3 { class: "tab-header-title", "Galeria de Exames e Radiografias" }
+                    p { class: "tab-header-desc", "Radiografias panorâmicas, periapicais, tomografias e fotos intraorais." }
                 }
                 if can_write {
                     button {
                         class: "btn-primary",
                         onclick: move |_| is_create_modal_open.set(true),
-                        IconPlus { size: 16, color: "currentColor".to_string() }
-                        span { "Anexar Novo Exame" }
+                        IconUpload { size: 16, color: "#ffffff".to_string() }
+                        span { " Novo Exame / Laudo" }
                     }
                 }
             }
 
             if exams.is_empty() {
                 div { class: "empty-state-card",
-                    IconUpload { size: 48, color: "var(--text-muted, #8c8c8c)".to_string() }
-                    h3 { "Nenhum exame anexado" }
-                    p { "Clique em 'Anexar Novo Exame' para fazer upload de radiografias ou fotos." }
+                    div { class: "empty-state-icon-box",
+                        IconEye { size: 32, color: "currentColor".to_string() }
+                    }
+                    h3 { "Nenhum exame ou laudo anexado" }
+                    p { "Adicione radiografias panorâmicas, periapicais, fotos intraorais ou tomografias ao prontuário deste paciente." }
                 }
             } else {
                 div { class: "exams-gallery-grid",
@@ -168,7 +164,7 @@ pub fn PatientPhotosTab(
                                             }
                                         } else {
                                             div { class: "exam-no-img",
-                                                IconUpload { size: 32, color: "var(--text-muted, #8c8c8c)".to_string() }
+                                                IconUpload { size: 32, color: "#94a3b8".to_string() }
                                             }
                                         }
                                     }
@@ -181,12 +177,12 @@ pub fn PatientPhotosTab(
                                         }
                                     }
                                     if has_file {
-                                        div { class: "exam-card-actions",
+                                        div { class: "p-3 pt-0",
                                             button {
-                                                class: "btn-secondary btn-sm",
+                                                class: "btn-secondary btn-sm w-full flex items-center justify-center gap-1",
                                                 onclick: move |_| selected_preview_url.set(first_url.clone()),
                                                 IconEye { size: 14, color: "currentColor".to_string() }
-                                                span { "Visualizar" }
+                                                span { "Visualizar Imagem" }
                                             }
                                         }
                                     }
@@ -206,17 +202,20 @@ pub fn PatientPhotosTab(
                 }
             }
 
+            // Modal Aprimorado: Anexar Exame / Foto ao Prontuário
             if is_create_modal_open() {
                 div { class: "modal-overlay",
-                    div { class: "action-modal modal-large",
-                        div { class: "modal-header",
+                    div { class: "action-modal stock-custom-modal", style: "max-width: 620px;",
+                        div { class: "settings-header",
                             div {
-                                h2 { class: "modal-title", "Anexar Exame / Foto ao Prontuário" }
-                                p { class: "modal-subtitle", "Faça upload de radiografias panorâmicas, fotos intraorais ou tomografias." }
+                                h2 { class: "settings-title", "Anexar Exame / Foto ao Prontuário" }
+                                p { class: "text-muted font-xs mt-1",
+                                    "Faça upload de radiografias panorâmicas, fotos intraorais ou tomografias."
+                                }
                             }
-                            button { class: "modal-close", onclick: move |_| is_create_modal_open.set(false), "×" }
+                            button { class: "close-btn", onclick: move |_| is_create_modal_open.set(false), "×" }
                         }
-                        div { class: "modal-body",
+                        div { class: "settings-content",
                             div { class: "form-grid-2",
                                 div { class: "form-group",
                                     label { "Título do Exame *" }
@@ -233,48 +232,63 @@ pub fn PatientPhotosTab(
                                         class: "form-input",
                                         value: "{exam_type}",
                                         onchange: move |e| exam_type.set(e.value()),
-                                        option { value: "radiography", "Radiografia Panorâmica / Periapical" }
-                                        option { value: "intraoral_photo", "Fotografia Intraoral" }
-                                        option { value: "tomography", "Tomografia Computadorizada (TC)" }
-                                        option { value: "lab_exam", "Exame Laboratorial / Biópsia" }
-                                        option { value: "other", "Outro Documento de Imagem" }
+                                        option { value: "Radiografia Panorâmica", "Radiografia Panorâmica / Periapical" }
+                                        option { value: "Fotografia Intraoral", "Fotografia Intraoral" }
+                                        option { value: "Tomografia Computadorizada (TC)", "Tomografia Computadorizada (TC)" }
+                                        option { value: "Exame Laboratorial / Biópsia", "Exame Laboratorial / Biópsia" }
+                                        option { value: "Outro Documento de Imagem", "Outro Documento de Imagem" }
                                     }
                                 }
                             }
 
+                            // Custom Dropzone
                             div { class: "form-group",
                                 label { "Arquivo do Exame (Imagem ou PDF)" }
-                                input {
-                                    class: "form-input",
-                                    r#type: "file",
-                                    accept: "image/*,.pdf",
-                                    onchange: move |e| handle_file_change(e)
-                                }
-                                if is_uploading_file() {
-                                    p { class: "text-primary font-xs mt-1", "Enviando arquivo..." }
-                                } else if !exam_file_url().is_empty() {
-                                    p { class: "text-success font-xs mt-1", "✓ Arquivo anexado com sucesso." }
+                                div {
+                                    class: if !uploaded_filename().is_empty() { "patient-upload-dropzone has-file" } else { "patient-upload-dropzone" },
+                                    input {
+                                        class: "patient-upload-hidden-input",
+                                        r#type: "file",
+                                        accept: "image/*,.pdf",
+                                        onchange: move |e| handle_file_change(e)
+                                    }
+                                    div { class: "patient-upload-icon-wrap",
+                                        if !uploaded_filename().is_empty() {
+                                            IconCheckCircle { size: 22, color: "currentColor".to_string() }
+                                        } else {
+                                            IconUpload { size: 22, color: "currentColor".to_string() }
+                                        }
+                                    }
+                                    if is_uploading_file() {
+                                        p { class: "patient-upload-main-text text-primary", "Enviando arquivo..." }
+                                    } else if !uploaded_filename().is_empty() {
+                                        p { class: "patient-upload-main-text text-success", "✓ Arquivo: {uploaded_filename}" }
+                                        span { class: "patient-upload-sub-text", "Clique ou arraste outro arquivo para substituir" }
+                                    } else {
+                                        p { class: "patient-upload-main-text", "Clique para selecionar ou arraste o arquivo até aqui" }
+                                        span { class: "patient-upload-sub-text", "Suporta imagens (PNG, JPG, JPEG) ou documentos PDF (até 15MB)" }
+                                    }
                                 }
                             }
 
                             div { class: "form-group",
                                 label { "Interpretação Clínica / Laudo" }
                                 textarea {
-                                    class: "form-textarea",
+                                    class: "form-input",
+                                    style: "min-height: 85px; resize: vertical;",
                                     placeholder: "Ex: Presença de lesão periapical no elemento 36, sem reabsorção óssea severa...",
                                     value: "{exam_notes}",
                                     oninput: move |e| exam_notes.set(e.value())
                                 }
                             }
                         }
-                        div { class: "modal-footer",
+                        div { class: "modal-footer-actions",
                             button { class: "btn-secondary", onclick: move |_| is_create_modal_open.set(false), "Cancelar" }
                             button {
                                 class: "btn-primary",
                                 disabled: is_submitting() || is_uploading_file(),
                                 onclick: move |e| handle_submit(e),
-                                IconCheckCircle { size: 16, color: "currentColor".to_string() }
-                                span { if is_submitting() { "Salvando..." } else { "Salvar Exame" } }
+                                if is_submitting() { "Salvando..." } else { "Salvar Exame" }
                             }
                         }
                     }

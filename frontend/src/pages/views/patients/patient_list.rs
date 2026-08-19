@@ -1,44 +1,70 @@
-//! # Listagem e KPIs de Pacientes (Frontend)
+//! # Tabela e Listagem de Pacientes (Frontend)
 //!
-//! Controla a visualização em tabela dos pacientes cadastrados, barra de pesquisa,
-//! cartões de métricas (KPIs) e ações de abertura do prontuário ou exclusão.
+//! Exibe os KPIs do topo, barra de busca, filtros por tipo de convênio
+//! e a listagem tabular com ações de abrir prontuário e exclusão.
 
 use crate::api::delete_patient;
 use crate::components::icons::{
-    IconCheckCircle, IconEye, IconFile, IconFolder, IconRefresh, IconSearch, IconSignature,
-    IconTooth, IconTrash, IconUsers,
+    IconCheckCircle, IconEdit, IconFolder, IconLock, IconRefresh, IconSearch, IconTooth, IconTrash,
+    IconUsers,
 };
 use dioxus::prelude::*;
 use shared::patients::{Patient, PatientKpis};
 
-/// Componente de listagem dos pacientes com indicadores superiores.
+/// Formata a data ISO para o padrão brasileiro DD/MM/YYYY.
+fn format_br_date(date_str: &str) -> String {
+    if date_str.len() >= 10 {
+        let parts: Vec<&str> = date_str[0..10].split('-').collect();
+        if parts.len() == 3 {
+            return format!("{}/{}/{}", parts[2], parts[1], parts[0]);
+        }
+    }
+    date_str.to_string()
+}
+
+/// Retorna uma classe de cor de avatar baseada no caractere inicial.
+fn get_avatar_color_class(initial: char) -> &'static str {
+    match initial.to_ascii_uppercase() {
+        'A'..='E' => "patient-row-avatar avatar-emerald",
+        'F'..='J' => "patient-row-avatar avatar-blue",
+        'K'..='O' => "patient-row-avatar avatar-indigo",
+        'P'..='T' => "patient-row-avatar avatar-amber",
+        _ => "patient-row-avatar avatar-purple",
+    }
+}
+
+/// Componente de listagem dos pacientes com KPIs e filtros.
 #[component]
 pub fn PatientListSection(
-    patients: Vec<Patient>,
     kpis: PatientKpis,
+    patients: Vec<Patient>,
     is_loading: bool,
     search_query: Signal<String>,
+    reload_trigger: Signal<usize>,
     can_write: bool,
     can_delete: bool,
     token: String,
     clinic_id: String,
-    on_open_create_modal: EventHandler<()>,
     on_select_patient: EventHandler<String>,
-    reload_trigger: Signal<usize>,
+    on_open_create_modal: EventHandler<()>,
     toast_msg: Signal<Option<String>>,
     error_toast: Signal<Option<String>>,
 ) -> Element {
     let mut delete_target_id = use_signal(|| None::<(String, String)>);
     let mut is_deleting = use_signal(|| false);
+    let mut filter_plan = use_signal(|| "all".to_string());
 
     let tok = token.clone();
     let cid = clinic_id.clone();
 
     let mut handle_confirm_delete = move |_| {
-        let Some((p_id, _)) = delete_target_id() else { return; };
+        let Some((ref p_id, _)) = *delete_target_id.read() else {
+            return;
+        };
+        let p_id_clone = p_id.clone();
         let t = tok.clone();
         let c = cid.clone();
-        let mut del_sig = delete_target_id;
+        let mut target_sig = delete_target_id;
         let mut rel_sig = reload_trigger;
         let mut toast = toast_msg;
         let mut err_sig = error_toast;
@@ -46,11 +72,11 @@ pub fn PatientListSection(
 
         is_del.set(true);
         spawn(async move {
-            match delete_patient(&t, &p_id, &c).await {
+            match delete_patient(&t, &p_id_clone, &c).await {
                 Ok(_) => {
-                    del_sig.set(None);
+                    target_sig.set(None);
                     rel_sig.set(rel_sig() + 1);
-                    toast.set(Some("Paciente removido com sucesso!".into()));
+                    toast.set(Some("Paciente excluído com sucesso!".into()));
                 }
                 Err(e) => {
                     err_sig.set(Some(format!("Erro ao excluir paciente: {}", e)));
@@ -60,69 +86,76 @@ pub fn PatientListSection(
         });
     };
 
-    let s_query = search_query().to_lowercase();
-    let filtered_patients: Vec<&Patient> = patients
-        .iter()
+    let total_count = patients.len();
+    let filtered_patients: Vec<Patient> = patients
+        .into_iter()
         .filter(|p| {
-            if s_query.is_empty() {
-                return true;
+            let plan = p.insurance_plan.as_deref().unwrap_or("Particular");
+            match filter_plan().as_str() {
+                "particular" => plan.eq_ignore_ascii_case("particular") || plan.is_empty(),
+                "convenio" => !plan.eq_ignore_ascii_case("particular") && !plan.is_empty(),
+                _ => true,
             }
-            p.full_name.to_lowercase().contains(&s_query)
-                || p.document_cpf.contains(&s_query)
-                || p.phone.contains(&s_query)
         })
         .collect();
 
     rsx! {
         div { class: "patients-list-view",
-            // KPI Cards Row
-            div { class: "kpi-grid",
-                div { class: "kpi-card",
-                    div { class: "kpi-icon-wrap bg-blue-light",
-                        IconUsers { size: 24, color: "#0052cc".to_string() }
+            // 1. TOP: 4 Minimalist Horizontal KPI Cards
+            div { class: "agenda-kpi-row",
+                // 1. TOTAL DE PACIENTES
+                div { class: "agenda-kpi-card",
+                    div { class: "agenda-kpi-icon-wrapper kpi-icon-total",
+                        IconUsers { size: 18, color: "currentColor".to_string() }
                     }
-                    div { class: "kpi-content",
-                        span { class: "kpi-label", "Total de Pacientes" }
-                        h3 { class: "kpi-value", "{kpis.total_patients}" }
+                    div { class: "agenda-kpi-text-col",
+                        span { class: "agenda-kpi-lbl", "TOTAL DE PACIENTES" }
                     }
+                    div { class: "agenda-kpi-val", "{kpis.total_patients}" }
                 }
-                div { class: "kpi-card",
-                    div { class: "kpi-icon-wrap bg-emerald-light",
-                        IconCheckCircle { size: 24, color: "#10b981".to_string() }
+
+                // 2. NOVOS NO MÊS
+                div { class: "agenda-kpi-card",
+                    div { class: "agenda-kpi-icon-wrapper kpi-icon-completed",
+                        IconCheckCircle { size: 18, color: "currentColor".to_string() }
                     }
-                    div { class: "kpi-content",
-                        span { class: "kpi-label", "Novos no Mês" }
-                        h3 { class: "kpi-value", "{kpis.new_this_month}" }
+                    div { class: "agenda-kpi-text-col",
+                        span { class: "agenda-kpi-lbl", "NOVOS NO MÊS" }
                     }
+                    div { class: "agenda-kpi-val", "{kpis.new_this_month}" }
                 }
-                div { class: "kpi-card",
-                    div { class: "kpi-icon-wrap bg-amber-light",
-                        IconSignature { size: 24, color: "#f59e0b".to_string() }
+
+                // 3. DOCS. PENDENTES DE ASSINATURA
+                div { class: "agenda-kpi-card",
+                    div { class: "agenda-kpi-icon-wrapper kpi-icon-pending",
+                        IconEdit { size: 18, color: "currentColor".to_string() }
                     }
-                    div { class: "kpi-content",
-                        span { class: "kpi-label", "Docs. Pendentes Assinatura" }
-                        h3 { class: "kpi-value", "{kpis.pending_documents_count}" }
+                    div { class: "agenda-kpi-text-col",
+                        span { class: "agenda-kpi-lbl", "DOCS. PENDENTES DE ASSINATURA" }
                     }
+                    div { class: "agenda-kpi-val", "{kpis.pending_documents_count}" }
                 }
-                div { class: "kpi-card",
-                    div { class: "kpi-icon-wrap bg-purple-light",
-                        IconTooth { size: 24, color: "#8b5cf6".to_string() }
+
+                // 4. EM TRATAMENTO ATIVO
+                div { class: "agenda-kpi-card",
+                    div { class: "agenda-kpi-icon-wrapper kpi-icon-progress",
+                        IconTooth { size: 18, color: "currentColor".to_string() }
                     }
-                    div { class: "kpi-content",
-                        span { class: "kpi-label", "Em Tratamento Ativo" }
-                        h3 { class: "kpi-value", "{kpis.active_treatments_count}" }
+                    div { class: "agenda-kpi-text-col",
+                        span { class: "agenda-kpi-lbl", "EM TRATAMENTO ATIVO" }
                     }
+                    div { class: "agenda-kpi-val", "{kpis.active_treatments_count}" }
                 }
             }
 
-            // View Toolbar
+            // 2. View Toolbar
             div { class: "view-toolbar",
                 div { class: "search-input-wrap",
                     IconSearch { size: 18, color: "#94a3b8".to_string() }
                     input {
                         r#type: "text",
                         class: "search-input",
-                        placeholder: "Buscar por nome, CPF ou telefone...",
+                        placeholder: "Buscar paciente por nome, CPF ou telefone...",
                         value: "{search_query}",
                         oninput: move |e| search_query.set(e.value())
                     }
@@ -147,6 +180,26 @@ pub fn PatientListSection(
                 }
             }
 
+            // 3. Filter Pills Row
+            div { class: "patient-filter-pills-row",
+                button {
+                    class: if filter_plan() == "all" { "patient-filter-pill active" } else { "patient-filter-pill" },
+                    onclick: move |_| filter_plan.set("all".to_string()),
+                    "Todos os Pacientes ({total_count})"
+                }
+                button {
+                    class: if filter_plan() == "particular" { "patient-filter-pill active" } else { "patient-filter-pill" },
+                    onclick: move |_| filter_plan.set("particular".to_string()),
+                    "Particular"
+                }
+                button {
+                    class: if filter_plan() == "convenio" { "patient-filter-pill active" } else { "patient-filter-pill" },
+                    onclick: move |_| filter_plan.set("convenio".to_string()),
+                    "Com Convênio"
+                }
+            }
+
+            // 4. Patients Table List
             if is_loading {
                 div { class: "loading-card",
                     div { class: "loading-spinner" }
@@ -165,12 +218,12 @@ pub fn PatientListSection(
                     table { class: "modern-table",
                         thead {
                             tr {
-                                th { "Paciente" }
-                                th { "CPF / Documento" }
-                                th { "Telefone / Contato" }
-                                th { "Convênio" }
-                                th { "Cadastro" }
-                                th { class: "text-right", "Ações" }
+                                th { "PACIENTE" }
+                                th { "CPF (PROTEGIDO)" }
+                                th { "TELEFONE / WHATSAPP" }
+                                th { "PLANO / CONVÊNIO" }
+                                th { "CADASTRO" }
+                                th { class: "text-right", "AÇÕES" }
                             }
                         }
                         tbody {
@@ -180,46 +233,67 @@ pub fn PatientListSection(
                                     let pid_for_del = pat.id.clone();
                                     let pname_for_del = pat.full_name.clone();
                                     let on_sel = on_select_patient.clone();
+                                    let initial = pat.full_name.chars().next().unwrap_or('P');
+                                    let avatar_class = get_avatar_color_class(initial);
+                                    let is_particular = pat.insurance_plan.as_deref().map(|p| p.eq_ignore_ascii_case("Particular")).unwrap_or(true);
+                                    let plan_name = pat.insurance_plan.as_deref().unwrap_or("Particular");
+                                    let clean_phone: String = pat.phone.chars().filter(|c| c.is_ascii_digit()).collect();
+                                    let wa_url = format!("https://wa.me/55{}", clean_phone);
 
                                     rsx! {
                                         tr { key: "{pat.id}",
                                             td {
-                                                div { class: "patient-avatar-cell",
-                                                    div { class: "patient-avatar-circle",
-                                                        "{pat.full_name.chars().next().unwrap_or('P')}"
+                                                div { class: "patient-cell-info",
+                                                    div { class: "{avatar_class}",
+                                                        "{initial}"
                                                     }
-                                                    div { class: "patient-name-col",
-                                                        span { class: "patient-name-title font-semibold", "{pat.full_name}" }
-                                                        if let Some(ref g) = pat.gender {
-                                                            span { class: "badge-gender", "{g}" }
-                                                        }
+                                                    div {
+                                                        p { class: "patient-table-name", "{pat.full_name}" }
+                                                        p { class: "patient-table-email", "{pat.email.as_deref().unwrap_or(\"sem e-mail\")}" }
                                                     }
                                                 }
                                             }
                                             td {
-                                                span { class: "font-mono font-xs", "{pat.document_cpf}" }
-                                            }
-                                            td { "{pat.phone}" }
-                                            td {
-                                                span { class: "badge-outline",
-                                                    "{pat.insurance_plan.as_deref().unwrap_or(\"Particular\")}"
+                                                span { class: "cpf-protected-pill",
+                                                    IconLock { size: 12, color: "#64748b".to_string() }
+                                                    span { "{pat.document_cpf}" }
                                                 }
                                             }
-                                            td { "{pat.created_at.chars().take(10).collect::<String>()}" }
+                                            td {
+                                                div { class: "patient-phone-cell",
+                                                    span { "{pat.phone}" }
+                                                    a {
+                                                        class: "btn-wa-link",
+                                                        href: "{wa_url}",
+                                                        target: "_blank",
+                                                        title: "Conversar no WhatsApp",
+                                                        "💬"
+                                                    }
+                                                }
+                                            }
+                                            td {
+                                                if is_particular {
+                                                    span { class: "badge-insurance-particular", "Particular" }
+                                                } else {
+                                                    span { class: "badge-insurance-plan", "{plan_name}" }
+                                                }
+                                            }
+                                            td { "{format_br_date(&pat.created_at)}" }
                                             td { class: "text-right",
                                                 div { class: "table-actions-row",
                                                     button {
-                                                        class: "btn-action-icon",
+                                                        class: "btn-open-prontuario-table",
                                                         title: "Abrir Prontuário Completo",
                                                         onclick: move |_| on_sel.call(pid.clone()),
-                                                        IconEye { size: 16, color: "#0052cc".to_string() }
+                                                        IconFolder { size: 14, color: "#ffffff".to_string() }
+                                                        span { " Prontuário" }
                                                     }
                                                     if can_delete {
                                                         button {
-                                                            class: "btn-action-icon text-danger",
+                                                            class: "btn-delete-row-table",
                                                             title: "Excluir Paciente",
                                                             onclick: move |_| delete_target_id.set(Some((pid_for_del.clone(), pname_for_del.clone()))),
-                                                            IconTrash { size: 16, color: "#ef4444".to_string() }
+                                                            IconTrash { size: 16, color: "currentColor".to_string() }
                                                         }
                                                     }
                                                 }
@@ -237,11 +311,11 @@ pub fn PatientListSection(
             if let Some((_, ref p_name)) = *delete_target_id.read() {
                 div { class: "modal-overlay",
                     div { class: "action-modal delete-modal-card",
-                        div { class: "modal-header",
-                            h2 { class: "modal-title text-danger", "Excluir Paciente" }
-                            button { class: "modal-close", onclick: move |_| delete_target_id.set(None), "×" }
+                        div { class: "settings-header",
+                            h2 { class: "settings-title text-danger", "Excluir Paciente" }
+                            button { class: "close-btn", onclick: move |_| delete_target_id.set(None), "×" }
                         }
-                        div { class: "modal-body",
+                        div { class: "settings-content",
                             p { "Tem certeza que deseja excluir o prontuário de ", strong { "{p_name}" }, "?" }
                             p { class: "text-muted font-xs mt-2", "Esta ação apagará o histórico clínico, exames e termos associados." }
                         }

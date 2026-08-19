@@ -18,6 +18,9 @@ pub async fn run_migrations(db: &Db) {
 
     println!("Starting migrations from: {:?}", path);
 
+    // Ensure _migrations tracking table exists
+    let _ = db.query("DEFINE TABLE IF NOT EXISTS _migrations SCHEMALESS;").await;
+
     let mut files: Vec<_> = fs::read_dir(path)
         .unwrap_or_else(|_| panic!("Failed to read migration directory"))
         .filter_map(Result::ok)
@@ -29,7 +32,22 @@ pub async fn run_migrations(db: &Db) {
         let file_path = file.path();
 
         if file_path.extension().and_then(|s| s.to_str()) == Some("surql") {
-            let file_name = file_path.file_name().unwrap().to_string_lossy();
+            let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
+
+            // Check if migration has already been executed
+            let check_res = db
+                .query("SELECT * FROM _migrations WHERE name = $name")
+                .bind(("name", file_name.clone()))
+                .await;
+
+            if let Ok(mut res) = check_res {
+                let existing: Vec<serde_json::Value> = res.take(0).unwrap_or_default();
+                if !existing.is_empty() {
+                    println!("Migration {} already executed. Skipping.", file_name);
+                    continue;
+                }
+            }
+
             println!("Executing migration: {}", file_name);
 
             let content = match fs::read_to_string(&file_path) {
@@ -47,6 +65,10 @@ pub async fn run_migrations(db: &Db) {
                         println!("Error in migration {}: {:?}", file_name, errors);
                     } else {
                         println!("Migration {} executed successfully.", file_name);
+                        let _ = db
+                            .query("CREATE _migrations CONTENT { name: $name, executed_at: time::now() }")
+                            .bind(("name", file_name))
+                            .await;
                     }
                 }
                 Err(e) => {

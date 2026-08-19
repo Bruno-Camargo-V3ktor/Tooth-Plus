@@ -138,6 +138,35 @@ pub fn replace_template_variables(
     result
 }
 
+/// Verifica se um token JWT está expirado com base no campo `exp`.
+pub fn is_token_expired(token: &str) -> bool {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return true;
+    }
+    use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+    use base64::Engine;
+
+    let payload_b64 = parts[1];
+    let decoded = URL_SAFE_NO_PAD.decode(payload_b64).or_else(|_| {
+        let mut padded = payload_b64.to_string();
+        while padded.len() % 4 != 0 {
+            padded.push('=');
+        }
+        STANDARD.decode(padded)
+    });
+
+    if let Ok(bytes) = decoded {
+        if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            if let Some(exp) = val.get("exp").and_then(|e| e.as_i64()) {
+                let now = chrono::Utc::now().timestamp();
+                return now >= exp;
+            }
+        }
+    }
+    false
+}
+
 #[cfg(target_arch = "wasm32")]
 pub fn get_storage_item(key: &str) -> Option<String> {
     web_sys::window()
@@ -162,7 +191,9 @@ pub fn remove_storage_item(key: &str) {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn get_storage_item(_key: &str) -> Option<String> { None }
+pub fn get_storage_item(_key: &str) -> Option<String> {
+    None
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn set_storage_item(_key: &str, _value: &str) {}
@@ -177,8 +208,15 @@ pub fn save_session(session: &shared::auth::LoginResponse) {
 }
 
 pub fn load_session() -> Option<shared::auth::LoginResponse> {
-    get_storage_item("toothplus_session")
-        .and_then(|json| serde_json::from_str(&json).ok())
+    let sess: Option<shared::auth::LoginResponse> = get_storage_item("toothplus_session")
+        .and_then(|json| serde_json::from_str(&json).ok());
+    if let Some(ref s) = sess {
+        if is_token_expired(&s.token) {
+            clear_session();
+            return None;
+        }
+    }
+    sess
 }
 
 pub fn save_active_clinic(clinic: &shared::models::ClinicAccess) {

@@ -1,23 +1,23 @@
-//! # Gestão de Transações e Liquidação de Contas (Backend)
+//! # Operações de Transações e Lançamentos Financeiros (Backend)
 //!
-//! Controla as operações CRUD de transações financeiras, conciliação e liquidação
-//! de receitas ou despesas da clínica odontológica.
+//! Controla inserção, atualização de status/liquidação e exclusão de movimentações.
+
+use actix_web::{delete, patch, post, web, HttpResponse};
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
 use super::{
-    ClinicQuery, clinic_record_id, parse_direction, parse_record_id, parse_status,
-    transaction_record_id,
+    clinic_record_id, parse_direction, parse_record_id, parse_status, transaction_record_id,
+    ClinicQuery, DbAppointmentPendingRow,
 };
 use crate::db::Db;
 use crate::error::ApiError;
-use crate::security::auth_guard::{AuthenticatedUser, check_permission};
-use actix_web::{HttpResponse, delete, patch, post, web};
-use chrono::{DateTime, Utc};
-use serde::Serialize;
+use crate::security::auth_guard::{check_permission, AuthenticatedUser};
 use shared::finance::{
     CreateTransactionRequest, Transaction, TransactionDirection, TransactionStatus,
     UpdateTransactionStatusRequest,
 };
-use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
 #[derive(Serialize, SurrealValue)]
 struct InsertTransactionDb {
@@ -37,7 +37,7 @@ struct InsertTransactionDb {
     installment_total: i32,
 }
 
-/// Cria um novo lançamento de receita ou despesa na clínica.
+/// Cria um novo lançamento financeiro (Receita ou Despesa).
 #[post("/finance")]
 pub async fn create_transaction(
     auth: AuthenticatedUser,
@@ -45,27 +45,19 @@ pub async fn create_transaction(
     db: web::Data<Db>,
 ) -> Result<HttpResponse, ApiError> {
     let req = body.into_inner();
-    let clinic_rec = clinic_record_id(&req.clinic_id);
+    let clinic_rec_id = clinic_record_id(&req.clinic_id);
 
-    let perm = match req.direction {
-        TransactionDirection::Income => "finance:write_income",
-        TransactionDirection::Expense => "finance:write_expense",
-    };
-
-    let has_perm = check_permission(&db, &auth.id, &clinic_rec, perm)
-        .await
-        .unwrap_or(false);
-    let has_general_write = check_permission(&db, &auth.id, &clinic_rec, "finance:write")
+    let has_perm = check_permission(&db, &auth.id, &clinic_rec_id, "finance:write")
         .await
         .unwrap_or(false);
 
-    if !has_perm && !has_general_write {
+    if !has_perm {
         return Err(ApiError::Forbidden(
-            "Sem permissão para cadastrar movimentações financeiras.".into(),
+            "Sem privilégios para registrar lançamentos financeiros.".into(),
         ));
     }
 
-    let clinic_rec_id = parse_record_id("clinic", &req.clinic_id);
+    let clinic_rec = parse_record_id("clinic", &req.clinic_id);
     let appointment_rec = req
         .appointment_id
         .map(|id| parse_record_id("appointment", &id));
@@ -103,7 +95,7 @@ pub async fn create_transaction(
     };
 
     let insert_data = InsertTransactionDb {
-        clinic_id: clinic_rec_id,
+        clinic_id: clinic_rec,
         appointment_id: appointment_rec,
         patient_id: patient_rec,
         user_id: user_rec,
@@ -150,7 +142,7 @@ pub async fn create_transaction(
     }
 }
 
-/// Atualiza o status e liquidação de um lançamento financeiro.
+/// Atualiza o status e liquidação de um lançamento financeiro (ou efetiva pendência da agenda).
 #[patch("/finance/{id}/status")]
 pub async fn update_transaction_status(
     auth: AuthenticatedUser,
@@ -160,7 +152,6 @@ pub async fn update_transaction_status(
     db: web::Data<Db>,
 ) -> Result<HttpResponse, ApiError> {
     let raw_id = path.into_inner();
-    let tx_id = transaction_record_id(&raw_id);
     let clinic_rec = clinic_record_id(&query.clinic_id);
 
     let has_perm = check_permission(&db, &auth.id, &clinic_rec, "finance:update_status")
@@ -176,7 +167,6 @@ pub async fn update_transaction_status(
         ));
     }
 
-    let tx_rec_id = parse_record_id("transaction", &raw_id);
     let req = body.into_inner();
 
     let status_str = match req.status {
@@ -200,6 +190,72 @@ pub async fn update_transaction_status(
         None
     };
 
+    // Caso 1: Lançamento originado dinamicamente da Agenda
+    if raw_id.starts_with("calculated:") {
+        let app_raw_id = raw_id.strip_prefix("calculated:").unwrap();
+        let app_rec_id = parse_record_id("appointment", app_raw_id);
+
+        let mut app_res = db
+            .query("SELECT * FROM type::record($id)")
+            .bind(("id", app_rec_id.clone()))
+            .await
+            .map_err(|_| ApiError::Database("Erro ao buscar agendamento associado.".into()))?;
+
+        let app_opt: Option<DbAppointmentPendingRow> = app_res.take(0).unwrap_or(None);
+        let Some(app) = app_opt else {
+            return Err(ApiError::NotFound("Agendamento não encontrado para liquidação.".into()));
+        };
+
+        let insert_data = InsertTransactionDb {
+            clinic_id: app.clinic_id.clone(),
+            appointment_id: Some(app.id.clone()),
+            patient_id: app.patient_id.clone(),
+            user_id: None,
+            direction: "income".into(),
+            amount_cents: app.financial_amount_cents.unwrap_or(0),
+            description: format!("Consulta: {}", app.title),
+            category: "Procedimento Clínico".into(),
+            status: status_str.into(),
+            due_date: app.scheduled_for,
+            paid_date: paid_dt,
+            payment_method: req.payment_method.clone(),
+            installment_current: 1,
+            installment_total: 1,
+        };
+
+        let created: Option<super::DbTransactionRow> = db
+            .create("transaction")
+            .content(insert_data)
+            .await
+            .map_err(|e| ApiError::Database(format!("Falha ao registrar liquidação da agenda: {}", e)))?;
+
+        return match created {
+            Some(row) => Ok(HttpResponse::Ok().json(Transaction {
+                id: row.id.to_sql(),
+                clinic_id: row.clinic_id.to_sql(),
+                appointment_id: row.appointment_id.map(|id| id.to_sql()),
+                patient_id: row.patient_id.map(|id| id.to_sql()),
+                patient_name: app.patient_name,
+                user_id: row.user_id.map(|id| id.to_sql()),
+                user_name: None,
+                direction: parse_direction(&row.direction),
+                amount_cents: row.amount_cents,
+                description: row.description,
+                category: row.category,
+                status: parse_status(&row.status),
+                due_date: row.due_date.to_rfc3339(),
+                paid_date: row.paid_date.map(|d| d.to_rfc3339()),
+                payment_method: row.payment_method,
+                installment_current: row.installment_current,
+                installment_total: row.installment_total,
+                is_calculated_pending: false,
+            })),
+            None => Err(ApiError::Database("Erro ao retornar transação liquidada.".into())),
+        };
+    }
+
+    // Caso 2: Transação existente na tabela `transaction`
+    let tx_id = transaction_record_id(&raw_id);
     let mut update_query = format!("UPDATE {} SET status = $status", tx_id);
     if paid_dt.is_some() {
         update_query.push_str(", paid_date = $paid_date");
@@ -264,7 +320,6 @@ pub async fn delete_transaction(
     db: web::Data<Db>,
 ) -> Result<HttpResponse, ApiError> {
     let raw_id = path.into_inner();
-    let tx_id = transaction_record_id(&raw_id);
     let clinic_rec = clinic_record_id(&query.clinic_id);
 
     let has_perm = check_permission(&db, &auth.id, &clinic_rec, "finance:delete")
@@ -280,6 +335,21 @@ pub async fn delete_transaction(
         ));
     }
 
+    if raw_id.starts_with("calculated:") {
+        let app_raw_id = raw_id.strip_prefix("calculated:").unwrap();
+        let app_rec_id = parse_record_id("appointment", app_raw_id);
+        db.query("UPDATE type::record($id) SET financial_amount_cents = NONE")
+            .bind(("id", app_rec_id))
+            .await
+            .map_err(|e| ApiError::Database(format!("Falha ao remover lançamento da consulta: {}", e)))?;
+
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "status": "success",
+            "message": "Lançamento da agenda removido com sucesso."
+        })));
+    }
+
+    let tx_id = transaction_record_id(&raw_id);
     db.query("DELETE type::record($id)")
         .bind(("id", tx_id))
         .await
