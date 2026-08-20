@@ -1,0 +1,10 @@
+target/
+**/target/
+database.db/
+.git/
+.gitignore
+.env
+uploads/
+node_modules/
+.gemini/
+*.log

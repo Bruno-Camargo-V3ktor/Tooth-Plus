@@ -1,0 +1,85 @@
+services:
+  # ==========================================
+  # 🦀 BACKEND (Actix-Web + SurrealDB)
+  # ==========================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: toothplus_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=4000
+      - STORAGE_BUCKET=/app/uploads
+    ports:
+      - "4000:4000"
+    volumes:
+      # Monta o diretório de uploads para persistência de arquivos
+      - ./uploads:/app/uploads
+    networks:
+      - toothplus_net
+
+  # ==========================================
+  # 🌐 FRONTEND (Dioxus WASM + Nginx)
+  # ==========================================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        API_BASE_URL: ${API_BASE_URL:-https://backend.toothplus.bluerosestudio.com.br/api}
+    container_name: toothplus_frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    networks:
+      - toothplus_net
+
+  # ==========================================
+  # 💬 EVOLUTION API (WhatsApp Integration)
+  # ==========================================
+  evolution-api:
+    image: atendai/evolution-api:v2.2.2
+    container_name: toothplus_evolution
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    environment:
+      - SERVER_URL=http://localhost:8081
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-01234567890123456789012345678901}
+      - DATABASE_ENABLED=false
+      - LOG_LEVEL=ERROR,WARN,DEBUG,INFO,LOG,VERBOSE
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    networks:
+      - toothplus_net
+
+  # ==========================================
+  # 🗄️ SURREALDB LOCAL (Opcional - Usado caso não use SurrealDB Cloud)
+  # ==========================================
+  surrealdb:
+    image: surrealdb/surrealdb:v2.2.1
+    container_name: toothplus_surrealdb
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    command: start --user root --pass root rocksdb:/var/lib/surrealdb/database.db
+    volumes:
+      - surreal_data:/var/lib/surrealdb
+    networks:
+      - toothplus_net
+
+networks:
+  toothplus_net:
+    driver: bridge
+
+volumes:
+  evolution_instances:
+    driver: local
+  evolution_store:
+    driver: local
+  surreal_data:
+    driver: local

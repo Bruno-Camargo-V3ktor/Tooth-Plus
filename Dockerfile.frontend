@@ -1,0 +1,54 @@
+# ==========================================
+# 🌐 STAGE 1: Build Frontend (Dioxus WebAssembly)
+# ==========================================
+FROM rust:1.85-slim-bookworm AS builder
+
+WORKDIR /usr/src/app
+
+# Instala dependências nativas
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Adiciona o target WASM
+RUN rustup target add wasm32-unknown-unknown
+
+# Instala o Dioxus CLI via binstall (rápido e leve)
+RUN curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
+    && cargo binstall -y --force dioxus-cli
+
+# Copia código fonte do projeto
+COPY Cargo.toml Cargo.lock ./
+COPY shared/ ./shared/
+COPY frontend/ ./frontend/
+COPY backend/Cargo.toml ./backend/Cargo.toml
+
+# Argumento para injetar a URL do backend em tempo de compilação
+ARG API_BASE_URL=https://backend.toothplus.bluerosestudio.com.br/api
+ENV API_BASE_URL=${API_BASE_URL}
+
+# Compila o frontend WebAssembly
+WORKDIR /usr/src/app/frontend
+RUN dx build --release
+
+# ==========================================
+# 🚀 STAGE 2: Nginx Web Server
+# ==========================================
+FROM nginx:alpine AS runner
+
+# Remove a página padrão do nginx
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copia os arquivos compilados do Dioxus (suporta múltiplos caminhos de saída do dx)
+COPY --from=builder /usr/src/app/target/dx/frontend/release/web/public/ /usr/share/nginx/html/
+
+# Copia configuração otimizada do Nginx com suporte a SPA e WASM
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Expõe a porta HTTP padrão
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
