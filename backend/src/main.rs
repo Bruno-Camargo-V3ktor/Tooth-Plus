@@ -107,6 +107,7 @@ async fn main() -> std::io::Result<()> {
     let evolution_data = web::Data::new(evolution_client);
 
     let port: u16 = env::var("PORT")
+        .or_else(|_| env::var("SERVER_PORT"))
         .unwrap_or_else(|_| "4000".into())
         .parse()
         .unwrap_or(4000);

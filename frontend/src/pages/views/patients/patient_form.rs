@@ -114,8 +114,8 @@ pub fn PatientFormModal(
 
     rsx! {
         div { class: "modal-overlay",
-            div { class: "action-modal stock-custom-modal", style: "max-width: 680px;",
-                div { class: "settings-header",
+            div { class: "action-modal stock-custom-modal", style: "width: 720px !important; max-width: 95vw !important; max-height: 90vh !important; display: flex !important; flex-direction: column !important; overflow: hidden !important;",
+                div { class: "settings-header", style: "flex-shrink: 0;",
                     div {
                         h2 { class: "settings-title", "Cadastrar Novo Paciente" }
                         p { class: "text-muted font-xs mt-1",
@@ -132,8 +132,10 @@ pub fn PatientFormModal(
                     }
                 }
 
-                form { onsubmit: move |e| handle_submit(e),
-                    div { class: "settings-content",
+                form {
+                    onsubmit: move |e| handle_submit(e),
+                    style: "display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; margin: 0;",
+                    div { class: "settings-content", style: "flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px;",
                         div { class: "form-grid-2",
                             // Linha 1: Nome Completo (full width)
                             div { class: "form-group full-width", style: "grid-column: 1 / -1;",
@@ -249,7 +251,9 @@ pub fn PatientFormModal(
                         }
                     }
 
-                    div { class: "modal-footer-actions",
+                    div {
+                        class: "modal-footer-actions",
+                        style: "flex-shrink: 0; padding: 16px 24px; border-top: 1px solid #e2e8f0; background: #ffffff; display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 0;",
                         button {
                             r#type: "button",
                             class: "btn-secondary",
@@ -262,6 +266,7 @@ pub fn PatientFormModal(
                         button {
                             r#type: "submit",
                             class: "btn-primary",
+                            style: "font-weight: 600; padding: 8px 20px;",
                             disabled: is_submitting(),
                             if is_submitting() { "Salvando..." } else { "Salvar Paciente" }
                         }

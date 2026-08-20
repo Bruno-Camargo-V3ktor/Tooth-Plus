@@ -564,43 +564,74 @@ pub async fn update_patient(
 
     let cpf_clean = data.document_cpf.as_deref().unwrap_or("").trim();
     let has_cpf = !cpf_clean.is_empty();
-    let has_rg = data
-        .document_rg
+
+    // Buscar registro existente para preservar documentos criptografados caso venham mascarados da interface
+    let mut exist_res = db
+        .query("SELECT * FROM type::record($pid);")
+        .bind(("pid", pat_rec.clone()))
+        .await
+        .map_err(|e| ApiError::Database(format!("Erro ao verificar paciente existente: {}", e)))?;
+    let exist_patient: Option<DbPatientRow> = exist_res.take(0).unwrap_or(None);
+
+    let (cpf_encrypted, cpf_hash) = if cpf_clean.contains('*') {
+        // Dado mascarado recebido do formulário: preserva os valores originais criptografados
+        let enc = exist_patient
+            .as_ref()
+            .and_then(|r| r.document_cpf_encrypted.clone());
+        let hash = exist_patient
+            .as_ref()
+            .and_then(|r| r.document_cpf_hash.clone());
+        (enc, hash)
+    } else if has_cpf {
+        let enc = Some(encrypt_deterministic(cpf_clean)
+            .map_err(|e| ApiError::Internal(format!("Falha na proteção de dados do CPF: {}", e)))?);
+        let hash = Some(hash_blind_index(cpf_clean));
+        (enc, hash)
+    } else {
+        (None, None)
+    };
+
+    let rg_value = if let Some(ref rg) = data.document_rg {
+        let t = rg.trim();
+        if t.contains('*') {
+            exist_patient.as_ref().and_then(|r| r.document_rg.clone())
+        } else if !t.is_empty() {
+            Some(t.to_string())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let exist_guardians: Vec<shared::patients::PatientGuardian> = exist_patient
         .as_ref()
-        .map(|rg| !rg.trim().is_empty())
-        .unwrap_or(false);
-
-    if !has_cpf && !has_rg {
-        return Err(ApiError::BadRequest(
-            "O paciente deve possuir obrigatoriamente CPF ou RG cadastrado.".into(),
-        ));
-    }
-
-    let cpf_encrypted = if has_cpf {
-        Some(encrypt_deterministic(cpf_clean)
-            .map_err(|e| ApiError::Internal(format!("Falha na proteção de dados do CPF: {}", e)))?)
-    } else {
-        None
-    };
-    let cpf_hash = if has_cpf {
-        Some(hash_blind_index(cpf_clean))
-    } else {
-        None
-    };
+        .and_then(|r| r.legal_guardians.as_ref())
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
 
     let guardians_list = data.legal_guardians.unwrap_or_default();
     let encrypted_guardians: Vec<shared::patients::PatientGuardian> = guardians_list
         .into_iter()
         .map(|mut g| {
+            let matched_exist = exist_guardians.iter().find(|eg| eg.name.trim().eq_ignore_ascii_case(g.name.trim()));
             if let Some(ref cpf) = g.document_cpf {
                 let t = cpf.trim();
-                if !t.is_empty() {
+                if t.contains('*') {
+                    // Preserva o valor criptografado original já existente no banco de dados
+                    g.document_cpf = matched_exist.and_then(|eg| eg.document_cpf.clone()).or(Some(t.to_string()));
+                } else if !t.is_empty() {
+                    // Criptografa o novo CPF do responsável legal
                     g.document_cpf = encrypt_deterministic(t).ok().or(Some(t.to_string()));
                 }
             }
             if let Some(ref rg) = g.document_rg {
                 let t = rg.trim();
-                if !t.is_empty() {
+                if t.contains('*') {
+                    // Preserva o valor criptografado original já existente no banco de dados
+                    g.document_rg = matched_exist.and_then(|eg| eg.document_rg.clone()).or(Some(t.to_string()));
+                } else if !t.is_empty() {
+                    // Criptografa o novo RG do responsável legal
                     g.document_rg = encrypt_deterministic(t).ok().or(Some(t.to_string()));
                 }
             }
@@ -612,6 +643,8 @@ pub async fn update_patient(
         let t = s.trim();
         if t.is_empty() {
             None
+        } else if t.contains('*') {
+            exist_patient.as_ref().and_then(|r| r.legal_guardian_cpf.clone())
         } else {
             encrypt_deterministic(t).ok().or(Some(t.to_string()))
         }
@@ -651,7 +684,7 @@ pub async fn update_patient(
         .bind(("full_name", data.full_name.trim().to_string()))
         .bind(("cpf_enc", cpf_encrypted))
         .bind(("cpf_hash", cpf_hash))
-        .bind(("rg", data.document_rg.map(|s| s.trim().to_string())))
+        .bind(("rg", rg_value))
         .bind(("guardians", serde_json::to_value(&encrypted_guardians).unwrap_or_default()))
         .bind(("g_name", data.legal_guardian_name.map(|s| s.trim().to_string())))
         .bind(("g_cpf", enc_guardian_cpf))

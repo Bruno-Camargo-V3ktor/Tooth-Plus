@@ -5,7 +5,7 @@
 //! e restauração para as perguntas oficiais da clínica (conforme referência física).
 
 use crate::api::{fetch_anamnesis_templates, save_anamnesis_template};
-use crate::components::icons::{IconCheck, IconEdit, IconHeartPulse, IconPlus, IconRefresh, IconTrash, IconX};
+use crate::components::icons::{IconCheck, IconEdit, IconHeartPulse, IconPlus, IconRefresh, IconTrash, IconUser, IconUsers, IconX};
 use dioxus::prelude::*;
 use shared::anamnesis::{AnamnesisQuestion, AnamnesisTemplate, SaveAnamnesisTemplateRequest};
 
@@ -306,8 +306,8 @@ pub fn AnamneseTemplatesModal(
 
     rsx! {
         div { class: "modal-overlay",
-            div { class: "action-modal stock-custom-modal", style: "max-width: 900px;",
-                div { class: "settings-header",
+            div { class: "action-modal anamnese-custom-modal", style: "width: 1060px !important; max-width: 96vw !important; max-height: 90vh !important; display: flex !important; flex-direction: column !important; overflow: hidden !important;",
+                div { class: "settings-header", style: "flex-shrink: 0;",
                     div {
                         h2 { class: "settings-title",
                             IconHeartPulse { size: 22, color: "#0052cc".to_string() }
@@ -324,35 +324,48 @@ pub fn AnamneseTemplatesModal(
                     }
                 }
 
-                div { class: "settings-content", style: "max-height: 70vh; overflow-y: auto; padding-right: 4px;",
-                    // Seletor de Modelo e Ações de Topo
-                    div { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; flex-wrap: wrap; gap: 10px;",
-                        div { class: "documents-tab-bar", style: "margin-bottom: 0;",
+                div { class: "settings-content", style: "flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px;",
+                    // Seletor de Modelo Segmentado e Ações de Topo
+                    div { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; flex-wrap: wrap; gap: 12px;",
+                        div {
+                            style: "display: inline-flex; background: #f1f5f9; padding: 4px; border-radius: 10px; border: 1px solid #e2e8f0; gap: 4px;",
                             button {
-                                class: if selected_type() == "adult" { "documents-tab-btn active" } else { "documents-tab-btn" },
+                                r#type: "button",
+                                style: if selected_type() == "adult" {
+                                    "display: inline-flex; align-items: center; gap: 8px; background: #ffffff; color: #0052cc; font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 8px; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08); cursor: pointer; transition: all 0.2s ease;"
+                                } else {
+                                    "display: inline-flex; align-items: center; gap: 8px; background: transparent; color: #64748b; font-weight: 500; font-size: 13px; padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s ease;"
+                                },
                                 onclick: move |_| {
                                     selected_type.set("adult".to_string());
                                     editing_q_id.set(None);
                                     is_adding_new.set(false);
                                 },
-                                "📋 Ficha Oficial: Adulto"
+                                IconUser { size: 16, color: if selected_type() == "adult" { "#0052cc".to_string() } else { "#64748b".to_string() } }
+                                span { "Ficha Oficial: Adulto" }
                             }
                             button {
-                                class: if selected_type() == "minor" { "documents-tab-btn active" } else { "documents-tab-btn" },
+                                r#type: "button",
+                                style: if selected_type() == "minor" {
+                                    "display: inline-flex; align-items: center; gap: 8px; background: #ffffff; color: #0052cc; font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 8px; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08); cursor: pointer; transition: all 0.2s ease;"
+                                } else {
+                                    "display: inline-flex; align-items: center; gap: 8px; background: transparent; color: #64748b; font-weight: 500; font-size: 13px; padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s ease;"
+                                },
                                 onclick: move |_| {
                                     selected_type.set("minor".to_string());
                                     editing_q_id.set(None);
                                     is_adding_new.set(false);
                                 },
-                                "🧸 Ficha Oficial: Pediátrica / Menor"
+                                IconUsers { size: 16, color: if selected_type() == "minor" { "#0052cc".to_string() } else { "#64748b".to_string() } }
+                                span { "Ficha Oficial: Pediátrica (Menor)" }
                             }
                         }
 
-                        div { style: "display: flex; align-items: center; gap: 8px;",
+                        div { style: "display: flex; align-items: center; gap: 10px;",
                             button {
                                 r#type: "button",
                                 class: "btn-secondary",
-                                style: "font-size: 12px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px;",
+                                style: "font-size: 12.5px; padding: 7px 14px; display: inline-flex; align-items: center; gap: 6px;",
                                 onclick: {
                                     let cid_r = cid.clone();
                                     move |_| {
@@ -379,23 +392,23 @@ pub fn AnamneseTemplatesModal(
                                                 questions: default_questions,
                                                 created_at: String::new(),
                                                 updated_at: String::new(),
-                                            });
+                                             });
                                         }
                                         templates.set(current_list);
                                         toast_msg.set(Some("Perguntas restauradas para o padrão oficial da ficha da clínica!".into()));
                                     }
                                 },
-                                title: "Restaura o questionário padrão com 15 perguntas oficiais",
-                                IconRefresh { size: 13, color: "#475569".to_string() }
+                                title: "Restaura o questionário padrão com as perguntas oficiais",
+                                IconRefresh { size: 14, color: "#475569".to_string() }
                                 span { "Restaurar Padrão da Clínica" }
                             }
                             button {
                                 r#type: "button",
                                 class: "btn-primary",
-                                style: "font-size: 12px; padding: 6px 14px;",
+                                style: "font-size: 12.5px; padding: 7px 16px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;",
                                 onclick: move |_| is_adding_new.set(!is_adding_new()),
-                                IconPlus { size: 13, color: "currentColor".to_string() }
-                                span { if is_adding_new() { " Fechar Formulário" } else { " + Nova Pergunta" } }
+                                IconPlus { size: 14, color: "currentColor".to_string() }
+                                span { if is_adding_new() { "Fechar Formulário" } else { "Nova Pergunta" } }
                             }
                         }
                     }
@@ -734,7 +747,9 @@ pub fn AnamneseTemplatesModal(
                     }
                 }
 
-                div { class: "modal-footer-actions",
+                div {
+                    class: "modal-footer-actions",
+                    style: "flex-shrink: 0; padding: 16px 24px; border-top: 1px solid #e2e8f0; background: #ffffff; display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 0;",
                     button {
                         r#type: "button",
                         class: "btn-secondary",
@@ -744,6 +759,7 @@ pub fn AnamneseTemplatesModal(
                     button {
                         r#type: "button",
                         class: "btn-primary",
+                        style: "font-weight: 600; padding: 8px 20px;",
                         disabled: is_saving(),
                         onclick: {
                             let t = tok.clone();
@@ -789,7 +805,8 @@ pub fn AnamneseTemplatesModal(
                                 });
                             }
                         },
-                        if is_saving() { "Salvando Modelo..." } else { "Salvar Alterações no Modelo" }
+                        IconCheck { size: 16, color: "#ffffff".to_string() }
+                        span { if is_saving() { " Salvando Modelo..." } else { " Salvar Alterações no Modelo" } }
                     }
                 }
             }

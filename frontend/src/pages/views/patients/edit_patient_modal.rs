@@ -120,8 +120,8 @@ pub fn EditPatientModal(
 
     rsx! {
         div { class: "modal-overlay",
-            div { class: "action-modal patient-custom-modal", style: "max-width: 780px;",
-                div { class: "settings-header",
+            div { class: "action-modal patient-custom-modal", style: "width: 820px !important; max-width: 95vw !important; max-height: 90vh !important; display: flex !important; flex-direction: column !important; overflow: hidden !important;",
+                div { class: "settings-header", style: "flex-shrink: 0;",
                     div {
                         h2 { class: "settings-title",
                             IconEdit { size: 20, color: "#0052cc".to_string() }
@@ -141,8 +141,10 @@ pub fn EditPatientModal(
                     }
                 }
 
-                form { onsubmit: handle_submit,
-                    div { class: "settings-content", style: "max-height: 68vh; overflow-y: auto; padding-right: 4px;",
+                form {
+                    onsubmit: handle_submit,
+                    style: "display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; margin: 0;",
+                    div { class: "settings-content", style: "flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px;",
                         // Seção 1: Identificação & Documentos
                         div { class: "agenda-resource-box", style: "margin-bottom: 16px;",
                             div { class: "resource-section-header",
@@ -167,6 +169,7 @@ pub fn EditPatientModal(
                                         value: "{form_cpf}",
                                         oninput: move |e| form_cpf.set(e.value())
                                     }
+                                    small { class: "text-muted", style: "font-size: 11px; margin-top: 2px;", "Mantenha o valor atual ou digite um novo CPF." }
                                 }
                                 div { class: "form-group",
                                     label { "RG (Registro Geral)" }
@@ -368,7 +371,9 @@ pub fn EditPatientModal(
                         }
                     }
 
-                    div { class: "modal-footer-actions",
+                    div {
+                        class: "modal-footer-actions",
+                        style: "flex-shrink: 0; padding: 16px 24px; border-top: 1px solid #e2e8f0; background: #ffffff; display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 0;",
                         button {
                             r#type: "button",
                             class: "btn-secondary",
@@ -381,9 +386,10 @@ pub fn EditPatientModal(
                         button {
                             r#type: "submit",
                             class: "btn-primary",
+                            style: "font-weight: 600; padding: 8px 20px;",
                             disabled: is_submitting(),
                             IconCheck { size: 16, color: "#ffffff".to_string() }
-                            span { if is_submitting() { "Salvando..." } else { "Salvar Alterações" } }
+                            span { if is_submitting() { " Salvando..." } else { " Salvar Alterações" } }
                         }
                     }
                 }

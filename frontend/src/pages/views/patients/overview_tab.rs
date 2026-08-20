@@ -3,9 +3,8 @@
 //! Apresenta os dados cadastrais, contatos, endereço, status de assinatura digital
 //! com opção de redefinição de senha e gestão de responsáveis legais para pacientes menores.
 
-use super::edit_patient_modal::EditPatientModal;
 use crate::api::{reset_patient_signature_password, update_patient};
-use crate::components::icons::{IconEdit, IconLock, IconPlus, IconRefresh, IconTrash, IconUsers};
+use crate::components::icons::{IconLock, IconPlus, IconRefresh, IconTrash, IconUsers};
 use dioxus::prelude::*;
 use shared::patients::{Patient, PatientGuardian, UpdatePatientRequest};
 
@@ -20,7 +19,6 @@ pub fn PatientOverviewTab(
     toast_msg: Signal<Option<String>>,
     error_toast: Signal<Option<String>>,
 ) -> Element {
-    let mut is_edit_patient_modal_open = use_signal(|| false);
     let mut is_reset_pwd_modal_open = use_signal(|| false);
     let mut is_resetting_pwd = use_signal(|| false);
 
@@ -188,19 +186,7 @@ pub fn PatientOverviewTab(
         div { class: "overview-two-cards-grid",
             // Card 1: Dados Cadastrais e Contatos
             div { class: "overview-details-card",
-                div { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;",
-                    h3 { class: "overview-details-card-title", style: "margin-bottom: 0;", "Dados Cadastrais e Contatos" }
-                    if can_write {
-                        button {
-                            r#type: "button",
-                            class: "btn-secondary",
-                            style: "font-size: 12px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 6px;",
-                            onclick: move |_| is_edit_patient_modal_open.set(true),
-                            IconEdit { size: 13, color: "#0052cc".to_string() }
-                            span { "Editar Dados" }
-                        }
-                    }
-                }
+                h3 { class: "overview-details-card-title", "Dados Cadastrais e Contatos" }
 
                 div { class: "overview-details-row",
                     span { class: "overview-details-label", "Nome Completo" }
@@ -517,19 +503,6 @@ pub fn PatientOverviewTab(
                         }
                     }
                 }
-            }
-        }
-
-        // Modal de Edição de Dados Cadastrais do Paciente
-        if is_edit_patient_modal_open() {
-            EditPatientModal {
-                is_open: is_edit_patient_modal_open,
-                patient: patient.clone(),
-                clinic_id: clinic_id.clone(),
-                token: token.clone(),
-                reload_patient_details: reload_patient_details.clone(),
-                toast_msg: toast_msg,
-                error_toast: error_toast,
             }
         }
     }
