@@ -7,7 +7,7 @@ title = "Tooth Plus"
 
 [web.watcher]
 reload_html = true
-watch_path = ["src", "assets"]
+watch_path = ["src", "assets", "index.html"]
 
 [web.resource]
 style = ["assets/main.css"]
