@@ -420,48 +420,289 @@ fn WhatsAppTab(
 ) -> Element {
     let mut qr_code = use_signal(|| None::<String>);
     let mut is_loading_qr = use_signal(|| false);
+    let mut connection_state = use_signal(|| "checking".to_string());
+    let mut instance_name = use_signal(String::new);
+    let mut success_msg = use_signal(|| None::<String>);
+
+    // Test message state
+    let mut test_phone = use_signal(String::new);
+    let mut is_sending_test = use_signal(|| false);
+    let mut is_disconnecting = use_signal(|| false);
+
+    let id_status = clinic_id.clone();
+    let t_status = token.clone();
+
+    // Check status on load
+    use_effect(move || {
+        let cid = id_status.clone();
+        let tok = t_status.clone();
+        let mut state_sig = connection_state;
+        let mut inst_sig = instance_name;
+        spawn(async move {
+            if let Ok(res) = api::fetch_whatsapp_status(&tok, &cid).await {
+                state_sig.set(res.state);
+                inst_sig.set(res.instance);
+            } else {
+                state_sig.set("disconnected".to_string());
+            }
+        });
+    });
+
+    // Auto-poll when QR code is visible
+    let id_poll = clinic_id.clone();
+    let t_poll = token.clone();
+    use_effect(move || {
+        if qr_code().is_some() {
+            let cid = id_poll.clone();
+            let tok = t_poll.clone();
+            let mut state_sig = connection_state;
+            let mut qr_sig = qr_code;
+            let mut succ_sig = success_msg;
+
+            spawn(async move {
+                for _ in 0..30 {
+                    gloo_timers::future::sleep(Duration::from_secs(3)).await;
+                    if qr_sig().is_none() {
+                        break;
+                    }
+                    if let Ok(res) = api::fetch_whatsapp_status(&tok, &cid).await {
+                        if res.state == "open" {
+                            state_sig.set("open".to_string());
+                            qr_sig.set(None);
+                            succ_sig.set(Some("WhatsApp conectado com sucesso!".into()));
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+    });
 
     let id_qr = clinic_id.clone();
     let t_qr = token.clone();
-    let handle_connect = move |_| {
+    let mut handle_connect = move |_| {
         is_loading_qr.set(true);
         let id = id_qr.clone();
         let t = t_qr.clone();
+        let mut qr_sig = qr_code;
+        let mut state_sig = connection_state;
+        let mut inst_sig = instance_name;
+        let mut err_sig = error_toast;
+        let mut load_sig = is_loading_qr;
+        let mut succ_sig = success_msg;
+
         spawn(async move {
             match api::fetch_whatsapp_qr_code(&t, &id).await {
-                Ok(qr) => qr_code.set(Some(qr)),
-                Err(msg) => error_toast.set(Some(msg)),
+                Ok(resp) => {
+                    inst_sig.set(resp.instance);
+                    if resp.state == "open" || resp.qrcode == "ALREADY_CONNECTED" {
+                        state_sig.set("open".to_string());
+                        qr_sig.set(None);
+                        succ_sig.set(Some("WhatsApp já está conectado e pronto para uso!".into()));
+                    } else {
+                        state_sig.set(resp.state);
+                        qr_sig.set(Some(resp.qrcode));
+                    }
+                }
+                Err(msg) => {
+                    err_sig.set(Some(msg));
+                }
             }
-            is_loading_qr.set(false);
+            load_sig.set(false);
         });
     };
 
+    let id_disc = clinic_id.clone();
+    let t_disc = token.clone();
+    let mut handle_disconnect = move |_| {
+        is_disconnecting.set(true);
+        let id = id_disc.clone();
+        let t = t_disc.clone();
+        let mut state_sig = connection_state;
+        let mut qr_sig = qr_code;
+        let mut err_sig = error_toast;
+        let mut succ_sig = success_msg;
+        let mut disc_sig = is_disconnecting;
+
+        spawn(async move {
+            match api::disconnect_whatsapp(&t, &id).await {
+                Ok(_) => {
+                    state_sig.set("close".to_string());
+                    qr_sig.set(None);
+                    succ_sig.set(Some("WhatsApp desconectado com sucesso.".into()));
+                }
+                Err(e) => {
+                    err_sig.set(Some(e));
+                }
+            }
+            disc_sig.set(false);
+        });
+    };
+
+    let id_test = clinic_id.clone();
+    let t_test = token.clone();
+    let mut handle_send_test = move |_| {
+        let phone = test_phone().trim().to_string();
+        if phone.is_empty() {
+            error_toast.set(Some("Informe um número de celular com DDD para teste.".into()));
+            return;
+        }
+
+        is_sending_test.set(true);
+        let id = id_test.clone();
+        let t = t_test.clone();
+        let mut err_sig = error_toast;
+        let mut succ_sig = success_msg;
+        let mut send_sig = is_sending_test;
+
+        spawn(async move {
+            match api::send_test_whatsapp_message(&t, &id, &phone, None).await {
+                Ok(msg) => {
+                    succ_sig.set(Some(msg));
+                }
+                Err(e) => {
+                    err_sig.set(Some(e));
+                }
+            }
+            send_sig.set(false);
+        });
+    };
+
+    let is_connected = connection_state() == "open";
+    let qr_img_src = qr_code().map(|q| {
+        if q.starts_with("data:image/") {
+            q
+        } else {
+            format!("data:image/png;base64,{}", q)
+        }
+    });
+
     rsx! {
-        div { class: "settings-pane-container",
-            h3 { class: "settings-pane-title", "Conexão com WhatsApp" }
-            p { class: "qr-description", "Habilite automações de mensagens e lembretes aos pacientes." }
-            match qr_code() {
-                Some(base64_str) => rsx! {
-                    div { class: "qr-code-wrapper",
-                        img { class: "qr-code-image", src: "data:image/png;base64,{base64_str}" }
-                        p { class: "qr-status", "Aguardando leitura do QR Code..." }
+        div { class: "settings-pane-container", style: "max-width: 700px;",
+            h3 { class: "settings-pane-title", "Conexão com WhatsApp (Evolution API)" }
+            p { class: "qr-description",
+                "Habilite envio de códigos OTP para assinatura digital, lembretes de consultas e notificações aos pacientes."
+            }
+
+            if let Some(ref msg) = success_msg() {
+                div { class: "alert-banner-success", style: "margin-bottom: 16px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; color: #065f46; font-size: 13px; font-weight: 500;",
+                    "✓ {msg}"
+                }
+            }
+
+            // Status Card Header
+            div { class: "whatsapp-status-card", style: "background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;",
+                div { style: "display: flex; align-items: center; gap: 12px;",
+                    div { style: "width: 44px; height: 44px; border-radius: 10px; background: #25D366; display: flex; align-items: center; justify-content: center; color: #ffffff;",
+                        crate::components::icons::IconWhatsApp { size: 24, color: "#ffffff".to_string() }
                     }
-                },
-                None => rsx! {
-                    div { class: "qr-placeholder",
-                        if can_write {
-                            button { class: "btn-primary", onclick: handle_connect, disabled: is_loading_qr(),
-                                if is_loading_qr() { "Gerando..." } else { "Gerar QR Code" }
-                            }
-                        } else {
-                            p { class: "text-error-small", "Apenas gestores podem gerar sessão WPP." }
+                    div {
+                        h4 { style: "margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;", "Status da Conexão" }
+                        if !instance_name().is_empty() {
+                            p { style: "margin: 2px 0 0 0; font-size: 12px; color: #64748b;", "Instância: ", strong { "{instance_name}" } }
                         }
+                    }
+                }
+                div {
+                    if is_connected {
+                        span { class: "badge-completed", style: "font-size: 12px; padding: 6px 12px; background: #dcfce7; color: #15803d; font-weight: 700; border-radius: 20px;", "🟢 Conectado" }
+                    } else if connection_state() == "checking" {
+                        span { class: "badge-pending", style: "font-size: 12px; padding: 6px 12px; border-radius: 20px;", "⏳ Verificando..." }
+                    } else {
+                        span { class: "badge-outline", style: "font-size: 12px; padding: 6px 12px; border-radius: 20px; color: #dc2626; border-color: #fca5a5; background: #fef2f2;", "🔴 Desconectado" }
+                    }
+                }
+            }
+
+            if is_connected {
+                // Sessão Ativa & Teste de Disparo
+                div { style: "display: flex; flex-direction: column; gap: 16px;",
+                    div { class: "agenda-resource-box", style: "padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;",
+                        h4 { style: "margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #1e293b;", "Disparo de Teste" }
+                        p { style: "margin: 0 0 12px 0; font-size: 12px; color: #64748b;", "Envie uma mensagem de teste para confirmar que seu WhatsApp está enviando mensagens normalmente." }
+                        div { style: "display: flex; gap: 10px;",
+                            input {
+                                class: "form-input",
+                                style: "max-width: 260px;",
+                                placeholder: "(11) 98888-8888",
+                                value: "{test_phone}",
+                                oninput: move |e| test_phone.set(e.value())
+                            }
+                            button {
+                                class: "btn-primary",
+                                style: "background-color: #25D366; border-color: #25D366; font-size: 13px; padding: 8px 16px;",
+                                disabled: is_sending_test(),
+                                onclick: handle_send_test,
+                                if is_sending_test() { "Enviando..." } else { "Enviar Teste" }
+                            }
+                        }
+                    }
+
+                    if can_write {
+                        div { style: "display: flex; justify-content: flex-end; margin-top: 8px;",
+                            button {
+                                class: "btn-danger-ghost",
+                                style: "font-size: 13px; color: #dc2626; border: 1px solid #fecaca; background: #fef2f2; padding: 8px 16px; border-radius: 8px; font-weight: 600;",
+                                disabled: is_disconnecting(),
+                                onclick: handle_disconnect,
+                                if is_disconnecting() { "Desconectando..." } else { "Desconectar WhatsApp" }
+                            }
+                        }
+                    }
+                }
+            } else if let Some(ref img_src) = qr_img_src {
+                div { class: "qr-code-wrapper", style: "text-align: center; padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;",
+                    div { style: "display: inline-block; padding: 12px; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #cbd5e1;",
+                        img {
+                            class: "qr-code-image",
+                            style: "width: 250px; height: 250px; display: block; border-radius: 8px;",
+                            src: "{img_src}",
+                            alt: "QR Code WhatsApp"
+                        }
+                    }
+                    h4 { style: "margin: 16px 0 6px 0; font-size: 15px; font-weight: 700; color: #0f172a;", "Aponte a câmera do seu WhatsApp" }
+                    p { style: "margin: 0 auto; max-width: 380px; font-size: 12px; color: #64748b; line-height: 1.4;",
+                        "No celular, abra o WhatsApp > Configurações (ou 3 pontinhos) > ",
+                        strong { "Aparelhos Conectados" },
+                        " > ",
+                        strong { "Conectar um aparelho" },
+                        " e aponte para a tela."
+                    }
+                    div { style: "margin-top: 14px; display: flex; justify-content: center; gap: 10px;",
+                        button {
+                            class: "btn-secondary btn-sm",
+                            disabled: is_loading_qr(),
+                            onclick: handle_connect,
+                            if is_loading_qr() { "Atualizando..." } else { "🔄 Atualizar QR Code" }
+                        }
+                    }
+                }
+            } else {
+                div { class: "qr-placeholder", style: "width: 100%; height: auto; padding: 40px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;",
+                    div { style: "width: 56px; height: 56px; border-radius: 50%; background: #eff6ff; display: flex; align-items: center; justify-content: center; color: #0052cc;",
+                        crate::components::icons::IconQrCode { size: 28, color: "#0052cc".to_string() }
+                    }
+                    div {
+                        h4 { style: "margin: 0; font-size: 15px; font-weight: 600; color: #1e293b;", "Nenhuma sessão ativa no momento" }
+                        p { style: "margin: 4px 0 0 0; font-size: 12px; color: #64748b;", "Clique no botão abaixo para gerar o QR Code e conectar o número da clínica." }
+                    }
+                    if can_write {
+                        button {
+                            class: "btn-primary",
+                            style: "padding: 10px 24px; font-weight: 600;",
+                            disabled: is_loading_qr(),
+                            onclick: handle_connect,
+                            if is_loading_qr() { "Conectando ao Evolution API..." } else { "Gerar QR Code de Conexão" }
+                        }
+                    } else {
+                        p { class: "text-error-small", "Apenas gestores com permissão whatsapp:write podem conectar o WhatsApp." }
                     }
                 }
             }
         }
     }
 }
+
 
 #[component]
 fn AdvancedTab(

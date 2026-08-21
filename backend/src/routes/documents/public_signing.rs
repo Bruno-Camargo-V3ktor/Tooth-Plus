@@ -633,25 +633,23 @@ pub async fn request_signing_otp(
             return Err(ApiError::BadRequest("Telefone/WhatsApp não disponível para envio.".into()));
         }
 
-        if let Some(ref c) = clinic_row {
-            if let Some(ref inst) = c.whatsapp_instance {
-                let api_key = env::var("EVOLUTION_API_KEY").unwrap_or_default();
-                let msg = format!(
-                    "🦷 *Tooth Plus — Assinatura Digital*\n\nOlá *{}*, seu código de verificação é:\n\n*{}*\n\nEsse código expira em 5 minutos. Não compartilhe com ninguém.",
-                    recipient_name, otp_code
-                );
-                if let Ok(message_id) = evolution
-                    .send_whatsapp_text(inst, &api_key, &recipient_phone, &msg)
-                    .await
-                {
-                    if !message_id.is_empty() {
-                        let _ = evolution
-                            .delete_whatsapp_message(inst, &api_key, &recipient_phone, &message_id)
-                            .await;
-                    }
-                }
-            }
-        }
+        let clinic_key = doc.clinic_id.key.to_sql();
+        let instance_name = clinic_row
+            .as_ref()
+            .and_then(|c| c.whatsapp_instance.clone())
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("clinic_{}", clinic_key));
+
+        let api_key = env::var("EVOLUTION_API_KEY").unwrap_or_default();
+        let msg = format!(
+            "🦷 *Tooth Plus — Assinatura Digital*\n\nOlá *{}*, seu código de verificação é:\n\n*{}*\n\nEsse código expira em 5 minutos. Não compartilhe com ninguém.",
+            recipient_name, otp_code
+        );
+
+        evolution
+            .send_whatsapp_text(&instance_name, &api_key, &recipient_phone, &msg)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Falha ao enviar OTP via WhatsApp: {}", e)))?;
 
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "message": "Código de validação enviado com sucesso via WhatsApp.",

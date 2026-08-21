@@ -7,6 +7,7 @@ use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
 use crate::db::Db;
 use crate::error::ApiError;
+use crate::evolution::EvolutionClient;
 use crate::security::auth_guard::{AuthenticatedUser, check_permission};
 use crate::storage::StorageProvider;
 
@@ -264,15 +265,22 @@ pub async fn upload_logo(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "logo_url": file_url })))
 }
 
-#[get("/clinics/{clinic_id}/whatsapp/qr")]
-pub async fn get_whatsapp_qr(
+#[get("/clinics/{clinic_id}/whatsapp/status")]
+pub async fn get_whatsapp_status(
     auth: AuthenticatedUser,
     path: web::Path<String>,
     db: web::Data<Db>,
+    evolution: web::Data<EvolutionClient>,
 ) -> Result<HttpResponse, ApiError> {
     let clinic_id = path.into_inner();
+    let raw_key = clinic_id
+        .replace("clinics:", "")
+        .replace("clinic:", "")
+        .replace('⟨', "")
+        .replace('⟩', "");
+    let clinic_rec = format!("clinic:{}", raw_key);
 
-    if !check_permission(&db, &auth.id, &clinic_id, "whatsapp:read")
+    if !check_permission(&db, &auth.id, &clinic_rec, "whatsapp:read")
         .await
         .unwrap_or(false)
     {
@@ -281,6 +289,215 @@ pub async fn get_whatsapp_qr(
         ));
     }
 
-    let qr_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "qrcode": qr_base64 })))
+    let mut response = db
+        .query("SELECT * FROM type::record($id)")
+        .bind(("id", clinic_rec.clone()))
+        .await
+        .map_err(|_| ApiError::Database("Erro ao buscar clínica no banco.".into()))?;
+
+    let clinic: Option<DbClinic> = response.take(0).unwrap_or(None);
+    let instance_name = clinic
+        .as_ref()
+        .and_then(|c| c.whatsapp_instance.clone())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| format!("clinic_{}", raw_key));
+
+    let api_key = std::env::var("EVOLUTION_API_KEY").unwrap_or_default();
+    let state = evolution
+        .get_connection_state(&instance_name, &api_key)
+        .await
+        .unwrap_or_else(|_| "disconnected".to_string());
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "instance": instance_name,
+        "state": state
+    })))
 }
+
+#[get("/clinics/{clinic_id}/whatsapp/qr")]
+pub async fn get_whatsapp_qr(
+    auth: AuthenticatedUser,
+    path: web::Path<String>,
+    db: web::Data<Db>,
+    evolution: web::Data<EvolutionClient>,
+) -> Result<HttpResponse, ApiError> {
+    let clinic_id = path.into_inner();
+    let raw_key = clinic_id
+        .replace("clinics:", "")
+        .replace("clinic:", "")
+        .replace('⟨', "")
+        .replace('⟩', "");
+    let clinic_rec = format!("clinic:{}", raw_key);
+
+    if !check_permission(&db, &auth.id, &clinic_rec, "whatsapp:read")
+        .await
+        .unwrap_or(false)
+    {
+        return Err(ApiError::Forbidden(
+            "Sem permissão para acessar integração de WhatsApp.".into(),
+        ));
+    }
+
+    let mut response = db
+        .query("SELECT * FROM type::record($id)")
+        .bind(("id", clinic_rec.clone()))
+        .await
+        .map_err(|_| ApiError::Database("Erro ao buscar clínica no banco.".into()))?;
+
+    let clinic: Option<DbClinic> = response.take(0).unwrap_or(None);
+    let instance_name = clinic
+        .as_ref()
+        .and_then(|c| c.whatsapp_instance.clone())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| format!("clinic_{}", raw_key));
+
+    let api_key = std::env::var("EVOLUTION_API_KEY").unwrap_or_default();
+
+    // Salva o nome da instância no registro da clínica se ainda não estiver definido
+    let _ = db
+        .query("UPDATE type::record($id) SET whatsapp_instance = $inst WHERE whatsapp_instance = NONE OR whatsapp_instance = NULL;")
+        .bind(("id", clinic_rec.clone()))
+        .bind(("inst", instance_name.clone()))
+        .await;
+
+    // 1. Tenta criar a instância (se não existir)
+    let _ = evolution.create_instance(&instance_name, &api_key).await;
+
+    // 2. Conecta e obtém o QR Code
+    let qr_result = evolution.connect_instance(&instance_name, &api_key).await;
+
+    let state = evolution
+        .get_connection_state(&instance_name, &api_key)
+        .await
+        .unwrap_or_else(|_| "connecting".to_string());
+
+    match qr_result {
+        Ok(qr) => {
+            Ok(HttpResponse::Ok().json(serde_json::json!({
+                "qrcode": qr,
+                "instance": instance_name,
+                "state": state
+            })))
+        }
+        Err(e) => {
+            if state == "open" {
+                Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "qrcode": "ALREADY_CONNECTED",
+                    "instance": instance_name,
+                    "state": "open"
+                })))
+            } else {
+                Err(ApiError::Internal(format!("Erro ao gerar QR Code: {}", e)))
+            }
+        }
+    }
+}
+
+#[post("/clinics/{clinic_id}/whatsapp/disconnect")]
+pub async fn disconnect_whatsapp(
+    auth: AuthenticatedUser,
+    path: web::Path<String>,
+    db: web::Data<Db>,
+    evolution: web::Data<EvolutionClient>,
+) -> Result<HttpResponse, ApiError> {
+    let clinic_id = path.into_inner();
+    let raw_key = clinic_id
+        .replace("clinics:", "")
+        .replace("clinic:", "")
+        .replace('⟨', "")
+        .replace('⟩', "");
+    let clinic_rec = format!("clinic:{}", raw_key);
+
+    if !check_permission(&db, &auth.id, &clinic_rec, "whatsapp:write")
+        .await
+        .unwrap_or(false)
+    {
+        return Err(ApiError::Forbidden(
+            "Sem permissão para desconectar o WhatsApp.".into(),
+        ));
+    }
+
+    let mut response = db
+        .query("SELECT * FROM type::record($id)")
+        .bind(("id", clinic_rec.clone()))
+        .await
+        .map_err(|_| ApiError::Database("Erro ao buscar clínica no banco.".into()))?;
+
+    let clinic: Option<DbClinic> = response.take(0).unwrap_or(None);
+    let instance_name = clinic
+        .as_ref()
+        .and_then(|c| c.whatsapp_instance.clone())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| format!("clinic_{}", raw_key));
+
+    let api_key = std::env::var("EVOLUTION_API_KEY").unwrap_or_default();
+    evolution
+        .disconnect_instance(&instance_name, &api_key)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Erro ao desconectar: {}", e)))?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "message": "Sessão do WhatsApp desconectada com sucesso.",
+        "state": "close"
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct SendTestWhatsappRequest {
+    pub phone: String,
+    pub message: Option<String>,
+}
+
+#[post("/clinics/{clinic_id}/whatsapp/test")]
+pub async fn send_test_whatsapp(
+    auth: AuthenticatedUser,
+    path: web::Path<String>,
+    req: web::Json<SendTestWhatsappRequest>,
+    db: web::Data<Db>,
+    evolution: web::Data<EvolutionClient>,
+) -> Result<HttpResponse, ApiError> {
+    let clinic_id = path.into_inner();
+    let raw_key = clinic_id
+        .replace("clinics:", "")
+        .replace("clinic:", "")
+        .replace('⟨', "")
+        .replace('⟩', "");
+    let clinic_rec = format!("clinic:{}", raw_key);
+
+    if !check_permission(&db, &auth.id, &clinic_rec, "whatsapp:write")
+        .await
+        .unwrap_or(false)
+    {
+        return Err(ApiError::Forbidden(
+            "Sem permissão para enviar teste de WhatsApp.".into(),
+        ));
+    }
+
+    let mut response = db
+        .query("SELECT * FROM type::record($id)")
+        .bind(("id", clinic_rec.clone()))
+        .await
+        .map_err(|_| ApiError::Database("Erro ao buscar clínica no banco.".into()))?;
+
+    let clinic: Option<DbClinic> = response.take(0).unwrap_or(None);
+    let instance_name = clinic
+        .as_ref()
+        .and_then(|c| c.whatsapp_instance.clone())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| format!("clinic_{}", raw_key));
+
+    let api_key = std::env::var("EVOLUTION_API_KEY").unwrap_or_default();
+    let default_msg = "🦷 *Tooth Plus — Teste de Integração*\n\nSeu WhatsApp está conectado com sucesso ao sistema Tooth-Plus!".to_string();
+    let message = req.message.as_deref().unwrap_or(&default_msg);
+
+    let message_id = evolution
+        .send_whatsapp_text(&instance_name, &api_key, &req.phone, message)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Erro ao enviar mensagem de teste via WhatsApp: {}", e)))?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "message": "Mensagem de teste enviada com sucesso!",
+        "message_id": message_id
+    })))
+}
+

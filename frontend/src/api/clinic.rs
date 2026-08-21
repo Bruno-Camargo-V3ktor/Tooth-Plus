@@ -100,7 +100,39 @@ pub async fn upload_clinic_logo(
     }
 }
 
-pub async fn fetch_whatsapp_qr_code(token: &str, clinic_id: &str) -> Result<String, String> {
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, PartialEq)]
+pub struct WhatsappStatusResponse {
+    pub instance: String,
+    pub state: String,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, PartialEq)]
+pub struct WhatsappQrResponse {
+    pub qrcode: String,
+    pub instance: String,
+    pub state: String,
+}
+
+pub async fn fetch_whatsapp_status(token: &str, clinic_id: &str) -> Result<WhatsappStatusResponse, String> {
+    let url = format!("{}/clinics/{}/whatsapp/status", API_BASE, clinic_id);
+
+    let res = get_client()
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|_| "Falha de comunicação com o serviço do WhatsApp.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<WhatsappStatusResponse>()
+            .await
+            .map_err(|_| "Erro ao processar status do WhatsApp.".to_string())
+    } else {
+        Err("Não foi possível obter o status da sessão do WhatsApp.".to_string())
+    }
+}
+
+pub async fn fetch_whatsapp_qr_code(token: &str, clinic_id: &str) -> Result<WhatsappQrResponse, String> {
     let url = format!("{}/clinics/{}/whatsapp/qr", API_BASE, clinic_id);
 
     let res = get_client()
@@ -111,19 +143,68 @@ pub async fn fetch_whatsapp_qr_code(token: &str, clinic_id: &str) -> Result<Stri
         .map_err(|_| "Falha de comunicação com o serviço do WhatsApp.".to_string())?;
 
     if res.status().is_success() {
-        let json_val: serde_json::Value = res
-            .json()
+        res.json::<WhatsappQrResponse>()
             .await
-            .map_err(|_| "Erro ao processar QR code.".to_string())?;
-
-        if let Some(qr) = json_val.as_str() {
-            Ok(qr.to_string())
-        } else if let Some(qr) = json_val.get("qrcode").and_then(|q| q.as_str()) {
-            Ok(qr.to_string())
-        } else {
-            Err("QR Code não disponível no momento.".to_string())
-        }
+            .map_err(|_| "Erro ao processar QR code do WhatsApp.".to_string())
     } else {
-        Err("Não foi possível gerar a sessão do WhatsApp.".to_string())
+        let err_txt = res.text().await.unwrap_or_default();
+        Err(if err_txt.is_empty() {
+            "Não foi possível gerar a sessão do WhatsApp.".to_string()
+        } else {
+            err_txt
+        })
     }
 }
+
+pub async fn disconnect_whatsapp(token: &str, clinic_id: &str) -> Result<(), String> {
+    let url = format!("{}/clinics/{}/whatsapp/disconnect", API_BASE, clinic_id);
+
+    let res = get_client()
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|_| "Falha de comunicação ao desconectar WhatsApp.".to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err("Erro ao desconectar sessão do WhatsApp.".to_string())
+    }
+}
+
+pub async fn send_test_whatsapp_message(
+    token: &str,
+    clinic_id: &str,
+    phone: &str,
+    message: Option<&str>,
+) -> Result<String, String> {
+    let url = format!("{}/clinics/{}/whatsapp/test", API_BASE, clinic_id);
+
+    let payload = serde_json::json!({
+        "phone": phone,
+        "message": message
+    });
+
+    let res = get_client()
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|_| "Falha ao enviar mensagem de teste.".to_string())?;
+
+    if res.status().is_success() {
+        let json_val: serde_json::Value = res.json().await.map_err(|_| "Erro ao ler resposta".to_string())?;
+        let msg = json_val.get("message").and_then(|m| m.as_str()).unwrap_or("Mensagem enviada com sucesso!").to_string();
+        Ok(msg)
+    } else {
+        let err_txt = res.text().await.unwrap_or_default();
+        Err(if err_txt.is_empty() {
+            "Falha ao enviar mensagem de teste.".to_string()
+        } else {
+            err_txt
+        })
+    }
+}
+
