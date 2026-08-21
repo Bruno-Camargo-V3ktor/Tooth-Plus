@@ -16,6 +16,7 @@ pub use templates_list::*;
 use crate::api::{fetch_documents, fetch_patients, fetch_users};
 use crate::components::icons::{IconExternalLink, IconFile, IconSignature};
 use crate::permissions;
+use crate::utils::{build_signing_url, resolve_file_url};
 use crate::{ActiveClinicState, SessionState};
 use dioxus::prelude::*;
 use qrcode::render::svg;
@@ -268,7 +269,7 @@ pub fn DocumentsView() -> Element {
             // Modal: QR Code de Assinatura
             if let Some(ref doc) = *qr_modal_doc.read() {
                 {
-                    let link_url = format!("http://localhost:8080/sign/{}", doc.signing_token);
+                    let link_url = build_signing_url(&doc.signing_token);
                     let qr_svg = generate_qr_svg(&link_url);
                     rsx! {
                         div { class: "modal-overlay",
@@ -296,7 +297,7 @@ pub fn DocumentsView() -> Element {
                                         input {
                                             r#type: "text",
                                             readonly: true,
-                                            class: "input-field",
+                                            class: "input-field font-mono font-xs",
                                             value: "{link_url}",
                                         }
                                         a {
@@ -320,40 +321,45 @@ pub fn DocumentsView() -> Element {
 
             // Modal: Visualizador Nativo de PDF / Documento
             if let Some((ref url, ref title)) = *pdf_preview_target.read() {
-                div { class: "modal-overlay",
-                    onclick: move |_| pdf_preview_target.set(None),
-                    div { class: "action-modal pdf-viewer-modal",
-                        onclick: move |e| e.stop_propagation(),
-                        div { class: "modal-header",
-                            div {
-                                h2 { class: "modal-title", "{title}" }
-                                p { class: "modal-subtitle", "Documento PDF Clínico" }
-                            }
-                            div { class: "modal-header-actions",
-                                a {
-                                    href: "{url}",
-                                    target: "_blank",
-                                    rel: "noopener noreferrer",
-                                    class: "btn-secondary btn-sm",
-                                    IconExternalLink { size: 14, color: "#0052cc".to_string() }
-                                    span { " Abrir em Nova Aba" }
+                {
+                    let resolved_url = resolve_file_url(url);
+                    rsx! {
+                        div { class: "modal-overlay",
+                            onclick: move |_| pdf_preview_target.set(None),
+                            div { class: "action-modal pdf-viewer-modal",
+                                onclick: move |e| e.stop_propagation(),
+                                div { class: "modal-header",
+                                    div {
+                                        h2 { class: "modal-title", "{title}" }
+                                        p { class: "modal-subtitle", "Documento PDF Clínico" }
+                                    }
+                                    div { class: "modal-header-actions",
+                                        a {
+                                            href: "{resolved_url}",
+                                            target: "_blank",
+                                            rel: "noopener noreferrer",
+                                            class: "btn-secondary btn-sm",
+                                            IconExternalLink { size: 14, color: "#0052cc".to_string() }
+                                            span { " Abrir em Nova Aba" }
+                                        }
+                                        button {
+                                            class: "modal-close",
+                                            onclick: move |_| pdf_preview_target.set(None),
+                                            "×"
+                                        }
+                                    }
                                 }
-                                button {
-                                    class: "modal-close",
-                                    onclick: move |_| pdf_preview_target.set(None),
-                                    "×"
-                                }
-                            }
-                        }
-                        div { class: "modal-body pdf-viewer-modal-body",
-                            object {
-                                data: "{url}#toolbar=1&view=FitH",
-                                r#type: "application/pdf",
-                                class: "pdf-modal-embed",
-                                iframe {
-                                    src: "{url}",
-                                    class: "pdf-modal-embed",
-                                    title: "{title}",
+                                div { class: "modal-body pdf-viewer-modal-body",
+                                    object {
+                                        data: "{resolved_url}#toolbar=1&view=FitH",
+                                        r#type: "application/pdf",
+                                        class: "pdf-modal-embed",
+                                        iframe {
+                                            src: "{resolved_url}",
+                                            class: "pdf-modal-embed",
+                                            title: "{title}",
+                                        }
+                                    }
                                 }
                             }
                         }

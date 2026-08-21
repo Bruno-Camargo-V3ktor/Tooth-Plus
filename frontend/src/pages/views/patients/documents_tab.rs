@@ -5,8 +5,10 @@
 
 use crate::api::create_patient_document;
 use crate::components::icons::{
-    IconCheckCircle, IconExternalLink, IconEye, IconFile, IconQrCode, IconSignature, IconUpload,
+    IconCheckCircle, IconCopy, IconExternalLink, IconEye, IconFile, IconQrCode, IconSignature,
+    IconUpload, IconWhatsApp,
 };
+use crate::utils::{build_signing_url, resolve_file_url};
 use dioxus::prelude::*;
 use qrcode::render::svg;
 use qrcode::QrCode;
@@ -172,7 +174,8 @@ pub fn PatientDocumentsTab(
                             for doc in &documents {
                                 {
                                     let doc_clone = doc.clone();
-                                    let pdf_url_to_preview = doc.signed_pdf_url.clone().unwrap_or_else(|| doc.original_pdf_url.clone());
+                                    let raw_pdf_url = doc.signed_pdf_url.clone().unwrap_or_else(|| doc.original_pdf_url.clone());
+                                    let pdf_url_to_preview = resolve_file_url(&raw_pdf_url);
                                     let pdf_title = doc.title.clone();
 
                                     rsx! {
@@ -234,68 +237,46 @@ pub fn PatientDocumentsTab(
                 }
             }
 
-            // Modal de Emissão de Documento / Contrato
+            // Modal de Emissão de Novo Documento
             if is_emit_modal_open() {
                 div { class: "modal-overlay",
-                    div { class: "action-modal stock-custom-modal", style: "max-width: 620px;",
-                        div { class: "settings-header",
+                    div { class: "action-modal",
+                        div { class: "modal-header",
                             div {
-                                h2 { class: "settings-title", "Emitir Contrato / Termo de Assinatura" }
-                                p { class: "text-muted font-xs mt-1",
-                                    "Vincule um modelo de contrato para assinatura digital imediata ou anexe um documento pronto."
-                                }
+                                h2 { class: "modal-title", "Emitir Novo Documento / Contrato" }
+                                p { class: "modal-subtitle", "Selecione o modelo e preencha os dados do termo para assinatura." }
                             }
-                            button { class: "close-btn", onclick: move |_| is_emit_modal_open.set(false), "×" }
+                            button { class: "modal-close", onclick: move |_| is_emit_modal_open.set(false), "×" }
                         }
-
-                        div { class: "settings-content",
-                            // Patient Info Banner (Light Blue Box)
-                            div { class: "patient-info-banner-blue",
-                                div {
-                                    span { class: "banner-blue-item-label", "PACIENTE" }
-                                    p { class: "banner-blue-item-val", "{pat_name}" }
-                                }
-                                div {
-                                    span { class: "banner-blue-item-label", "CPF PROTEGIDO" }
-                                    p { class: "banner-blue-item-val", "{pat_cpf_str}" }
-                                }
-                                div {
-                                    span { class: "banner-blue-item-label", "WHATSAPP" }
-                                    p { class: "banner-blue-item-val", "{pat_phone_str}" }
-                                }
-                                div {
-                                    span { class: "banner-blue-item-label", "CONVÊNIO" }
-                                    p { class: "banner-blue-item-val", "{pat_ins_str}" }
-                                }
-                            }
-
+                        div { class: "modal-body",
                             div { class: "form-group",
                                 label { "Título do Documento *" }
                                 input {
-                                    class: "form-input",
+                                    class: "input-field",
                                     value: "{emit_doc_title}",
+                                    placeholder: "Ex: Termo de Consentimento - Clareamento Dental",
                                     oninput: move |e| emit_doc_title.set(e.value())
                                 }
                             }
 
-                            div { class: "form-grid-2",
-                                div { class: "form-group",
+                            div { class: "form-row",
+                                div { class: "form-group col-md-6",
                                     label { "Tipo de Documento" }
                                     select {
-                                        class: "form-input",
+                                        class: "input-field",
                                         value: "{emit_doc_type}",
                                         onchange: move |e| emit_doc_type.set(e.value()),
-                                        option { value: "Contrato Odontológico (E-Sign)", "Contrato Odontológico (E-Sign)" }
-                                        option { value: "Termo de Consentimento (TCLE)", "Termo de Consentimento (TCLE)" }
-                                        option { value: "Atestado Odontológico", "Atestado Odontológico" }
-                                        option { value: "Receituário Especial", "Receituário Especial" }
-                                        option { value: "Outro", "Outro" }
+                                        option { value: "contract", "Contrato de Prestação de Serviços" }
+                                        option { value: "consent", "Termo de Consentimento (TCLE)" }
+                                        option { value: "budget", "Orçamento Formal" }
+                                        option { value: "declaration", "Declaração de Comparecimento" }
                                     }
                                 }
-                                div { class: "form-group",
-                                    label { "Modelo Base de Contrato" }
+
+                                div { class: "form-group col-md-6",
+                                    label { "Modelo de Contrato (Opcional)" }
                                     select {
-                                        class: "form-input",
+                                        class: "input-field",
                                         value: "{emit_template_id}",
                                         onchange: move |e| emit_template_id.set(e.value()),
                                         option { value: "", "Documento em Branco / Padrão" }
@@ -305,23 +286,14 @@ pub fn PatientDocumentsTab(
                                     }
                                 }
                             }
-
-                            div { class: "form-group",
-                                label { "Arquivo PDF do Documento (Opcional se usar modelo)" }
-                                div { class: "contract-upload-dropzone",
-                                    IconUpload { size: 18, color: "#0052cc".to_string() }
-                                    span { "Fazer Upload do PDF" }
-                                }
-                            }
                         }
-
-                        div { class: "modal-footer-actions",
+                        div { class: "modal-footer",
                             button { class: "btn-secondary", onclick: move |_| is_emit_modal_open.set(false), "Cancelar" }
                             button {
                                 class: "btn-primary",
                                 disabled: is_emitting(),
                                 onclick: move |e| handle_emit(e),
-                                if is_emitting() { "Emitindo..." } else { "Emitir e Gerar QR Code de Assinatura" }
+                                if is_emitting() { "Emitindo..." } else { "Emitir e Gerar QR Code" }
                             }
                         }
                     }
@@ -331,7 +303,7 @@ pub fn PatientDocumentsTab(
             // Modal do QR Code & Envio WhatsApp
             if let Some(ref doc) = *qr_modal_doc.read() {
                 {
-                    let sign_url = format!("https://app.smileplus.com.br/sign/{}", doc.signing_token);
+                    let sign_url = build_signing_url(&doc.signing_token);
                     let qr_svg = generate_qr_svg(&sign_url);
                     let wa_msg = format!("Olá {}, seu documento '{}' está pronto para assinatura digital: {}", patient_name, doc.title, sign_url);
                     let raw_phone: String = patient_phone.as_deref().unwrap_or("").chars().filter(|c| c.is_ascii_digit()).collect();
@@ -339,32 +311,51 @@ pub fn PatientDocumentsTab(
 
                     rsx! {
                         div { class: "modal-overlay",
+                            onclick: move |_| qr_modal_doc.set(None),
                             div { class: "action-modal qr-modal-card",
-                                div { class: "settings-header",
-                                    h2 { class: "settings-title", "Assinatura Digital - {doc.title}" }
-                                    button { class: "close-btn", onclick: move |_| qr_modal_doc.set(None), "×" }
+                                onclick: move |e| e.stop_propagation(),
+                                div { class: "modal-header",
+                                    div {
+                                        h2 { class: "modal-title", "Assinatura Digital - {doc.title}" }
+                                        p { class: "modal-subtitle", "Aponte a câmera do celular para o QR Code para abrir o portal de assinatura do paciente." }
+                                    }
+                                    button { class: "modal-close", onclick: move |_| qr_modal_doc.set(None), "×" }
                                 }
-                                div { class: "settings-content text-center",
-                                    p { class: "text-muted font-xs", "Aponte a câmera do celular para o QR Code para abrir o portal de assinatura do paciente." }
-
-                                    div { class: "qr-code-box my-4",
-                                        dangerous_inner_html: "{qr_svg}"
+                                div { class: "modal-body text-center",
+                                    div { class: "qr-box-center",
+                                        div {
+                                            class: "qr-svg-wrapper",
+                                            dangerous_inner_html: "{qr_svg}"
+                                        }
                                     }
 
-                                    div { class: "signing-link-input-group",
+                                    p { class: "qr-doc-title", "{doc.title}" }
+                                    p { class: "qr-hint", "O paciente poderá visualizar o contrato na íntegra, autenticar-se e desenhar a assinatura na tela do celular ou tablet." }
+
+                                    div { class: "qr-link-copy-box",
                                         input {
-                                            class: "form-input font-mono font-xs",
+                                            r#type: "text",
                                             readonly: true,
+                                            class: "input-field font-mono font-xs",
                                             value: "{sign_url}"
+                                        }
+                                        a {
+                                            href: "{sign_url}",
+                                            target: "_blank",
+                                            class: "btn-secondary",
+                                            IconExternalLink { size: 16, color: "#0052cc".to_string() }
+                                            span { " Abrir Portal" }
                                         }
                                     }
                                 }
-                                div { class: "modal-footer-actions",
+                                div { class: "modal-footer", style: "display: flex; gap: 8px; justify-content: flex-end;",
                                     a {
-                                        class: "btn-primary flex items-center gap-2",
+                                        class: "btn-primary",
+                                        style: "background-color: #25D366; border-color: #25D366; color: #ffffff; display: inline-flex; align-items: center; gap: 8px; text-decoration: none;",
                                         href: "{wa_link}",
                                         target: "_blank",
-                                        "📱 Enviar Link por WhatsApp"
+                                        IconWhatsApp { size: 18, color: "#ffffff".to_string() }
+                                        span { "Enviar Link por WhatsApp" }
                                     }
                                     button { class: "btn-secondary", onclick: move |_| qr_modal_doc.set(None), "Fechar" }
                                 }
@@ -376,27 +367,40 @@ pub fn PatientDocumentsTab(
 
             // Modal de Pré-Visualização de PDF
             if let Some((ref pdf_url, ref title)) = *pdf_preview_target.read() {
-                div { class: "modal-overlay",
-                    div { class: "action-modal pdf-modal-card", style: "max-width: 900px; height: 85vh;",
-                        div { class: "settings-header",
-                            h2 { class: "settings-title", "{title}" }
-                            button { class: "close-btn", onclick: move |_| pdf_preview_target.set(None), "×" }
-                        }
-                        div { class: "settings-content p-0", style: "height: calc(100% - 120px);",
-                            iframe {
-                                src: "{pdf_url}",
-                                style: "width: 100%; height: 100%; border: none;",
+                {
+                    let resolved_pdf_url = resolve_file_url(pdf_url);
+                    rsx! {
+                        div { class: "modal-overlay",
+                            onclick: move |_| pdf_preview_target.set(None),
+                            div { class: "action-modal pdf-viewer-modal",
+                                onclick: move |e| e.stop_propagation(),
+                                div { class: "modal-header",
+                                    div {
+                                        h2 { class: "modal-title", "{title}" }
+                                        p { class: "modal-subtitle", "Documento PDF Clínico" }
+                                    }
+                                    button { class: "modal-close", onclick: move |_| pdf_preview_target.set(None), "×" }
+                                }
+                                div { class: "modal-body p-0", style: "height: 68vh; overflow: hidden; background: #0f172a;",
+                                    iframe {
+                                        src: "{resolved_pdf_url}",
+                                        style: "width: 100%; height: 100%; border: none;",
+                                        title: "{title}"
+                                    }
+                                }
+                                div { class: "modal-footer",
+                                    div { class: "flex items-center justify-between full-width",
+                                        a {
+                                            class: "btn-secondary",
+                                            href: "{resolved_pdf_url}",
+                                            target: "_blank",
+                                            IconExternalLink { size: 14, color: "currentColor".to_string() }
+                                            span { " Abrir em Nova Aba" }
+                                        }
+                                        button { class: "btn-primary", onclick: move |_| pdf_preview_target.set(None), "Fechar" }
+                                    }
+                                }
                             }
-                        }
-                        div { class: "modal-footer-actions",
-                            a {
-                                class: "btn-secondary flex items-center gap-2",
-                                href: "{pdf_url}",
-                                target: "_blank",
-                                IconExternalLink { size: 16, color: "currentColor".to_string() }
-                                span { "Abrir em Nova Aba" }
-                            }
-                            button { class: "btn-primary", onclick: move |_| pdf_preview_target.set(None), "Fechar" }
                         }
                     }
                 }

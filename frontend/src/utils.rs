@@ -234,3 +234,51 @@ pub fn clear_session() {
     remove_storage_item("toothplus_session");
     remove_storage_item("toothplus_active_clinic");
 }
+
+/// Obtém a origin (esquema + domínio + porta) atual da janela no navegador.
+pub fn get_window_origin() -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(window) = web_sys::window() {
+            if let Ok(origin) = window.location().origin() {
+                if !origin.is_empty() && origin != "null" {
+                    return origin;
+                }
+            }
+        }
+    }
+    "http://localhost:8080".to_string()
+}
+
+/// Constrói o link completo para o portal público de assinatura digital usando o domínio atual da aplicação.
+pub fn build_signing_url(token: &str) -> String {
+    let origin = get_window_origin();
+    format!("{}/sign/{}", origin.trim_end_matches('/'), token)
+}
+
+/// Resolve URLs de arquivos/PDFs garantindo que links locais ou relativos apontem para o backend correto em produção.
+pub fn resolve_file_url(raw_url: &str) -> String {
+    let trimmed = raw_url.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if trimmed.starts_with("http://localhost:4000/uploads/")
+        || trimmed.starts_with("http://127.0.0.1:4000/uploads/")
+        || trimmed.starts_with("http://localhost:8000/uploads/")
+    {
+        if let Some(idx) = trimmed.find("/uploads/") {
+            let path = &trimmed[idx..];
+            let api_base = crate::api::API_BASE.trim_end_matches("/api");
+            return format!("{}{}", api_base, path);
+        }
+    }
+
+    if trimmed.starts_with("/uploads/") {
+        let api_base = crate::api::API_BASE.trim_end_matches("/api");
+        return format!("{}{}", api_base, trimmed);
+    }
+
+    trimmed.to_string()
+}
+

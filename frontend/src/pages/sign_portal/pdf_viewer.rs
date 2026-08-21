@@ -4,6 +4,7 @@
 //! e o visualizador embutido do PDF ou texto do contrato para conferência antes da assinatura.
 
 use crate::components::icons::{IconCheckCircle, IconExternalLink, IconLock};
+use crate::utils::resolve_file_url;
 use dioxus::prelude::*;
 use shared::documents::PublicSigningDocumentResponse;
 
@@ -12,6 +13,7 @@ use shared::documents::PublicSigningDocumentResponse;
 pub fn DocumentViewerCard(doc: PublicSigningDocumentResponse) -> Element {
     let patient_signed = doc.document.patient_signed_at.is_some();
     let doctor_signed = doc.document.doctor_signed_at.is_some();
+    let pdf_url = resolve_file_url(&doc.document.original_pdf_url);
 
     rsx! {
         div { class: "portal-doc-header",
@@ -20,10 +22,10 @@ pub fn DocumentViewerCard(doc: PublicSigningDocumentResponse) -> Element {
                 h2 { class: "portal-doc-title", "{doc.document.title}" }
                 p { class: "portal-doc-meta", "Emitido em: {doc.document.created_at.chars().take(10).collect::<String>()}" }
             }
-            if !doc.document.original_pdf_url.is_empty() {
+            if !pdf_url.is_empty() {
                 a {
                     class: "portal-btn-secondary",
-                    href: "{doc.document.original_pdf_url}",
+                    href: "{pdf_url}",
                     target: "_blank",
                     IconExternalLink { size: 14, color: "currentColor".to_string() }
                     span { "Abrir PDF" }
@@ -31,15 +33,16 @@ pub fn DocumentViewerCard(doc: PublicSigningDocumentResponse) -> Element {
             }
         }
 
-        if !doc.document.original_pdf_url.is_empty() {
+        if !pdf_url.is_empty() {
             div { class: "portal-preview-frame",
                 iframe {
                     class: "portal-pdf-embed",
-                    src: "{doc.document.original_pdf_url}#toolbar=0&navpanes=0",
+                    src: "{pdf_url}#toolbar=0&navpanes=0",
                     title: "{doc.document.title}"
                 }
             }
         }
+
 
         div { class: "portal-signers-status",
             h4 { class: "portal-signers-title", "Status dos Signatários" }

@@ -5,6 +5,7 @@
 
 use crate::api::delete_template;
 use crate::components::icons::{IconEdit, IconEye, IconFile, IconSignature, IconTrash};
+use crate::utils::resolve_file_url;
 use dioxus::prelude::*;
 use shared::documents::ContractTemplate;
 
@@ -105,7 +106,7 @@ pub fn TemplatesListSection(
                             let tpl_clone = tpl.clone();
                             let tpl_id_for_del = tpl.id.clone();
                             let tpl_title_for_del = tpl.title.clone();
-                            let pdf_url = tpl.pdf_url.clone();
+                            let pdf_url = resolve_file_url(&tpl.pdf_url);
                             let title = tpl.title.clone();
 
                             rsx! {

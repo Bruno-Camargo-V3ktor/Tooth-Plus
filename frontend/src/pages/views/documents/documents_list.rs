@@ -8,6 +8,7 @@ use crate::components::icons::{
     IconCheckCircle, IconClock, IconEye, IconFile, IconFolder, IconLock, IconQrCode, IconRefresh,
     IconSearch, IconShieldCheck, IconSignature, IconTrash,
 };
+use crate::utils::resolve_file_url;
 use dioxus::prelude::*;
 use shared::documents::{DocumentsKpis, PatientDocument};
 
@@ -232,11 +233,12 @@ pub fn DocumentsListSection(
                                     let doc_id_for_del = doc.id.clone();
                                     let doc_title_for_del = doc.title.clone();
                                     let is_signed = doc.status == "signed" || doc.status == "completed";
-                                    let pdf_url_to_preview = if let Some(ref s) = doc.signed_pdf_url {
+                                    let raw_url = if let Some(ref s) = doc.signed_pdf_url {
                                         s.clone()
                                     } else {
                                         doc.original_pdf_url.clone()
                                     };
+                                    let pdf_url_to_preview = resolve_file_url(&raw_url);
                                     let pdf_title = doc.title.clone();
 
                                     rsx! {
