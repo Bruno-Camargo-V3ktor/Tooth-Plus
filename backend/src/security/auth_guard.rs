@@ -78,31 +78,88 @@ pub async fn check_permission(
             }
         }
 
-        let alt_perm = if required_permission.starts_with("appointments:") {
-            Some(required_permission.replace("appointments:", "agenda:"))
-        } else if required_permission.starts_with("agenda:") {
-            Some(required_permission.replace("agenda:", "appointments:"))
-        } else if required_permission.starts_with("treatment_plans:") {
-            Some(required_permission.replace("treatment_plans:", "treatments:"))
-        } else if required_permission.starts_with("treatment_templates:") {
-            Some(required_permission.replace("treatment_templates:", "treatments:"))
-        } else if required_permission.starts_with("treatments:") {
-            Some(required_permission.replace("treatments:", "patients:"))
-        } else if required_permission.starts_with("anamnese:") {
-            Some(required_permission.replace("anamnese:", "patients:"))
-        } else if required_permission.starts_with("exams:") {
-            Some(required_permission.replace("exams:", "patients:"))
-        } else {
-            None
-        };
-
         if let Some(perms) = r.get("permissions").and_then(|p| p.as_array()) {
             for p in perms {
                 if let Some(s) = p.as_str() {
-                    if s == required_permission
-                        || s == "admin:all"
-                        || alt_perm.as_deref() == Some(s)
+                    if s == "admin:all" || s == required_permission {
+                        return Ok(true);
+                    }
+
+                    // Alias Agenda / Appointments
+                    if (required_permission.starts_with("appointments:") && s.replace("agenda:", "appointments:") == required_permission)
+                        || (required_permission.starts_with("agenda:") && s.replace("appointments:", "agenda:") == required_permission)
                     {
+                        return Ok(true);
+                    }
+
+                    // Tratamentos e Sub-módulos (Orçamentos, Catálogo, Prontuário)
+                    if required_permission == "treatments:read"
+                        && (s == "treatment_plans:read" || s == "treatment_templates:read" || s == "patients:read" || s == "patients:write")
+                    {
+                        return Ok(true);
+                    }
+                    if required_permission == "treatments:write"
+                        && (s == "treatment_plans:write" || s == "treatment_templates:write" || s == "patients:write")
+                    {
+                        return Ok(true);
+                    }
+                    if required_permission == "treatments:delete"
+                        && (s == "treatment_plans:delete" || s == "treatment_templates:delete" || s == "treatments:write" || s == "patients:delete")
+                    {
+                        return Ok(true);
+                    }
+                    if (required_permission.starts_with("treatment_plans:") || required_permission.starts_with("treatment_templates:"))
+                        && (s == "treatments:write" || s == "patients:write")
+                    {
+                        return Ok(true);
+                    }
+
+                    // Anamnese & Exames herdando de pacientes
+                    if required_permission.starts_with("anamnese:")
+                        && (s == "patients:write" || (s == "patients:read" && required_permission.ends_with(":read")))
+                    {
+                        return Ok(true);
+                    }
+                    if required_permission.starts_with("exams:")
+                        && (s == "patients:write" || (s == "patients:read" && required_permission.ends_with(":read")))
+                    {
+                        return Ok(true);
+                    }
+
+                    // Documentos
+                    if required_permission.starts_with("documents:")
+                        && (s == "patients:write" || (s == "patients:read" && required_permission.ends_with(":read")))
+                    {
+                        return Ok(true);
+                    }
+
+                    // Financeiro
+                    if required_permission == "finance:read"
+                        && (s == "finance:read_all" || s == "finance:read_income" || s == "finance:read_expense" || s == "finance:read_pending")
+                    {
+                        return Ok(true);
+                    }
+                    if required_permission == "finance:read_all" && s == "finance:read" {
+                        return Ok(true);
+                    }
+                    if (required_permission == "finance:read_income" || required_permission == "finance:read_expense" || required_permission == "finance:read_pending")
+                        && (s == "finance:read_all" || s == "finance:read")
+                    {
+                        return Ok(true);
+                    }
+                    if required_permission == "finance:write"
+                        && (s == "finance:write_income" || s == "finance:write_expense")
+                    {
+                        return Ok(true);
+                    }
+                    if (required_permission == "finance:write_income" || required_permission == "finance:write_expense" || required_permission == "finance:update_status")
+                        && s == "finance:write"
+                    {
+                        return Ok(true);
+                    }
+
+                    // Estoque
+                    if (required_permission == "stock:movement" || required_permission == "stock:delete") && s == "stock:write" {
                         return Ok(true);
                     }
                 }

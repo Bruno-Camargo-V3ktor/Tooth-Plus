@@ -139,34 +139,83 @@ pub fn has_permission(session: &SessionState, active: &ActiveClinicState, perm: 
     if a.role == "admin" || a.permissions.iter().any(|p| p == "admin:all") {
         return true;
     }
-    let alt_perm = if perm.starts_with("appointments:") {
-        Some(perm.replace("appointments:", "agenda:"))
-    } else if perm.starts_with("agenda:") {
-        Some(perm.replace("agenda:", "appointments:"))
-    } else if perm.starts_with("treatment_plans:") {
-        Some(perm.replace("treatment_plans:", "treatments:"))
-    } else if perm.starts_with("treatment_templates:") {
-        Some(perm.replace("treatment_templates:", "treatments:"))
-    } else if perm == "finance:read" {
-        Some("finance:read_all".to_string())
-    } else if perm == "finance:write" {
-        Some("finance:write_income".to_string())
-    } else {
-        None
-    };
 
     a.permissions.iter().any(|p| {
-        p == perm
-            || alt_perm.as_deref() == Some(p.as_str())
-            || (perm == "finance:read_all" && p == "finance:read")
-            || (perm == "finance:read_income" && (p == "finance:read_all" || p == "finance:read"))
-            || (perm == "finance:read_expense" && (p == "finance:read_all" || p == "finance:read"))
-            || (perm == "finance:read_pending" && (p == "finance:read_all" || p == "finance:read"))
-            || (perm == "finance:write_income" && p == "finance:write")
-            || (perm == "finance:write_expense" && p == "finance:write")
-            || (perm.starts_with("treatments:") && p == "patients:write")
-            || (perm.starts_with("treatment_plans:") && (p == "treatments:write" || p == "patients:write"))
-            || (perm.starts_with("treatment_templates:") && (p == "treatments:write" || p == "patients:write"))
+        if p == perm || p == "admin:all" {
+            return true;
+        }
+
+        // Agenda / Appointments
+        if (perm.starts_with("appointments:") && p.replace("agenda:", "appointments:") == perm)
+            || (perm.starts_with("agenda:") && p.replace("appointments:", "agenda:") == perm)
+        {
+            return true;
+        }
+
+        // Tratamentos e Sub-módulos (Orçamentos, Catálogo, Prontuário)
+        if perm == "treatments:read"
+            && (p == "treatment_plans:read" || p == "treatment_templates:read" || p == "patients:read" || p == "patients:write")
+        {
+            return true;
+        }
+        if perm == "treatments:write"
+            && (p == "treatment_plans:write" || p == "treatment_templates:write" || p == "patients:write")
+        {
+            return true;
+        }
+        if perm == "treatments:delete"
+            && (p == "treatment_plans:delete" || p == "treatment_templates:delete" || p == "treatments:write" || p == "patients:delete")
+        {
+            return true;
+        }
+        if (perm.starts_with("treatment_plans:") || perm.starts_with("treatment_templates:"))
+            && (p == "treatments:write" || p == "patients:write")
+        {
+            return true;
+        }
+
+        // Anamnese & Exames
+        if perm.starts_with("anamnese:") && (p == "patients:write" || (p == "patients:read" && perm.ends_with(":read"))) {
+            return true;
+        }
+        if perm.starts_with("exams:") && (p == "patients:write" || (p == "patients:read" && perm.ends_with(":read"))) {
+            return true;
+        }
+
+        // Documentos
+        if perm.starts_with("documents:") && (p == "patients:write" || (p == "patients:read" && perm.ends_with(":read"))) {
+            return true;
+        }
+
+        // Financeiro
+        if perm == "finance:read"
+            && (p == "finance:read_all" || p == "finance:read_income" || p == "finance:read_expense" || p == "finance:read_pending")
+        {
+            return true;
+        }
+        if perm == "finance:read_all" && p == "finance:read" {
+            return true;
+        }
+        if (perm == "finance:read_income" || perm == "finance:read_expense" || perm == "finance:read_pending")
+            && (p == "finance:read_all" || p == "finance:read")
+        {
+            return true;
+        }
+        if perm == "finance:write" && (p == "finance:write_income" || p == "finance:write_expense") {
+            return true;
+        }
+        if (perm == "finance:write_income" || perm == "finance:write_expense" || perm == "finance:update_status")
+            && p == "finance:write"
+        {
+            return true;
+        }
+
+        // Estoque
+        if (perm == "stock:movement" || perm == "stock:delete") && p == "stock:write" {
+            return true;
+        }
+
+        false
     })
 }
 
