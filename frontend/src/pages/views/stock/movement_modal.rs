@@ -24,6 +24,7 @@ pub fn StockMovementModal(
     is_open: Signal<bool>,
     reload_counter: Signal<i32>,
     toast_msg: Signal<Option<String>>,
+    error_toast: Signal<Option<String>>,
 ) -> Element {
     if !is_open() {
         return rsx! {};
@@ -49,15 +50,15 @@ pub fn StockMovementModal(
     let mut handle_submit = move |_| {
         let item_id = form_item_id();
         if item_id.is_empty() {
-            let mut toast = toast_msg;
-            toast.set(Some("Selecione o item de estoque.".into()));
+            let mut err = error_toast;
+            err.set(Some("Selecione o item de estoque.".into()));
             return;
         }
 
         let qty: i32 = form_qty();
         if qty <= 0 {
-            let mut toast = toast_msg;
-            toast.set(Some("A quantidade deve ser maior que zero.".into()));
+            let mut err = error_toast;
+            err.set(Some("A quantidade deve ser maior que zero.".into()));
             return;
         }
 
@@ -68,16 +69,16 @@ pub fn StockMovementModal(
             -qty.abs()
         };
 
-        let cost_clean = form_unit_cost()
+        let unit_cost_clean = form_unit_cost()
             .replace("R$", "")
             .replace(".", "")
             .replace(",", ".")
             .trim()
             .to_string();
-        let cost_cents = match cost_clean.parse::<f64>() {
-            Ok(v) if v > 0.0 => Some((v * 100.0).round() as i64),
-            _ => None,
-        };
+        let unit_cost_cents = unit_cost_clean
+            .parse::<f64>()
+            .map(|v| (v * 100.0).round() as i64)
+            .ok();
 
         let invoice_opt = if form_invoice().trim().is_empty() {
             None
@@ -94,9 +95,9 @@ pub fn StockMovementModal(
         let req = CreateStockMovementRequest {
             clinic_id: cid.clone(),
             item_id: item_id.clone(),
-            quantity_change: qty_change,
             movement_type: mov_type,
-            unit_cost_cents: cost_cents,
+            quantity_change: qty_change,
+            unit_cost_cents,
             invoice_number: invoice_opt,
             notes: notes_opt,
         };
@@ -106,6 +107,7 @@ pub fn StockMovementModal(
         let mut rel_sig = reload_counter;
         let mut sub_sig = is_submitting;
         let mut toast = toast_msg;
+        let mut err_sig = error_toast;
 
         sub_sig.set(true);
         spawn(async move {
@@ -113,10 +115,10 @@ pub fn StockMovementModal(
                 Ok(_) => {
                     open_sig.set(false);
                     rel_sig.set(rel_sig() + 1);
-                    toast.set(Some("Movimentação de estoque registrada com sucesso!".into()));
+                    toast.set(Some("Movimentação registrada!".into()));
                 }
                 Err(e) => {
-                    toast.set(Some(format!("Erro ao registrar movimentação: {}", e)));
+                    err_sig.set(Some(format!("Erro ao registrar movimentação: {}", e)));
                 }
             }
             sub_sig.set(false);

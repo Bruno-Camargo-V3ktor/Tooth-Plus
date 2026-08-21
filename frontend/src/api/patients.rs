@@ -181,6 +181,43 @@ pub async fn save_patient_anamnesis(
     }
 }
 
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct AnamnesisSignResponse {
+    pub signing_token: String,
+    pub sign_url: String,
+    pub document_pdf_url: String,
+}
+
+pub async fn request_anamnesis_signature(
+    token: &str,
+    patient_id: &str,
+    clinic_id: &str,
+) -> Result<AnamnesisSignResponse, String> {
+    let clean_id = patient_id.strip_prefix("patient:").unwrap_or(patient_id);
+    let url = format!("{}/patients/{}/anamnesis/sign-request", API_BASE, clean_id);
+
+    let res = get_client()
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&serde_json::json!({ "clinic_id": clinic_id }))
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao solicitar assinatura da anamnese.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<AnamnesisSignResponse>()
+            .await
+            .map_err(|_| "Erro ao processar resposta da assinatura.".into())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao solicitar assinatura da anamnese.".into()
+        } else {
+            err
+        })
+    }
+}
+
 pub async fn create_patient_exam(
     token: &str,
     patient_id: &str,

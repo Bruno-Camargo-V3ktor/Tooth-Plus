@@ -16,11 +16,15 @@ use shared::documents::{
 #[component]
 pub fn SignerAuthCard(
     token: String,
+    #[props(default)] doc_info: Option<shared::documents::PublicSigningDocumentResponse>,
     auth_session: Signal<Option<SignAuthResponse>>,
     error_msg: Signal<Option<String>>,
     success_msg: Signal<Option<String>>,
 ) -> Element {
-    let mut active_role = use_signal(|| "patient".to_string()); // "patient" | "doctor"
+    let req_pat = doc_info.as_ref().map(|d| d.requires_patient_signature).unwrap_or(true);
+    let req_doc = doc_info.as_ref().map(|d| d.requires_doctor_signature).unwrap_or(false);
+    let default_role = if !req_pat && req_doc { "doctor" } else { "patient" };
+    let mut active_role = use_signal(|| default_role.to_string());
 
     // Patient state
     let mut patient_cpf = use_signal(String::new);
@@ -178,25 +182,37 @@ pub fn SignerAuthCard(
 
     rsx! {
         div { class: "portal-auth-card",
-            div { class: "portal-tabs",
-                button {
-                    class: if active_role() == "patient" { "portal-tab active" } else { "portal-tab" },
-                    onclick: move |_| {
-                        active_role.set("patient".to_string());
-                        patient_check_info.set(None);
-                        error_msg.set(None);
-                    },
-                    IconUsers { size: 16, color: "currentColor".to_string() }
-                    span { "Sou o Paciente" }
+            if req_pat && req_doc {
+                div { class: "portal-tabs",
+                    button {
+                        class: if active_role() == "patient" { "portal-tab active" } else { "portal-tab" },
+                        onclick: move |_| {
+                            active_role.set("patient".to_string());
+                            patient_check_info.set(None);
+                            error_msg.set(None);
+                        },
+                        IconUsers { size: 16, color: "currentColor".to_string() }
+                        span { "Sou o Paciente" }
+                    }
+                    button {
+                        class: if active_role() == "doctor" { "portal-tab active" } else { "portal-tab" },
+                        onclick: move |_| {
+                            active_role.set("doctor".to_string());
+                            error_msg.set(None);
+                        },
+                        IconTooth { size: 16, color: "currentColor".to_string() }
+                        span { "Sou o Dentista" }
+                    }
                 }
-                button {
-                    class: if active_role() == "doctor" { "portal-tab active" } else { "portal-tab" },
-                    onclick: move |_| {
-                        active_role.set("doctor".to_string());
-                        error_msg.set(None);
-                    },
-                    IconTooth { size: 16, color: "currentColor".to_string() }
-                    span { "Sou o Dentista" }
+            } else if req_pat {
+                div { style: "padding: 14px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 8px;",
+                    IconUsers { size: 16, color: "#0052cc".to_string() }
+                    span { style: "font-size: 13.5px; font-weight: 700; color: #0f172a;", "Identificação do Paciente / Responsável" }
+                }
+            } else if req_doc {
+                div { style: "padding: 14px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 8px;",
+                    IconTooth { size: 16, color: "#0052cc".to_string() }
+                    span { style: "font-size: 13.5px; font-weight: 700; color: #0f172a;", "Identificação do Cirurgião-Dentista" }
                 }
             }
 

@@ -12,6 +12,8 @@ pub mod overview_tab;
 pub mod patient_form;
 pub mod patient_list;
 pub mod photos_tab;
+pub mod treatment_plan_modal;
+pub mod treatments_tab;
 
 pub use anamnese_tab::*;
 pub use anamnese_templates_modal::*;
@@ -22,6 +24,8 @@ pub use overview_tab::*;
 pub use patient_form::*;
 pub use patient_list::*;
 pub use photos_tab::*;
+pub use treatment_plan_modal::*;
+pub use treatments_tab::*;
 
 use crate::api::{fetch_patient_details, fetch_patients, fetch_templates};
 use crate::components::icons::{
@@ -314,7 +318,7 @@ pub fn PatientsView() -> Element {
                                             class: if active_patient_tab() == "odontogram" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
                                             onclick: move |_| active_patient_tab.set("odontogram".to_string()),
                                             IconTooth { size: 15, color: "currentColor".to_string() }
-                                            span { " Histórico de Tratamentos ({det.treatments.len()})" }
+                                            span { " Tratamentos & Orçamentos ({det.treatment_plans.len()})" }
                                         }
                                     }
                                     if can_read_documents {
@@ -356,11 +360,13 @@ pub fn PatientsView() -> Element {
                                     "odontogram" => {
                                         if can_read_treatments {
                                             rsx! {
-                                                PatientOdontogramTab {
+                                                PatientTreatmentsTab {
                                                     patient_id: det.patient.id.clone(),
+                                                    patient_name: Some(det.patient.full_name.clone()),
                                                     clinic_id: clinic_id.clone(),
                                                     token: token.clone(),
                                                     treatments: det.treatments.clone(),
+                                                    treatment_plans: det.treatment_plans.clone(),
                                                     can_write: can_write_treatments,
                                                     can_delete: can_delete_treatments,
                                                     reload_patient_details: reload_fn.clone(),

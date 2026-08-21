@@ -23,6 +23,7 @@ pub fn AppointmentModal(
     can_finance: bool,
     on_success: EventHandler<()>,
     toast_msg: Signal<Option<String>>,
+    error_toast: Signal<Option<String>>,
 ) -> Element {
 
     if !is_open() {
@@ -159,12 +160,14 @@ pub fn AppointmentModal(
 
     let mut handle_submit = move |_| {
         if title().trim().is_empty() {
-            toast_msg.set(Some("Por favor, preencha o título do agendamento.".to_string()));
+            let mut err = error_toast;
+            err.set(Some("Por favor, preencha o título do agendamento.".to_string()));
             return;
         }
 
         if assigned_users().is_empty() {
-            toast_msg.set(Some("Selecione pelo menos um profissional responsável.".to_string()));
+            let mut err = error_toast;
+            err.set(Some("Selecione pelo menos um profissional responsável.".to_string()));
             return;
         }
 
@@ -182,7 +185,8 @@ pub fn AppointmentModal(
                 }
             }
             Err(_) => {
-                toast_msg.set(Some("Data ou horário inválido.".to_string()));
+                let mut err = error_toast;
+                err.set(Some("Data ou horário inválido.".to_string()));
                 return;
             }
         };
@@ -209,6 +213,7 @@ pub fn AppointmentModal(
         let mut open_sig = is_open;
         let mut sub_sig = is_submitting;
         let mut toast = toast_msg;
+        let mut err_sig = error_toast;
         let on_succ = on_success.clone();
 
         spawn(async move {
@@ -239,11 +244,11 @@ pub fn AppointmentModal(
                 match update_appointment(&t, &a.id, &c, req).await {
                     Ok(_) => {
                         open_sig.set(false);
-                        toast.set(Some("Agendamento atualizado com sucesso!".to_string()));
+                        toast.set(Some("Agendamento atualizado!".to_string()));
                         on_succ.call(());
                     }
                     Err(e) => {
-                        toast.set(Some(format!("Erro ao atualizar agendamento: {}", e)));
+                        err_sig.set(Some(format!("Erro ao atualizar agendamento: {}", e)));
                     }
                 }
             } else {
@@ -274,11 +279,11 @@ pub fn AppointmentModal(
                 match create_appointment(&t, req).await {
                     Ok(_) => {
                         open_sig.set(false);
-                        toast.set(Some("Agendamento criado com sucesso!".to_string()));
+                        toast.set(Some("Agendamento criado!".to_string()));
                         on_succ.call(());
                     }
                     Err(e) => {
-                        toast.set(Some(format!("Erro ao criar agendamento: {}", e)));
+                        err_sig.set(Some(format!("Erro ao criar agendamento: {}", e)));
                     }
                 }
             }

@@ -5,6 +5,7 @@ pub mod documents;
 mod finance;
 mod patients;
 mod stock;
+pub mod treatments;
 mod user;
 
 pub use appointments::*;
@@ -14,6 +15,7 @@ pub use documents::*;
 pub use finance::*;
 pub use patients::*;
 pub use stock::*;
+pub use treatments::*;
 pub use user::*;
 
 pub const API_BASE: &str = match option_env!("API_BASE_URL") {

@@ -34,6 +34,9 @@ pub enum Route {
     #[route("/documents")]
     DocumentsView {},
 
+    #[route("/treatments")]
+    TreatmentsView {},
+
     #[end_layout]
     #[route("/:.._route")]
     NotFound { _route: Vec<String> },
@@ -44,6 +47,7 @@ impl Route {
         match self {
             Route::AgendaView {} => "Agenda de Atendimentos",
             Route::PatientsView {} => "Gestão de Pacientes",
+            Route::TreatmentsView {} => "Catálogo de Tratamentos",
             Route::FinanceView {} => "Fluxo Financeiro",
             Route::StockView {} => "Estoque e Patrimônio",
             Route::UsersView {} => "Equipe e Usuários",

@@ -16,9 +16,8 @@ use shared::anamnesis::{
 use shared::patients::{PatientAnamnesis, SaveAnamnesisRequest};
 use surrealdb::types::ToSql;
 
-/// Retorna perguntas padrão para adultos.
 /// Retorna perguntas padrão para adultos (Ficha Oficial de Anamnese).
-fn default_adult_questions() -> Vec<AnamnesisQuestion> {
+pub(crate) fn default_adult_questions() -> Vec<AnamnesisQuestion> {
     vec![
         AnamnesisQuestion {
             id: "prof_occupation".into(),
@@ -144,7 +143,7 @@ fn default_adult_questions() -> Vec<AnamnesisQuestion> {
 }
 
 /// Retorna perguntas padrão para menores / odontopediatria.
-fn default_minor_questions() -> Vec<AnamnesisQuestion> {
+pub(crate) fn default_minor_questions() -> Vec<AnamnesisQuestion> {
     vec![
         AnamnesisQuestion {
             id: "ped_chief_complaint".into(),
@@ -273,22 +272,49 @@ pub async fn save_anamnesis(
 
     let mut res = db
         .query(
-            "UPSERT patient_anamnesis SET
-            patient_id = $pid,
-            clinic_id = $cid,
-            template_type = $ttype,
-            custom_responses = $responses,
-            allergies = $allergies,
-            continuous_medications = $meds,
-            systemic_diseases = $diseases,
-            is_pregnant = $preg,
-            has_bleeding_disorder = $bleed,
-            smoker = $smoker,
-            bruxism = $brux,
-            chief_complaint = $complaint,
-            clinical_notes = $notes,
-            updated_at = time::now()
-            WHERE patient_id = $pid;",
+            "LET $existing = (SELECT id FROM patient_anamnesis WHERE patient_id = $pid LIMIT 1)[0].id;
+            IF $existing != NONE {
+                UPDATE $existing SET
+                    clinic_id = $cid,
+                    template_type = $ttype,
+                    custom_responses = $responses,
+                    allergies = $allergies,
+                    continuous_medications = $meds,
+                    systemic_diseases = $diseases,
+                    is_pregnant = $preg,
+                    has_bleeding_disorder = $bleed,
+                    smoker = $smoker,
+                    bruxism = $brux,
+                    chief_complaint = $complaint,
+                    clinical_notes = $notes,
+                    signature_status = NONE,
+                    signing_token = NONE,
+                    signed_at = NONE,
+                    signed_pdf_url = NONE,
+                    updated_at = time::now();
+            } ELSE {
+                CREATE patient_anamnesis SET
+                    patient_id = $pid,
+                    clinic_id = $cid,
+                    template_type = $ttype,
+                    custom_responses = $responses,
+                    allergies = $allergies,
+                    continuous_medications = $meds,
+                    systemic_diseases = $diseases,
+                    is_pregnant = $preg,
+                    has_bleeding_disorder = $bleed,
+                    smoker = $smoker,
+                    bruxism = $brux,
+                    chief_complaint = $complaint,
+                    clinical_notes = $notes,
+                    signature_status = NONE,
+                    signing_token = NONE,
+                    signed_at = NONE,
+                    signed_pdf_url = NONE,
+                    updated_at = time::now();
+            };
+            UPDATE patient_document SET status = 'superseded_by_update' WHERE patient_id = $pid AND document_type = 'anamnesis' AND status = 'signed';
+            SELECT * FROM patient_anamnesis WHERE patient_id = $pid LIMIT 1;",
         )
         .bind(("pid", pat_rec.clone()))
         .bind(("cid", clinic_rec.clone()))
@@ -306,11 +332,10 @@ pub async fn save_anamnesis(
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao salvar anamnese: {}", e)))?;
 
-    let saved: Option<DbAnamnesisRow> =
-        res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
+    let saved: Option<DbAnamnesisRow> = res.take(3).ok().and_then(|mut v: Vec<DbAnamnesisRow>| v.pop());
     let Some(a) = saved else {
         return Err(ApiError::Database(
-            "Erro ao recuperar registro de anamnese.".into(),
+            "Erro ao recuperar registro de anamnese após salvar.".into(),
         ));
     };
 
@@ -340,6 +365,133 @@ pub async fn save_anamnesis(
             .updated_at
             .map(|d| d.to_rfc3339())
             .unwrap_or_else(|| Utc::now().to_rfc3339()),
+        signature_status: a.signature_status,
+        signing_token: a.signing_token,
+        signed_at: a.signed_at.map(|d| d.to_rfc3339()),
+        signed_pdf_url: a.signed_pdf_url,
+    }))
+}
+
+/// Solicita a emissão do termo oficial de anamnese e gera o link/token de assinatura digital.
+#[post("/patients/{id}/anamnesis/sign-request")]
+pub async fn request_anamnesis_signature(
+    auth: AuthenticatedUser,
+    path: web::Path<String>,
+    req: web::Json<crate::routes::documents::issued_docs::ClinicQuery>,
+    db: web::Data<Db>,
+) -> Result<HttpResponse, ApiError> {
+    let pat_id_str = path.into_inner();
+    let pat_rec = parse_record_id("patient", &pat_id_str);
+    let clinic_str = clinic_record_id(&req.clinic_id);
+
+    if !check_permission(&db, &auth.id, &clinic_str, "anamnese:write")
+        .await
+        .unwrap_or(false)
+    {
+        return Err(ApiError::Forbidden(
+            "Sem permissão para emitir termo de assinatura para a anamnese.".into(),
+        ));
+    }
+
+    let clinic_rec = parse_record_id("clinic", &req.clinic_id);
+
+    // Buscar dados do paciente e da clínica
+    let mut q_res = db
+        .query(
+            "SELECT * FROM patient WHERE id = $pid LIMIT 1;
+             SELECT * FROM clinic WHERE id = $cid LIMIT 1;
+             SELECT * FROM patient_anamnesis WHERE patient_id = $pid LIMIT 1;",
+        )
+        .bind(("pid", pat_rec.clone()))
+        .bind(("cid", clinic_rec.clone()))
+        .await
+        .map_err(|e| ApiError::Database(format!("Erro ao buscar dados do paciente/clínica: {}", e)))?;
+
+    let pat_row: Option<crate::routes::documents::DbPatientAuthRow> =
+        q_res.take(0).ok().and_then(|mut v: Vec<crate::routes::documents::DbPatientAuthRow>| v.pop());
+    let _clinic_row: Option<crate::routes::documents::DbClinicInfo> =
+        q_res.take(1).ok().and_then(|mut v: Vec<crate::routes::documents::DbClinicInfo>| v.pop());
+
+    let pat_name = pat_row
+        .as_ref()
+        .map(|p| p.full_name.clone())
+        .unwrap_or_else(|| "Paciente".into());
+
+    let doc_token = uuid::Uuid::new_v4().to_string();
+    let doc_title = format!("Ficha de Anamnese e Histórico de Saúde - {}", pat_name);
+
+    let now_utc = chrono::Utc::now().to_rfc3339();
+    let audit_json = serde_json::json!([
+        {
+            "event": "created_for_patient_signing",
+            "action": "anamnesis_term_issued",
+            "timestamp": now_utc,
+            "ip_address": "127.0.0.1",
+            "signer_type": "patient"
+        }
+    ]);
+
+    // Cria o documento de assinatura do paciente e vincula à anamnese (sem necessidade de gerar PDF ou assinatura de dentista)
+    let _ = db
+        .query(
+            "CREATE patient_document CONTENT {
+                clinic_id: $cid,
+                patient_id: $pid,
+                title: $title,
+                document_type: 'anamnesis',
+                original_pdf_url: '',
+                signing_token: $sig_token,
+                status: 'pending_signatures',
+                requires_patient_signature: true,
+                requires_doctor_signature: false,
+                allow_any_dentist_signature: false,
+                audit_trail: $audit,
+                final_checksum_sha256: NONE,
+                created_at: time::now(),
+                updated_at: time::now()
+            };
+            LET $existing = (SELECT id FROM patient_anamnesis WHERE patient_id = $pid LIMIT 1)[0].id;
+            IF $existing != NONE {
+                UPDATE $existing SET
+                    signing_token = $sig_token,
+                    signature_status = 'pending',
+                    signed_at = NONE,
+                    signed_pdf_url = NONE,
+                    updated_at = time::now();
+            } ELSE {
+                CREATE patient_anamnesis SET
+                    patient_id = $pid,
+                    clinic_id = $cid,
+                    signing_token = $sig_token,
+                    signature_status = 'pending',
+                    signed_at = NONE,
+                    signed_pdf_url = NONE,
+                    updated_at = time::now();
+            };",
+        )
+        .bind(("cid", clinic_rec.clone()))
+        .bind(("pid", pat_rec.clone()))
+        .bind(("title", doc_title))
+        .bind(("sig_token", doc_token.clone()))
+        .bind(("audit", audit_json))
+        .await
+        .map_err(|e| ApiError::Database(format!("Erro ao registrar termo de anamnese no banco: {}", e)))?;
+
+    #[derive(serde::Serialize)]
+    struct SignRequestResponse {
+        signing_token: String,
+        sign_url: String,
+        document_pdf_url: String,
+    }
+
+    let sign_base_url = std::env::var("APP_BASE_URL")
+        .unwrap_or_else(|_| "http://localhost:3000".into());
+    let sign_url = format!("{}/sign/{}", sign_base_url, doc_token);
+
+    Ok(HttpResponse::Ok().json(SignRequestResponse {
+        signing_token: doc_token,
+        sign_url,
+        document_pdf_url: String::new(),
     }))
 }
 
@@ -514,11 +666,11 @@ pub async fn sync_patient_anamnesis(
 
     // Buscar ficha existente do paciente
     let mut a_res = db
-        .query("SELECT * FROM patient_anamnesis WHERE patient_id = type::record($pid) LIMIT 1;")
+        .query("SELECT * FROM patient_anamnesis WHERE patient_id = $pid LIMIT 1;")
         .bind(("pid", pat_rec.clone()))
         .await
         .map_err(|e| ApiError::Database(e.to_string()))?;
-    let existing_anam: Option<DbAnamnesisRow> = a_res.take(0).unwrap_or(None);
+    let existing_anam: Option<DbAnamnesisRow> = a_res.take(0).ok().and_then(|mut v: Vec<DbAnamnesisRow>| v.pop());
 
     let template_type = data
         .template_type
@@ -533,7 +685,7 @@ pub async fn sync_patient_anamnesis(
         .await
         .map_err(|e| ApiError::Database(e.to_string()))?;
 
-    let t_row: Option<DbAnamnesisTemplateRow> = t_res.take(0).unwrap_or(None);
+    let t_row: Option<DbAnamnesisTemplateRow> = t_res.take(0).ok().and_then(|mut v: Vec<DbAnamnesisTemplateRow>| v.pop());
     let template_questions: Vec<AnamnesisQuestion> = t_row
         .and_then(|t| t.questions)
         .and_then(|v| serde_json::from_value(v).ok())
@@ -579,13 +731,22 @@ pub async fn sync_patient_anamnesis(
 
     let mut res = db
         .query(
-            "UPSERT patient_anamnesis SET
-            patient_id = $pid,
-            clinic_id = $cid,
-            template_type = $ttype,
-            custom_responses = $responses,
-            updated_at = time::now()
-            WHERE patient_id = $pid;",
+            "LET $existing = (SELECT id FROM patient_anamnesis WHERE patient_id = $pid LIMIT 1)[0].id;
+            IF $existing != NONE {
+                UPDATE $existing SET
+                    clinic_id = $cid,
+                    template_type = $ttype,
+                    custom_responses = $responses,
+                    updated_at = time::now();
+            } ELSE {
+                CREATE patient_anamnesis SET
+                    patient_id = $pid,
+                    clinic_id = $cid,
+                    template_type = $ttype,
+                    custom_responses = $responses,
+                    updated_at = time::now();
+            };
+            SELECT * FROM patient_anamnesis WHERE patient_id = $pid LIMIT 1;",
         )
         .bind(("pid", pat_rec.clone()))
         .bind(("cid", clinic_rec.clone()))
@@ -594,8 +755,7 @@ pub async fn sync_patient_anamnesis(
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao atualizar anamnese: {}", e)))?;
 
-    let saved: Option<DbAnamnesisRow> =
-        res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
+    let saved: Option<DbAnamnesisRow> = res.take(2).ok().and_then(|mut v: Vec<DbAnamnesisRow>| v.pop());
     let Some(a) = saved else {
         return Err(ApiError::Database("Erro ao sincronizar anamnese.".into()));
     };
@@ -624,7 +784,9 @@ pub async fn sync_patient_anamnesis(
             .updated_at
             .map(|d| d.to_rfc3339())
             .unwrap_or_else(|| Utc::now().to_rfc3339()),
+        signature_status: a.signature_status,
+        signing_token: a.signing_token,
+        signed_at: a.signed_at.map(|d| d.to_rfc3339()),
+        signed_pdf_url: a.signed_pdf_url,
     }))
-
 }
-

@@ -7,12 +7,14 @@ pub mod anamnesis;
 pub mod crud;
 pub mod photos;
 pub mod security;
+pub mod treatment_plans;
 pub mod treatments;
 
 pub use anamnesis::*;
 pub use crud::*;
 pub use photos::*;
 pub use security::*;
+pub use treatment_plans::*;
 pub use treatments::*;
 
 use chrono::{DateTime, Utc};
@@ -104,6 +106,10 @@ pub(crate) struct DbAnamnesisRow {
     pub chief_complaint: Option<String>,
     pub clinical_notes: Option<String>,
     pub updated_at: Option<DateTime<Utc>>,
+    pub signature_status: Option<String>,
+    pub signing_token: Option<String>,
+    pub signed_at: Option<DateTime<Utc>>,
+    pub signed_pdf_url: Option<String>,
 }
 
 /// Linha da tabela `patient_exam` no banco de dados.
@@ -133,6 +139,8 @@ pub(crate) struct DbTreatmentRow {
     pub appointment_id: Option<RecordId>,
     pub document_id: Option<RecordId>,
     pub exam_id: Option<RecordId>,
+    pub treatment_plan_id: Option<RecordId>,
+    pub transaction_id: Option<RecordId>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,
@@ -161,6 +169,9 @@ pub(crate) struct DbDocumentRow {
     pub signed_pdf_url: Option<String>,
     pub status: Option<String>,
     pub signing_token: String,
+    pub requires_patient_signature: Option<bool>,
+    pub requires_doctor_signature: Option<bool>,
+    pub allow_any_dentist_signature: Option<bool>,
     pub patient_signed_at: Option<DateTime<Utc>>,
     pub patient_signature_data: Option<String>,
     pub doctor_signed_at: Option<DateTime<Utc>>,
@@ -264,6 +275,37 @@ pub(crate) fn map_patient(row: DbPatientRow) -> Patient {
             .updated_at
             .map(|d| d.to_rfc3339())
             .unwrap_or_else(|| Utc::now().to_rfc3339()),
+    }
+}
+
+/// Converte a linha de banco de dados `DbAnamnesisRow` no modelo compartilhado `PatientAnamnesis`.
+pub(crate) fn map_anamnesis(a: DbAnamnesisRow) -> shared::patients::PatientAnamnesis {
+    shared::patients::PatientAnamnesis {
+        id: a.id.map(|t| t.to_sql()),
+        patient_id: a.patient_id.to_sql(),
+        clinic_id: a.clinic_id.to_sql(),
+        template_type: a.template_type,
+        custom_responses: a
+            .custom_responses
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default(),
+        allergies: a.allergies.unwrap_or_default(),
+        continuous_medications: a.continuous_medications,
+        systemic_diseases: a.systemic_diseases.unwrap_or_default(),
+        is_pregnant: a.is_pregnant.unwrap_or(false),
+        has_bleeding_disorder: a.has_bleeding_disorder.unwrap_or(false),
+        smoker: a.smoker.unwrap_or(false),
+        bruxism: a.bruxism.unwrap_or(false),
+        chief_complaint: a.chief_complaint,
+        clinical_notes: a.clinical_notes,
+        updated_at: a
+            .updated_at
+            .map(|d| d.to_rfc3339())
+            .unwrap_or_else(|| Utc::now().to_rfc3339()),
+        signature_status: a.signature_status,
+        signing_token: a.signing_token,
+        signed_at: a.signed_at.map(|d| d.to_rfc3339()),
+        signed_pdf_url: a.signed_pdf_url,
     }
 }
 

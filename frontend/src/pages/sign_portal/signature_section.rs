@@ -1,14 +1,14 @@
 //! # Seção de Assinatura Eletrônica e Confirmação de Sucesso (Frontend)
 //!
-//! Controla o quadro de assinatura, confirmação de termos,
-//! envio da assinatura digital e tela de conclusão com checksum criptográfico.
+//! Controla o quadro interativo de assinatura manuscrita (Canvas HTML5),
+//! confirmação de termos legais, captura de metadados do dispositivo e submissão.
 
 use crate::api::documents::submit_digital_signature;
-use crate::components::icons::{IconCheckCircle, IconSignature};
+use crate::components::icons::{IconCheckCircle, IconRefresh, IconSignature};
 use dioxus::prelude::*;
 use shared::documents::{SignAuthResponse, SubmitSignatureRequest};
 
-/// Componente do quadro de assinatura manuscrita e submissão da assinatura eletrônica.
+/// Componente do quadro de assinatura manuscrita interativo e submissão da assinatura eletrônica.
 #[component]
 pub fn SignaturePadSection(
     token: String,
@@ -21,10 +21,110 @@ pub fn SignaturePadSection(
     let mut signature_name = use_signal(|| auth_session.signer_name.clone());
     let mut agreed_terms = use_signal(|| true);
     let mut is_submitting = use_signal(|| false);
+    let mut signature_base64 = use_signal(String::new);
+    let mut client_device_info = use_signal(String::new);
 
     let tok = token.clone();
     let signer_type_clone = auth_session.signer_type.clone();
     let is_doctor = auth_session.signer_type == "doctor";
+
+    // Inicializa o canvas de desenho manuscrito e captura de dados do dispositivo via script
+    use_effect(move || {
+        spawn(async move {
+            gloo_timers::future::sleep(std::time::Duration::from_millis(100)).await;
+            let js_code = r#"
+                (function() {
+                    const canvas = document.getElementById('signature-drawing-pad');
+                    const hiddenInput = document.getElementById('signature-b64-input');
+                    const devInput = document.getElementById('device-info-input');
+
+                    if (devInput) {
+                        const screenRes = window.screen ? `${window.screen.width}x${window.screen.height}` : 'unknown';
+                        const tz = Intl && Intl.DateTimeFormat ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'unknown';
+                        const lang = navigator.language || 'pt-BR';
+                        const plat = navigator.platform || 'unknown';
+                        devInput.value = `Plataforma: ${plat} | Tela: ${screenRes} | Fuso: ${tz} | Idioma: ${lang}`;
+                        devInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+
+                    if (!canvas) return;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.lineWidth = 2.8;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.strokeStyle = '#0f172a';
+
+                    let isDrawing = false;
+                    let hasStroke = false;
+
+                    function getPos(e) {
+                        const rect = canvas.getBoundingClientRect();
+                        const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+                        const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+                        const scaleX = canvas.width / rect.width;
+                        const scaleY = canvas.height / rect.height;
+                        return {
+                            x: (clientX - rect.left) * scaleX,
+                            y: (clientY - rect.top) * scaleY
+                        };
+                    }
+
+                    function start(e) {
+                        e.preventDefault();
+                        isDrawing = true;
+                        hasStroke = true;
+                        const pos = getPos(e);
+                        ctx.beginPath();
+                        ctx.moveTo(pos.x, pos.y);
+                    }
+
+                    function move(e) {
+                        if (!isDrawing) return;
+                        e.preventDefault();
+                        const pos = getPos(e);
+                        ctx.lineTo(pos.x, pos.y);
+                        ctx.stroke();
+                    }
+
+                    function end(e) {
+                        if (isDrawing) {
+                            isDrawing = false;
+                            if (hiddenInput && hasStroke) {
+                                hiddenInput.value = canvas.toDataURL('image/png');
+                                hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                        }
+                    }
+
+                    // Limpa listeners anteriores para não duplicar
+                    canvas.onmousedown = start;
+                    canvas.onmousemove = move;
+                    canvas.onmouseup = end;
+                    canvas.onmouseleave = end;
+
+                    canvas.ontouchstart = start;
+                    canvas.ontouchmove = move;
+                    canvas.ontouchend = end;
+
+                    window.clearToothSignature = function() {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        hasStroke = false;
+                        if (hiddenInput) {
+                            hiddenInput.value = '';
+                            hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    };
+                })();
+            "#;
+            let _ = js_sys::eval(js_code);
+        });
+    });
+
+    let handle_clear = move |_| {
+        let _ = js_sys::eval("if (window.clearToothSignature) window.clearToothSignature();");
+        signature_base64.set(String::new());
+    };
 
     let mut handle_submit = move |_| {
         let name = signature_name().trim().to_string();
@@ -42,14 +142,28 @@ pub fn SignaturePadSection(
 
         if otp_code.trim().len() < 6 {
             let mut err = error_msg;
-            err.set(Some("Informe o código OTP de 6 dígitos completo.".into()));
+            err.set(Some("Informe o código de segurança OTP de 6 dígitos completo.".into()));
             return;
         }
 
+        let b64 = signature_base64().trim().to_string();
+        if b64.is_empty() || !b64.starts_with("data:image/png;base64,") {
+            let mut err = error_msg;
+            err.set(Some("Por favor, desenhe sua assinatura no quadro antes de concluir.".into()));
+            return;
+        }
+
+        let dev_meta = if client_device_info().trim().is_empty() {
+            None
+        } else {
+            Some(client_device_info().trim().to_string())
+        };
+
         let req = SubmitSignatureRequest {
             signer_type: signer_type_clone.clone(),
-            signature_base64: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+            signature_base64: b64,
             otp_code: Some(otp_code.trim().to_string()),
+            device_info: dev_meta,
         };
 
         let t = tok.clone();
@@ -74,6 +188,20 @@ pub fn SignaturePadSection(
 
     rsx! {
         div { class: "portal-sign-card",
+            // Hidden inputs para binding bidirecional com o JS do canvas
+            input {
+                r#type: "hidden",
+                id: "signature-b64-input",
+                value: "{signature_base64}",
+                oninput: move |e| signature_base64.set(e.value())
+            }
+            input {
+                r#type: "hidden",
+                id: "device-info-input",
+                value: "{client_device_info}",
+                oninput: move |e| client_device_info.set(e.value())
+            }
+
             div { class: "portal-signer-simple-header",
                 div { class: "signer-info-text",
                     h3 { "{auth_session.signer_name}" }
@@ -91,26 +219,43 @@ pub fn SignaturePadSection(
                     }
                 }
 
+                // Quadro Interativo de Assinatura Manuscrita
                 div { class: "portal-canvas-section",
-                    div { class: "canvas-header",
-                        label { "Assinatura Digital Manuscrita" }
-                    }
-                    div { class: "signature-canvas-wrapper flex items-center justify-center bg-white p-4",
-                        div { class: "text-center",
-                            IconSignature { size: 36, color: "var(--clinic-primary, #0052cc)".to_string() }
-                            p { class: "signature-hint", "Assinatura eletrônica autenticada por certificado digital e OTP." }
+                    div { class: "canvas-header", style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;",
+                        label { class: "portal-label", style: "margin: 0; font-weight: 700;", "Desenhe sua Assinatura no Quadro *" }
+                        button {
+                            r#type: "button",
+                            class: "btn-secondary btn-sm",
+                            style: "font-size: 11px; padding: 3px 8px; display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; background: #f1f5f9; color: #475569;",
+                            onclick: handle_clear,
+                            IconRefresh { size: 12, color: "currentColor".to_string() }
+                            span { "Limpar Traço" }
                         }
+                    }
+
+                    div {
+                        class: "signature-canvas-wrapper",
+                        style: "width: 100%; height: 180px; background: #ffffff; border: 2px dashed #94a3b8; border-radius: 12px; position: relative; overflow: hidden; touch-action: none;",
+                        canvas {
+                            id: "signature-drawing-pad",
+                            width: "600",
+                            height: "200",
+                            style: "width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none;"
+                        }
+                    }
+                    p { class: "signature-hint", style: "margin-top: 6px; font-size: 11px; color: #64748b; text-align: center;",
+                        "✍️ Desenhe usando o dedo (no celular/tablet) ou o mouse (no computador)."
                     }
                 }
 
-                div { class: "form-group",
+                div { class: "form-group mt-3",
                     label { class: "flex items-start gap-2 cursor-pointer",
                         input {
                             r#type: "checkbox",
                             checked: agreed_terms(),
                             onchange: move |e| agreed_terms.set(e.checked())
                         }
-                        span { class: "portal-helper-text",
+                        span { class: "portal-helper-text", style: "font-size: 12px; color: #475569; line-height: 1.4;",
                             "Declaro que li e concordo integralmente com os termos e cláusulas deste documento odontológico."
                         }
                     }

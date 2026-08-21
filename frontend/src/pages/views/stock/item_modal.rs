@@ -15,6 +15,7 @@ pub fn StockItemModal(
     is_open: Signal<bool>,
     reload_counter: Signal<i32>,
     toast_msg: Signal<Option<String>>,
+    error_toast: Signal<Option<String>>,
 ) -> Element {
     if !is_open() {
         return rsx! {};
@@ -123,8 +124,8 @@ pub fn StockItemModal(
     let mut handle_submit = move |_| {
         let name = form_name().trim().to_string();
         if name.is_empty() {
-            let mut toast = toast_msg;
-            toast.set(Some("Informe o nome do item.".into()));
+            let mut err = error_toast;
+            err.set(Some("Informe o nome do item.".into()));
             return;
         }
 
@@ -193,15 +194,16 @@ pub fn StockItemModal(
 
         let t = tok.clone();
         let c = cid.clone();
+        let editing_opt = editing_item.clone();
         let mut open_sig = is_open;
         let mut rel_sig = reload_counter;
         let mut sub_sig = is_submitting;
         let mut toast = toast_msg;
-        let item_opt_clone = item_opt.clone();
+        let mut err_sig = error_toast;
 
         sub_sig.set(true);
         spawn(async move {
-            if let Some(ref existing) = item_opt_clone {
+            if let Some(ref existing) = editing_opt {
                 let req = UpdateInventoryItemRequest {
                     clinic_id: c.clone(),
                     item_type,
@@ -223,10 +225,10 @@ pub fn StockItemModal(
                     Ok(_) => {
                         open_sig.set(false);
                         rel_sig.set(rel_sig() + 1);
-                        toast.set(Some("Item atualizado com sucesso!".into()));
+                        toast.set(Some("Item atualizado!".into()));
                     }
                     Err(e) => {
-                        toast.set(Some(format!("Erro ao atualizar item: {}", e)));
+                        err_sig.set(Some(format!("Erro ao atualizar item: {}", e)));
                     }
                 }
             } else {
@@ -251,10 +253,10 @@ pub fn StockItemModal(
                     Ok(_) => {
                         open_sig.set(false);
                         rel_sig.set(rel_sig() + 1);
-                        toast.set(Some("Item cadastrado com sucesso!".into()));
+                        toast.set(Some("Item cadastrado!".into()));
                     }
                     Err(e) => {
-                        toast.set(Some(format!("Erro ao cadastrar item: {}", e)));
+                        err_sig.set(Some(format!("Erro ao cadastrar item: {}", e)));
                     }
                 }
             }

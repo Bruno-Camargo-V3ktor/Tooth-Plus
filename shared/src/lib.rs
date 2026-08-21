@@ -8,4 +8,5 @@ pub mod finance;
 pub mod models;
 pub mod patients;
 pub mod stock;
+pub mod treatments;
 pub mod users;

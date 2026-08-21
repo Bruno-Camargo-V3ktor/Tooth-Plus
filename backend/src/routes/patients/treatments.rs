@@ -62,6 +62,16 @@ pub async fn create_treatment(
         .as_deref()
         .map(|e| parse_record_id("patient_exam", e));
 
+    let plan_rec = data
+        .treatment_plan_id
+        .as_deref()
+        .map(|p| parse_record_id("patient_treatment_plan", p));
+
+    let tx_rec = data
+        .transaction_id
+        .as_deref()
+        .map(|t| parse_record_id("transaction", t));
+
     let surfaces_list = data.surfaces.unwrap_or_default();
     let materials_list = data.materials_used.unwrap_or_default();
 
@@ -74,6 +84,8 @@ pub async fn create_treatment(
             appointment_id: $aid,
             document_id: $did,
             exam_id: $eid,
+            treatment_plan_id: $plan_id,
+            transaction_id: $tx_id,
             procedure_category: $pcat,
             procedure_name: $pname,
             tooth_number: $tooth,
@@ -93,6 +105,8 @@ pub async fn create_treatment(
         .bind(("aid", appt_rec))
         .bind(("did", doc_rec))
         .bind(("eid", exam_rec))
+        .bind(("plan_id", plan_rec))
+        .bind(("tx_id", tx_rec))
         .bind(("pcat", data.procedure_category.clone()))
         .bind(("pname", data.procedure_name.trim().to_string()))
         .bind(("tooth", data.tooth_number.map(|s| s.trim().to_string())))
@@ -120,6 +134,8 @@ pub async fn create_treatment(
         appointment_id: t.appointment_id.map(|a| a.to_sql()),
         document_id: t.document_id.map(|d| d.to_sql()),
         exam_id: t.exam_id.map(|e| e.to_sql()),
+        treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
+        transaction_id: t.transaction_id.map(|x| x.to_sql()),
         procedure_category: t.procedure_category,
         procedure_name: t.procedure_name,
         tooth_number: t.tooth_number,
@@ -196,6 +212,16 @@ pub async fn update_treatment(
         None
     };
 
+    let plan_rec = data
+        .treatment_plan_id
+        .as_deref()
+        .map(|p| parse_record_id("patient_treatment_plan", p));
+
+    let tx_rec = data
+        .transaction_id
+        .as_deref()
+        .map(|t| parse_record_id("transaction", t));
+
     let surfaces_list = data.surfaces.unwrap_or_default();
     let materials_list = data.materials_used.unwrap_or_default();
 
@@ -212,6 +238,8 @@ pub async fn update_treatment(
             post_care_instructions = $post_care,
             clinical_notes = $notes,
             dentist_user_id = IF $uid != NONE THEN $uid ELSE dentist_user_id END,
+            treatment_plan_id = IF $plan_id != NONE THEN $plan_id ELSE treatment_plan_id END,
+            transaction_id = IF $tx_id != NONE THEN $tx_id ELSE transaction_id END,
             updated_at = time::now();",
         )
         .bind(("tid", treat_rec))
@@ -225,6 +253,8 @@ pub async fn update_treatment(
         .bind(("post_care", data.post_care_instructions.map(|s| s.trim().to_string())))
         .bind(("notes", data.clinical_notes.map(|s| s.trim().to_string())))
         .bind(("uid", dentist_rec))
+        .bind(("plan_id", plan_rec))
+        .bind(("tx_id", tx_rec))
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao atualizar tratamento: {}", e)))?;
 
@@ -243,6 +273,8 @@ pub async fn update_treatment(
         appointment_id: t.appointment_id.map(|a| a.to_sql()),
         document_id: t.document_id.map(|d| d.to_sql()),
         exam_id: t.exam_id.map(|e| e.to_sql()),
+        treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
+        transaction_id: t.transaction_id.map(|x| x.to_sql()),
         procedure_category: t.procedure_category,
         procedure_name: t.procedure_name,
         tooth_number: t.tooth_number,

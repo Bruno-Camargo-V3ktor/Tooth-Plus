@@ -56,6 +56,7 @@ pub(crate) struct DbTransactionRow {
     pub appointment_id: Option<RecordId>,
     pub patient_id: Option<RecordId>,
     pub user_id: Option<RecordId>,
+    pub treatment_plan_id: Option<RecordId>,
     pub direction: String,
     pub amount_cents: i64,
     pub description: String,

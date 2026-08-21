@@ -17,6 +17,7 @@ pub fn TransactionModal(
     can_write_expense: bool,
     reload_counter: Signal<i32>,
     toast_msg: Signal<Option<String>>,
+    error_toast: Signal<Option<String>>,
 ) -> Element {
 
     if !is_open() {
@@ -43,7 +44,7 @@ pub fn TransactionModal(
         }
     });
 
-    let mut form_amount = use_signal(String::new);
+    let mut form_amount = use_signal(|| "0,00".to_string());
     let mut form_desc = use_signal(String::new);
     let mut form_due_date = use_signal(|| chrono::Local::now().format("%Y-%m-%d").to_string());
     let mut is_paid_now = use_signal(|| true);
@@ -58,14 +59,16 @@ pub fn TransactionModal(
         let amount_cents = match clean_amount.parse::<f64>() {
             Ok(v) if v > 0.0 => (v * 100.0).round() as i64,
             _ => {
-                toast_msg.set(Some("Informe um valor numérico válido maior que zero.".into()));
+                let mut err = error_toast;
+                err.set(Some("Informe um valor numérico válido maior que zero.".into()));
                 return;
             }
         };
 
         let desc = form_desc().trim().to_string();
         if desc.is_empty() {
-            toast_msg.set(Some("Informe a descrição do lançamento financeiro.".into()));
+            let mut err = error_toast;
+            err.set(Some("Informe a descrição do lançamento financeiro.".into()));
             return;
         }
 
@@ -94,6 +97,7 @@ pub fn TransactionModal(
             patient_id: None,
             patient_name: None,
             user_id: None,
+            treatment_plan_id: None,
             direction: dir,
             amount_cents,
             description: desc,
@@ -111,6 +115,7 @@ pub fn TransactionModal(
         let mut rel_sig = reload_counter;
         let mut sub_sig = is_submitting;
         let mut toast = toast_msg;
+        let mut err_sig = error_toast;
 
         sub_sig.set(true);
         spawn(async move {
@@ -118,10 +123,10 @@ pub fn TransactionModal(
                 Ok(_) => {
                     open_sig.set(false);
                     rel_sig.set(rel_sig() + 1);
-                    toast.set(Some("Lançamento financeiro registrado com sucesso!".into()));
+                    toast.set(Some("Lançamento registrado!".into()));
                 }
                 Err(e) => {
-                    toast.set(Some(format!("Erro ao criar lançamento: {}", e)));
+                    err_sig.set(Some(format!("Erro ao criar lançamento: {}", e)));
                 }
             }
             sub_sig.set(false);

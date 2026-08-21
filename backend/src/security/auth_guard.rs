@@ -82,6 +82,12 @@ pub async fn check_permission(
             Some(required_permission.replace("appointments:", "agenda:"))
         } else if required_permission.starts_with("agenda:") {
             Some(required_permission.replace("agenda:", "appointments:"))
+        } else if required_permission.starts_with("treatments:") {
+            Some(required_permission.replace("treatments:", "patients:"))
+        } else if required_permission.starts_with("anamnese:") {
+            Some(required_permission.replace("anamnese:", "patients:"))
+        } else if required_permission.starts_with("exams:") {
+            Some(required_permission.replace("exams:", "patients:"))
         } else {
             None
         };

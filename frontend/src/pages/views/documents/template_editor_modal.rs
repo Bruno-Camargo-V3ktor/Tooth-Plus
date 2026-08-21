@@ -28,6 +28,9 @@ pub fn TemplateEditorModal(
     let mut tpl_category = use_signal(|| initial_tpl.as_ref().map(|t| t.category.clone()).unwrap_or_else(|| "contract".into()));
     let mut tpl_desc = use_signal(|| initial_tpl.as_ref().and_then(|t| t.description.clone()).unwrap_or_default());
     let mut tpl_pdf_url = use_signal(|| initial_tpl.as_ref().map(|t| t.pdf_url.clone()).unwrap_or_default());
+    let mut req_patient_sign = use_signal(|| initial_tpl.as_ref().map(|t| t.requires_patient_signature).unwrap_or(true));
+    let mut req_doctor_sign = use_signal(|| initial_tpl.as_ref().map(|t| t.requires_doctor_signature).unwrap_or(false));
+    let mut allow_any_dentist = use_signal(|| initial_tpl.as_ref().map(|t| t.allow_any_dentist_signature).unwrap_or(true));
 
     let mut is_uploading_tpl_pdf = use_signal(|| false);
     let mut uploaded_tpl_pdf_name = use_signal(String::new);
@@ -107,6 +110,9 @@ pub fn TemplateEditorModal(
                     description: desc_opt,
                     pdf_url: tpl_pdf_url(),
                     signature_fields: vec![],
+                    requires_patient_signature: Some(req_patient_sign()),
+                    requires_doctor_signature: Some(req_doctor_sign()),
+                    allow_any_dentist_signature: Some(allow_any_dentist()),
                 };
                 match update_template(&t, &e_id, req).await {
                     Ok(_) => {
@@ -126,6 +132,9 @@ pub fn TemplateEditorModal(
                     description: desc_opt,
                     pdf_url: tpl_pdf_url(),
                     signature_fields: vec![],
+                    requires_patient_signature: Some(req_patient_sign()),
+                    requires_doctor_signature: Some(req_doctor_sign()),
+                    allow_any_dentist_signature: Some(allow_any_dentist()),
                 };
                 match create_template(&t, req).await {
                     Ok(_) => {
@@ -242,6 +251,51 @@ pub fn TemplateEditorModal(
                                         span { "Fazer Upload do PDF do Modelo" }
                                     }
                                     span { class: "upload-subtitle", "Arquivo com layout e tags para preenchimento" }
+                                }
+                            }
+                        }
+                    }
+
+                    // Configuração de Assinaturas Padrão do Modelo
+                    div { style: "background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px;",
+                        span { style: "font-size: 13px; font-weight: 700; color: #0f172a;", "Requisitos Padrão de Assinatura" }
+                        div { style: "display: grid; grid-template-columns: 1fr 1fr; gap: 12px;",
+                            label { style: "display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #334155; cursor: pointer;",
+                                input {
+                                    r#type: "checkbox",
+                                    checked: req_patient_sign(),
+                                    onchange: move |e| req_patient_sign.set(e.value() == "true"),
+                                }
+                                span { "Assinatura do Paciente" }
+                            }
+                            label { style: "display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #334155; cursor: pointer;",
+                                input {
+                                    r#type: "checkbox",
+                                    checked: req_doctor_sign(),
+                                    onchange: move |e| req_doctor_sign.set(e.value() == "true"),
+                                }
+                                span { "Assinatura do Dentista" }
+                            }
+                        }
+                        if req_doctor_sign() {
+                            div { style: "padding-top: 8px; border-top: 1px dashed #cbd5e1; display: flex; gap: 16px;",
+                                label { style: "display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;",
+                                    input {
+                                        r#type: "radio",
+                                        name: "tpl_dentist_mode",
+                                        checked: allow_any_dentist(),
+                                        onchange: move |_| allow_any_dentist.set(true),
+                                    }
+                                    span { "Qualquer Dentista da Clínica" }
+                                }
+                                label { style: "display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;",
+                                    input {
+                                        r#type: "radio",
+                                        name: "tpl_dentist_mode",
+                                        checked: !allow_any_dentist(),
+                                        onchange: move |_| allow_any_dentist.set(false),
+                                    }
+                                    span { "Exigir Dentista Específico" }
                                 }
                             }
                         }

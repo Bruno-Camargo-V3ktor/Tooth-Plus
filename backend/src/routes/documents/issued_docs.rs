@@ -248,6 +248,10 @@ pub async fn create_patient_document(
         .as_deref()
         .map(|t| parse_record_id("contract_template", t));
 
+    let req_pat = data.requires_patient_signature.unwrap_or(true);
+    let req_doc = data.requires_doctor_signature.unwrap_or(false);
+    let allow_any_doc = data.allow_any_dentist_signature.unwrap_or(true);
+
     let mut res = db
         .query(
             "CREATE patient_document CONTENT {
@@ -262,6 +266,9 @@ pub async fn create_patient_document(
             signed_pdf_url: $signed_pdf_url,
             status: $st,
             signing_token: $stoken,
+            requires_patient_signature: $req_pat,
+            requires_doctor_signature: $req_doc,
+            allow_any_dentist_signature: $allow_any_doc,
             patient_signed_at: $ps_at,
             doctor_signed_at: $ds_at,
             patient_otp_verified: false,
@@ -280,6 +287,9 @@ pub async fn create_patient_document(
         .bind(("signed_pdf_url", signed_pdf_url))
         .bind(("st", initial_status))
         .bind(("stoken", doc_token))
+        .bind(("req_pat", req_pat))
+        .bind(("req_doc", req_doc))
+        .bind(("allow_any_doc", allow_any_doc))
         .bind(("ps_at", pat_signed_at))
         .bind(("ds_at", doc_signed_at))
         .await

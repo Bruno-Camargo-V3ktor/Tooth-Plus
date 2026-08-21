@@ -16,6 +16,7 @@ pub fn AppointmentStatusModal(
     is_open: Signal<bool>,
     on_success: EventHandler<String>,
     toast_msg: Signal<Option<String>>,
+    error_toast: Signal<Option<String>>,
 ) -> Element {
     let Some(ref app) = appointment else {
         return rsx! {};
@@ -85,6 +86,7 @@ pub fn AppointmentStatusModal(
         let mut open_sig = is_open;
         let mut sub_sig = is_submitting;
         let mut toast = toast_msg;
+        let mut err_sig = error_toast;
         let on_succ = on_success.clone();
 
         sub_sig.set(true);
@@ -92,11 +94,11 @@ pub fn AppointmentStatusModal(
             match update_appointment_status(&t, &a_id, &c, req).await {
                 Ok(_) => {
                     open_sig.set(false);
-                    toast.set(Some("Status do agendamento atualizado com sucesso!".into()));
+                    toast.set(Some("Status atualizado!".into()));
                     on_succ.call("Status atualizado".into());
                 }
                 Err(e) => {
-                    toast.set(Some(format!("Erro ao atualizar status: {}", e)));
+                    err_sig.set(Some(format!("Erro ao atualizar status: {}", e)));
                 }
             }
             sub_sig.set(false);

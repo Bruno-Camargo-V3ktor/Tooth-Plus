@@ -92,18 +92,35 @@ fn sanitize_pdf_text(s: &str) -> String {
         .replace('\n', " ")
 }
 
-fn truncate_safe(s: &str, max_chars: usize) -> String {
-    if s.chars().count() > max_chars {
-        let truncated: String = s.chars().take(max_chars - 3).collect();
-        format!("{}...", truncated)
-    } else {
-        s.to_string()
+pub fn wrap_text(text: &str, max_chars: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    for raw_line in text.lines() {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() {
+            lines.push(String::new());
+            continue;
+        }
+        let words: Vec<&str> = trimmed.split_whitespace().collect();
+        let mut cur_line = String::new();
+        for word in words {
+            if cur_line.is_empty() {
+                cur_line.push_str(word);
+            } else if cur_line.chars().count() + 1 + word.chars().count() <= max_chars {
+                cur_line.push(' ');
+                cur_line.push_str(word);
+            } else {
+                lines.push(cur_line);
+                cur_line = word.to_string();
+            }
+        }
+        if !cur_line.is_empty() {
+            lines.push(cur_line);
+        }
     }
+    lines
 }
 
 /// Substitui placeholders de texto e imagem considerando o tamanho da fonte (font_size).
-/// Para o logotipo {{logo}} ou {{clinic_logo}}, o tamanho da imagem gerada corresponde
-/// exatamente ao tamanho da fonte daquele bloco (ex: se a fonte for 20px / 20pt, gera 20x20).
 pub fn replace_placeholders_with_font_metrics(
     stream: &str,
     placeholders: &PdfPlaceholders,
@@ -129,8 +146,6 @@ pub fn replace_placeholders_with_font_metrics(
         // 1. Substituição do Logotipo considerando o tamanho da fonte (ex: 20px -> 20x20)
         if replaced_line.contains("{{logo}}") || replaced_line.contains("{{clinic_logo}}") {
             let logo_size = current_font_size;
-            // Se for em bloco de texto Tj, substituímos por placeholder textual formatado
-            // e preparamos marcação vetorial / XObject de tamanho exato (logo_size x logo_size)
             let logo_tag_replacement = format!("[LOGO: {:.1}x{:.1}]", logo_size, logo_size);
             replaced_line = replaced_line
                 .replace("{{logo}}", &logo_tag_replacement)
@@ -194,7 +209,10 @@ pub fn generate_signed_contract_pdf_bytes(
     let safe_title = sanitize_pdf_text(doc_title);
     let safe_type = sanitize_pdf_text(doc_type);
 
-    let safe_pat_name = sanitize_pdf_text(&truncate_safe(&patient.name, 34));
+    let pat_name_wrapped = wrap_text(&patient.name, 38);
+    let safe_pat_name = sanitize_pdf_text(pat_name_wrapped.first().map(|s| s.as_str()).unwrap_or(""));
+    let safe_pat_name_2 = pat_name_wrapped.get(1).map(|s| sanitize_pdf_text(s));
+
     let clean_pat_doc = if patient.document_info.starts_with("CPF:") || patient.document_info.starts_with("RG:") {
         patient.document_info.replace("CPF:", "").replace("RG:", "").trim().to_string()
     } else {
@@ -202,7 +220,10 @@ pub fn generate_signed_contract_pdf_bytes(
     };
     let safe_pat_doc = sanitize_pdf_text(&clean_pat_doc);
 
-    let safe_doc_name = sanitize_pdf_text(&truncate_safe(&doctor.name, 34));
+    let doc_name_wrapped = wrap_text(&doctor.name, 38);
+    let safe_doc_name = sanitize_pdf_text(doc_name_wrapped.first().map(|s| s.as_str()).unwrap_or(""));
+    let safe_doc_name_2 = doc_name_wrapped.get(1).map(|s| sanitize_pdf_text(s));
+
     let clean_doc_reg = if doctor.document_info.starts_with("Registro:") || doctor.document_info.starts_with("CRO:") {
         doctor.document_info.trim().to_string()
     } else {
@@ -213,23 +234,23 @@ pub fn generate_signed_contract_pdf_bytes(
     let pat_time = patient
         .signed_at
         .as_deref()
-        .map(|t| sanitize_pdf_text(&truncate_safe(t, 25)))
+        .map(|t| sanitize_pdf_text(t))
         .unwrap_or_else(|| "Pendente".into());
     let pat_ip = patient
         .ip_address
         .as_deref()
-        .map(sanitize_pdf_text)
+        .map(|ip| sanitize_pdf_text(ip))
         .unwrap_or_else(|| "N/A".into());
 
     let doc_time = doctor
         .signed_at
         .as_deref()
-        .map(|t| sanitize_pdf_text(&truncate_safe(t, 25)))
+        .map(|t| sanitize_pdf_text(t))
         .unwrap_or_else(|| "Pendente".into());
     let doc_ip = doctor
         .ip_address
         .as_deref()
-        .map(sanitize_pdf_text)
+        .map(|ip| sanitize_pdf_text(ip))
         .unwrap_or_else(|| "N/A".into());
 
     let pat_img = patient
@@ -243,11 +264,9 @@ pub fn generate_signed_contract_pdf_bytes(
 
     let mut stream = String::new();
 
-    // 1. Header & Clinic Branding Letterhead (Font size = 15pt / Logo vector sized 15x15 points)
-    // Logo renderizado proporcional ao tamanho da fonte do cabeçalho (15x15)
+    // 1. Header & Clinic Branding Letterhead
     let header_font_size: f32 = 15.0;
     stream.push_str("0.0 0.32 0.8 rg\n");
-    // Ícone dental vetorial 15x15 alinhado com a fonte
     stream.push_str(&format!("45 790 {:.1} {:.1} re\nf\n", header_font_size, header_font_size));
     stream.push_str("1.0 1.0 1.0 rg\n");
     stream.push_str(&format!("48 793 {:.1} {:.1} re\nf\n", header_font_size - 6.0, header_font_size - 6.0));
@@ -289,18 +308,21 @@ pub fn generate_signed_contract_pdf_bytes(
     stream.push_str("(apostas neste termo, protegidas por hash criptografico SHA-256 e registro auditavel de integridade.) Tj T*\n");
     stream.push_str("ET\n");
 
-    // 4. Patient Signature Box (Left Side: X=45..285, Width=240, Height=155)
-    stream.push_str("0.98 0.99 1.0 rg\n45 320 240 155 re\nf\n");
-    stream.push_str("0.82 0.88 0.95 RG\n1 w\n45 320 240 155 re\nS\n");
+    // 4. Patient Signature Box (Left Side: X=45..285, Width=240, Height=160)
+    stream.push_str("0.98 0.99 1.0 rg\n45 320 240 160 re\nf\n");
+    stream.push_str("0.82 0.88 0.95 RG\n1 w\n45 320 240 160 re\nS\n");
 
     // Patient Header Strip
-    stream.push_str("0.90 0.94 0.99 rg\n45 450 240 25 re\nf\n");
-    stream.push_str("0.82 0.88 0.95 RG\n1 w\n45 450 240 25 re\nS\n");
-    stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n55 458 Td\n(ASSINATURA DO PACIENTE / RESPONSAVEL) Tj\nET\n");
+    stream.push_str("0.90 0.94 0.99 rg\n45 455 240 25 re\nf\n");
+    stream.push_str("0.82 0.88 0.95 RG\n1 w\n45 455 240 25 re\nS\n");
+    stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n55 463 Td\n(ASSINATURA DO PACIENTE / RESPONSAVEL) Tj\nET\n");
 
     // Patient Details
-    stream.push_str("BT\n/F1 7.5 Tf\n10 TL\n55 436 Td\n");
+    stream.push_str("BT\n/F1 7.5 Tf\n10 TL\n55 442 Td\n");
     stream.push_str(&format!("(Signatario: {}) Tj T*\n", safe_pat_name));
+    if let Some(ref line2) = safe_pat_name_2 {
+        stream.push_str(&format!("(            {}) Tj T*\n", line2));
+    }
     stream.push_str(&format!("(Documento: {}) Tj T*\n", safe_pat_doc));
     stream.push_str(&format!("(Data/Hora: {} UTC) Tj T*\n", pat_time));
     stream.push_str(&format!("(IP: {}) Tj T*\n", pat_ip));
@@ -313,23 +335,26 @@ pub fn generate_signed_contract_pdf_bytes(
 
     // Render patient signature image or vector fallback inside the box
     if pat_img.is_some() {
-        stream.push_str("q\n220 0 0 52 55 328 cm\n/SigPatient Do\nQ\n");
+        stream.push_str("q\n220 0 0 55 55 326 cm\n/SigPatient Do\nQ\n");
     } else if patient.has_signed {
         stream.push_str("0.0 0.32 0.8 RG\n1.8 w\n65 355 m 95 385 125 338 160 368 c 190 390 215 348 255 362 c S\n");
     }
 
-    // 5. Doctor Signature Box (Right Side: X=310..550, Width=240, Height=155)
-    stream.push_str("0.98 0.99 1.0 rg\n310 320 240 155 re\nf\n");
-    stream.push_str("0.82 0.88 0.95 RG\n1 w\n310 320 240 155 re\nS\n");
+    // 5. Doctor Signature Box (Right Side: X=310..550, Width=240, Height=160)
+    stream.push_str("0.98 0.99 1.0 rg\n310 320 240 160 re\nf\n");
+    stream.push_str("0.82 0.88 0.95 RG\n1 w\n310 320 240 160 re\nS\n");
 
     // Doctor Header Strip
-    stream.push_str("0.90 0.94 0.99 rg\n310 450 240 25 re\nf\n");
-    stream.push_str("0.82 0.88 0.95 RG\n1 w\n310 450 240 25 re\nS\n");
-    stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n320 458 Td\n(ASSINATURA DO CIRURGIAO-DENTISTA) Tj\nET\n");
+    stream.push_str("0.90 0.94 0.99 rg\n310 455 240 25 re\nf\n");
+    stream.push_str("0.82 0.88 0.95 RG\n1 w\n310 455 240 25 re\nS\n");
+    stream.push_str("0 0 0 rg\nBT\n/F2 8.5 Tf\n320 463 Td\n(ASSINATURA DO CIRURGIAO-DENTISTA) Tj\nET\n");
 
     // Doctor Details
-    stream.push_str("BT\n/F1 7.5 Tf\n10 TL\n320 436 Td\n");
+    stream.push_str("BT\n/F1 7.5 Tf\n10 TL\n320 442 Td\n");
     stream.push_str(&format!("(Profissional: {}) Tj T*\n", safe_doc_name));
+    if let Some(ref line2) = safe_doc_name_2 {
+        stream.push_str(&format!("(             {}) Tj T*\n", line2));
+    }
     stream.push_str(&format!("(Registro: {}) Tj T*\n", safe_doc_reg));
     stream.push_str(&format!("(Data/Hora: {} UTC) Tj T*\n", doc_time));
     stream.push_str(&format!("(IP: {}) Tj T*\n", doc_ip));
@@ -342,14 +367,14 @@ pub fn generate_signed_contract_pdf_bytes(
 
     // Render doctor signature image or vector fallback inside the box
     if doc_img.is_some() {
-        stream.push_str("q\n220 0 0 52 320 328 cm\n/SigDoctor Do\nQ\n");
+        stream.push_str("q\n220 0 0 55 320 326 cm\n/SigDoctor Do\nQ\n");
     } else if doctor.has_signed {
         stream.push_str("0.0 0.32 0.8 RG\n1.8 w\n325 358 m 365 388 395 342 435 372 c 465 392 490 352 530 366 c S\n");
     }
 
-    // 6. Audit & Legal Compliance Stamp Footer (X=45..550, Width=505, Height=145)
-    stream.push_str("0.96 0.97 0.99 rg\n45 155 505 145 re\nf\n");
-    stream.push_str("0.8 0.85 0.92 RG\n1 w\n45 155 505 145 re\nS\n");
+    // 6. Audit & Legal Compliance Stamp Footer (X=45..550, Width=505, Height=150)
+    stream.push_str("0.96 0.97 0.99 rg\n45 150 505 150 re\nf\n");
+    stream.push_str("0.8 0.85 0.92 RG\n1 w\n45 150 505 150 re\nS\n");
 
     // Audit Header Strip
     stream.push_str("0.88 0.92 0.97 rg\n45 278 505 22 re\nf\n");
@@ -363,10 +388,10 @@ pub fn generate_signed_contract_pdf_bytes(
     stream.push_str(&format!("(HASH CRIPTOGRAFICO SHA-256 DO ARQUIVO: {}) Tj T*\n", doc_checksum));
     stream.push_str("(TRILHA AUDITAVEL DE EVENTOS DO DOCUMENTO:) Tj T*\n");
 
-    for (i, entry) in audit_entries.iter().take(3).enumerate() {
-        let safe_ev = sanitize_pdf_text(&truncate_safe(&entry.event, 45));
-        let safe_ts = sanitize_pdf_text(&truncate_safe(&entry.timestamp, 22));
-        let safe_ip = sanitize_pdf_text(&truncate_safe(&entry.ip_address, 15));
+    for (i, entry) in audit_entries.iter().take(4).enumerate() {
+        let safe_ev = sanitize_pdf_text(&entry.event);
+        let safe_ts = sanitize_pdf_text(&entry.timestamp);
+        let safe_ip = sanitize_pdf_text(&entry.ip_address);
         stream.push_str(&format!(
             "({}. {} | Data: {} UTC | IP: {}) Tj T*\n",
             i + 1,

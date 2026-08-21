@@ -42,6 +42,10 @@ DEFINE FIELD OVERWRITE smoker ON TABLE patient_anamnesis TYPE bool DEFAULT false
 DEFINE FIELD OVERWRITE bruxism ON TABLE patient_anamnesis TYPE bool DEFAULT false;
 DEFINE FIELD OVERWRITE chief_complaint ON TABLE patient_anamnesis TYPE option<string>;
 DEFINE FIELD OVERWRITE clinical_notes ON TABLE patient_anamnesis TYPE option<string>;
+DEFINE FIELD OVERWRITE signature_status ON TABLE patient_anamnesis TYPE option<string> DEFAULT "pending";
+DEFINE FIELD OVERWRITE signing_token ON TABLE patient_anamnesis TYPE option<string>;
+DEFINE FIELD OVERWRITE signed_at ON TABLE patient_anamnesis TYPE option<datetime>;
+DEFINE FIELD OVERWRITE signed_pdf_url ON TABLE patient_anamnesis TYPE option<string>;
 DEFINE FIELD OVERWRITE updated_at ON TABLE patient_anamnesis TYPE datetime DEFAULT time::now();
 
 DEFINE INDEX OVERWRITE idx_anamnesis_patient ON TABLE patient_anamnesis COLUMNS patient_id UNIQUE;
@@ -83,6 +87,9 @@ DEFINE FIELD OVERWRITE description ON TABLE contract_template TYPE option<string
 DEFINE FIELD OVERWRITE pdf_url ON TABLE contract_template TYPE string;
 DEFINE FIELD OVERWRITE signature_fields ON TABLE contract_template TYPE array<object> FLEXIBLE DEFAULT [];
 DEFINE FIELD OVERWRITE signature_fields.* ON TABLE contract_template TYPE any;
+DEFINE FIELD OVERWRITE requires_patient_signature ON TABLE contract_template TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE requires_doctor_signature ON TABLE contract_template TYPE bool DEFAULT false;
+DEFINE FIELD OVERWRITE allow_any_dentist_signature ON TABLE contract_template TYPE bool DEFAULT true;
 DEFINE FIELD OVERWRITE created_at ON TABLE contract_template TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE updated_at ON TABLE contract_template TYPE datetime DEFAULT time::now();
 
@@ -100,6 +107,9 @@ DEFINE FIELD OVERWRITE original_pdf_url ON TABLE patient_document TYPE string;
 DEFINE FIELD OVERWRITE signed_pdf_url ON TABLE patient_document TYPE option<string>;
 DEFINE FIELD OVERWRITE status ON TABLE patient_document TYPE string DEFAULT "pending_signatures";
 DEFINE FIELD OVERWRITE signing_token ON TABLE patient_document TYPE string;
+DEFINE FIELD OVERWRITE requires_patient_signature ON TABLE patient_document TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE requires_doctor_signature ON TABLE patient_document TYPE bool DEFAULT false;
+DEFINE FIELD OVERWRITE allow_any_dentist_signature ON TABLE patient_document TYPE bool DEFAULT true;
 DEFINE FIELD OVERWRITE patient_signed_at ON TABLE patient_document TYPE option<datetime>;
 DEFINE FIELD OVERWRITE patient_signature_data ON TABLE patient_document TYPE option<string>;
 DEFINE FIELD OVERWRITE doctor_signed_at ON TABLE patient_document TYPE option<datetime>;

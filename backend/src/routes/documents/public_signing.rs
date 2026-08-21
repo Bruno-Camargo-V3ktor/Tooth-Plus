@@ -158,18 +158,91 @@ pub async fn get_public_signing_document(
         None
     };
 
+    let is_anamnesis = doc.document_type.as_deref() == Some("anamnesis");
+    let req_pat = if is_anamnesis { true } else { doc.requires_patient_signature.unwrap_or(true) };
+    let req_doc = if is_anamnesis { false } else { doc.requires_doctor_signature.unwrap_or(false) };
+    let allow_any_doc = if is_anamnesis { false } else { doc.allow_any_dentist_signature.unwrap_or(true) };
+
+    let anamnesis = if is_anamnesis {
+        let mut a_res = db
+            .query("SELECT * FROM patient_anamnesis WHERE patient_id = $pid LIMIT 1;")
+            .bind(("pid", doc.patient_id.clone()))
+            .await
+            .map_err(|e| ApiError::Database(e.to_string()))?;
+        let a_row: Option<crate::routes::patients::DbAnamnesisRow> =
+            a_res.take(0).ok().and_then(|mut v: Vec<crate::routes::patients::DbAnamnesisRow>| v.pop());
+        let mut a_mapped = a_row.map(crate::routes::patients::map_anamnesis);
+        if let Some(ref mut a) = a_mapped {
+            if a.custom_responses.is_empty() {
+                let t_type = a.template_type.clone().unwrap_or_else(|| "adult".into());
+                let questions = if t_type == "minor" {
+                    crate::routes::patients::default_minor_questions()
+                } else {
+                    crate::routes::patients::default_adult_questions()
+                };
+                a.custom_responses = questions.into_iter().map(|q| shared::anamnesis::AnamnesisResponseItem {
+                    question_id: q.id,
+                    category: q.category,
+                    question_text: q.question_text,
+                    question_type: q.question_type,
+                    answer_boolean: Some(false),
+                    answer_text: None,
+                    notes: None,
+                }).collect();
+            }
+        } else {
+            let questions = crate::routes::patients::default_adult_questions();
+            a_mapped = Some(shared::patients::PatientAnamnesis {
+                id: None,
+                patient_id: doc.patient_id.to_sql(),
+                clinic_id: doc.clinic_id.to_sql(),
+                template_type: Some("adult".into()),
+                custom_responses: questions.into_iter().map(|q| shared::anamnesis::AnamnesisResponseItem {
+                    question_id: q.id,
+                    category: q.category,
+                    question_text: q.question_text,
+                    question_type: q.question_type,
+                    answer_boolean: Some(false),
+                    answer_text: None,
+                    notes: None,
+                }).collect(),
+                allergies: vec![],
+                continuous_medications: None,
+                systemic_diseases: vec![],
+                is_pregnant: false,
+                has_bleeding_disorder: false,
+                smoker: false,
+                bruxism: false,
+                chief_complaint: None,
+                clinical_notes: None,
+                updated_at: String::new(),
+                signature_status: Some("pending".into()),
+                signing_token: Some(doc.signing_token.clone()),
+                signed_at: None,
+                signed_pdf_url: None,
+            });
+        }
+        a_mapped
+    } else {
+        None
+    };
+
     Ok(HttpResponse::Ok().json(PublicSigningDocumentResponse {
         document: map_patient_document(doc),
         clinic_name,
         clinic_theme_color: clinic_theme,
         clinic_logo_url: clinic_logo,
         template,
+        anamnesis,
         patient_phone_masked: phone_masked,
         patient_email_masked: email_masked,
         doctor_phone_masked,
         doctor_email_masked,
         require_whatsapp_otp: require_otp,
         has_email_channel: has_email,
+        requires_patient_signature: req_pat,
+        requires_doctor_signature: req_doc,
+        allow_any_dentist_signature: allow_any_doc,
     }))
 }
 
@@ -476,6 +549,14 @@ pub async fn auth_doctor_signing(
         return Err(ApiError::NotFound("Documento inválido.".into()));
     };
 
+    let is_anamnesis = doc.document_type.as_deref() == Some("anamnesis");
+    let req_doc = if is_anamnesis { false } else { doc.requires_doctor_signature.unwrap_or(false) };
+    if !req_doc {
+        return Err(ApiError::BadRequest(
+            "Este documento não requer assinatura de dentista/responsável técnico.".into(),
+        ));
+    }
+
     let mut user_res = db
         .query("SELECT * FROM user WHERE username = $uname LIMIT 1;")
         .bind(("uname", data.username.trim().to_string()))
@@ -489,6 +570,17 @@ pub async fn auth_doctor_signing(
 
     if !verify_password(&u.password_hash, data.password.trim()) {
         return Err(ApiError::Unauthorized("Senha incorreta.".into()));
+    }
+
+    let allow_any_doc = if is_anamnesis { false } else { doc.allow_any_dentist_signature.unwrap_or(true) };
+    if !allow_any_doc {
+        if let Some(ref req_uid) = doc.doctor_user_id {
+            if &u.id != req_uid {
+                return Err(ApiError::Unauthorized(
+                    "Este documento foi emitido para assinatura de outro profissional específico.".into(),
+                ));
+            }
+        }
     }
 
     Ok(HttpResponse::Ok().json(SignAuthResponse {
@@ -760,10 +852,24 @@ pub async fn submit_digital_signature(
 
     let peer_ip = http_req
         .headers()
-        .get("x-forwarded-for")
+        .get("cf-connecting-ip")
         .and_then(|h| h.to_str().ok())
-        .and_then(|s| s.split(',').next())
         .map(|s| s.trim().to_string())
+        .or_else(|| {
+            http_req
+                .headers()
+                .get("true-client-ip")
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.trim().to_string())
+        })
+        .or_else(|| {
+            http_req
+                .headers()
+                .get("x-forwarded-for")
+                .and_then(|h| h.to_str().ok())
+                .and_then(|s| s.split(',').next())
+                .map(|s| s.trim().to_string())
+        })
         .or_else(|| {
             http_req
                 .headers()
@@ -813,10 +919,17 @@ pub async fn submit_digital_signature(
     let public_url = env::var("STORAGE_PUBLIC_URL")
         .unwrap_or_else(|_| "http://localhost:4000/uploads".into());
 
+    let device_meta_str = data
+        .device_info
+        .clone()
+        .unwrap_or_else(|| format!("UserAgent: {}", user_agent));
+
     if data.signer_type == "patient" {
+        let is_anamnesis = doc.document_type.as_deref() == Some("anamnesis");
+        let requires_doctor = if is_anamnesis { false } else { doc.requires_doctor_signature.unwrap_or(false) };
         let doctor_has_signed =
             doc.doctor_signed_at.is_some() || doc.doctor_signature_data.is_some();
-        if doctor_has_signed {
+        if !requires_doctor || doctor_has_signed {
             is_completed = true;
         }
 
@@ -837,6 +950,7 @@ pub async fn submit_digital_signature(
             "timestamp": now_utc,
             "ip_address": peer_ip,
             "user_agent": user_agent,
+            "device_info": device_meta_str,
             "event_checksum_sha256": event_checksum,
             "otp_verified": doc.patient_otp_verified.unwrap_or(true)
         }));
@@ -930,18 +1044,24 @@ pub async fn submit_digital_signature(
             })
             .collect();
 
-        let (new_pdf_url, generated_checksum) = crate::documents_pdf::save_signed_contract_pdf(
-            &uploads_dir,
-            &public_url,
-            &doc.clinic_id.to_sql(),
-            &doc.title,
-            doc.document_type.as_deref().unwrap_or("contrato"),
-            &clinic_name,
-            &pat_info,
-            &doc_info,
-            &audit_entries_mapped,
-        )
-        .unwrap_or_else(|_| (doc.original_pdf_url.clone(), event_checksum.clone()));
+        let is_anamnesis = doc.document_type.as_deref() == Some("anamnesis");
+
+        let (new_pdf_url, generated_checksum) = if is_anamnesis {
+            (String::new(), event_checksum.clone())
+        } else {
+            crate::documents_pdf::save_signed_contract_pdf(
+                &uploads_dir,
+                &public_url,
+                &doc.clinic_id.to_sql(),
+                &doc.title,
+                doc.document_type.as_deref().unwrap_or("contrato"),
+                &clinic_name,
+                &pat_info,
+                &doc_info,
+                &audit_entries_mapped,
+            )
+            .unwrap_or_else(|_| (doc.original_pdf_url.clone(), event_checksum.clone()))
+        };
 
         let checksum_val = Some(generated_checksum);
         let audit_json = serde_json::to_value(&current_audit).unwrap_or_default();
@@ -962,7 +1082,7 @@ pub async fn submit_digital_signature(
             .bind(("id", doc.id.clone()))
             .bind(("sig", data.signature_base64))
             .bind(("status", new_st))
-            .bind(("pdf_url", new_pdf_url))
+            .bind(("pdf_url", new_pdf_url.clone()))
             .bind(("checksum", checksum_val))
             .bind(("audit", audit_json))
             .await
@@ -976,11 +1096,21 @@ pub async fn submit_digital_signature(
             ));
         };
 
+        if is_anamnesis {
+            let _ = db
+                .query("UPDATE patient_anamnesis SET signature_status = 'signed', signed_at = time::now(), signed_pdf_url = NONE, signing_token = $sig_token WHERE patient_id = $pid;")
+                .bind(("pid", doc.patient_id.clone()))
+                .bind(("sig_token", doc.signing_token.clone()))
+                .await;
+        }
+
         return Ok(HttpResponse::Ok().json(map_patient_document(r)));
     } else {
+        let is_anamnesis = doc.document_type.as_deref() == Some("anamnesis");
+        let requires_patient = if is_anamnesis { true } else { doc.requires_patient_signature.unwrap_or(true) };
         let patient_has_signed =
             doc.patient_signed_at.is_some() || doc.patient_signature_data.is_some();
-        if patient_has_signed {
+        if !requires_patient || patient_has_signed {
             is_completed = true;
         }
 
@@ -1001,6 +1131,7 @@ pub async fn submit_digital_signature(
             "timestamp": now_utc,
             "ip_address": peer_ip,
             "user_agent": user_agent,
+            "device_info": device_meta_str,
             "event_checksum_sha256": event_checksum
         }));
 

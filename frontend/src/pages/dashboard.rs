@@ -68,6 +68,7 @@ pub fn DashboardLayout() -> Element {
         &["appointments:read", "agenda:read"],
     );
     let can_read_patients = permissions::has_permission(&sess, &clinic, "patients:read");
+    let can_read_treatments = permissions::has_permission(&sess, &clinic, "treatments:read");
     let can_read_stock = permissions::has_permission(&sess, &clinic, "stock:read");
     let can_read_documents = permissions::has_permission(&sess, &clinic, "documents:read");
     let can_see_settings = can_read_clinics || can_read_wpp || can_read_adv;
@@ -87,9 +88,9 @@ pub fn DashboardLayout() -> Element {
             style: "--clinic-primary: {clinic_data.theme_color};",
 
             if let Some(err_msg) = error_toast() {
-                div { class: "toast-error",
+                div { class: "toast toast-error",
                     span { "{err_msg}" }
-                    button { class: "toast-close-btn", onclick: move |_| error_toast.set(None), "×" }
+                    button { class: "toast-close", onclick: move |_| error_toast.set(None), "✕" }
                 }
             }
 
@@ -99,6 +100,7 @@ pub fn DashboardLayout() -> Element {
                 is_collapsed: collapsed_val,
                 can_see_agenda: can_read_agenda,
                 can_see_patients: can_read_patients,
+                can_see_treatments: can_read_treatments,
                 can_see_finance: can_read_finance,
                 can_see_stock: can_read_stock,
                 can_see_documents: can_read_documents,
@@ -578,59 +580,62 @@ fn WhatsAppTab(
     });
 
     rsx! {
-        div { class: "settings-pane-container", style: "max-width: 700px;",
-            h3 { class: "settings-pane-title", "Conexão com WhatsApp (Evolution API)" }
-            p { class: "qr-description",
-                "Habilite envio de códigos OTP para assinatura digital, lembretes de consultas e notificações aos pacientes."
+        div { class: "settings-pane-container",
+            div { style: "margin-bottom: 2px;",
+                h3 { class: "settings-pane-title", style: "padding-bottom: 8px; margin-bottom: 4px;", "Conexão com WhatsApp (Evolution API)" }
+                p { class: "text-muted font-xs", style: "margin: 0;",
+                    "Habilite envio de códigos OTP para assinatura digital, lembretes de consultas e notificações aos pacientes."
+                }
             }
 
             if let Some(ref msg) = success_msg() {
-                div { class: "alert-banner-success", style: "margin-bottom: 16px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; color: #065f46; font-size: 13px; font-weight: 500;",
-                    "✓ {msg}"
+                div { class: "toast toast-success", style: "margin-bottom: 10px;",
+                    span { "✓ {msg}" }
+                    button { class: "toast-close", onclick: move |_| success_msg.set(None), "✕" }
                 }
             }
 
             // Status Card Header
-            div { class: "whatsapp-status-card", style: "background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;",
+            div { class: "whatsapp-status-card", style: "background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;",
                 div { style: "display: flex; align-items: center; gap: 12px;",
-                    div { style: "width: 44px; height: 44px; border-radius: 10px; background: #25D366; display: flex; align-items: center; justify-content: center; color: #ffffff;",
-                        crate::components::icons::IconWhatsApp { size: 24, color: "#ffffff".to_string() }
+                    div { style: "width: 38px; height: 38px; border-radius: 10px; background: #25D366; display: flex; align-items: center; justify-content: center; color: #ffffff; flex-shrink: 0;",
+                        crate::components::icons::IconWhatsApp { size: 20, color: "#ffffff".to_string() }
                     }
                     div {
-                        h4 { style: "margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;", "Status da Conexão" }
+                        h4 { style: "margin: 0; font-size: 14px; font-weight: 700; color: #0f172a;", "Status da Conexão" }
                         if !instance_name().is_empty() {
-                            p { style: "margin: 2px 0 0 0; font-size: 12px; color: #64748b;", "Instância: ", strong { "{instance_name}" } }
+                            p { style: "margin: 2px 0 0 0; font-size: 11.5px; color: #64748b;", "Instância: ", strong { "{instance_name}" } }
                         }
                     }
                 }
                 div {
                     if is_connected {
-                        span { class: "badge-completed", style: "font-size: 12px; padding: 6px 12px; background: #dcfce7; color: #15803d; font-weight: 700; border-radius: 20px;", "🟢 Conectado" }
+                        span { class: "badge-completed", style: "font-size: 11.5px; padding: 4px 10px; background: #dcfce7; color: #15803d; font-weight: 700; border-radius: 20px;", "🟢 Conectado" }
                     } else if connection_state() == "checking" {
-                        span { class: "badge-pending", style: "font-size: 12px; padding: 6px 12px; border-radius: 20px;", "⏳ Verificando..." }
+                        span { class: "badge-pending", style: "font-size: 11.5px; padding: 4px 10px; border-radius: 20px;", "⏳ Verificando..." }
                     } else {
-                        span { class: "badge-outline", style: "font-size: 12px; padding: 6px 12px; border-radius: 20px; color: #dc2626; border-color: #fca5a5; background: #fef2f2;", "🔴 Desconectado" }
+                        span { class: "badge-outline", style: "font-size: 11.5px; padding: 4px 10px; border-radius: 20px; color: #dc2626; border-color: #fca5a5; background: #fef2f2;", "🔴 Desconectado" }
                     }
                 }
             }
 
             if is_connected {
                 // Sessão Ativa & Teste de Disparo
-                div { style: "display: flex; flex-direction: column; gap: 16px;",
-                    div { class: "agenda-resource-box", style: "padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;",
-                        h4 { style: "margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #1e293b;", "Disparo de Teste" }
-                        p { style: "margin: 0 0 12px 0; font-size: 12px; color: #64748b;", "Envie uma mensagem de teste para confirmar que seu WhatsApp está enviando mensagens normalmente." }
+                div { style: "display: flex; flex-direction: column; gap: 12px;",
+                    div { class: "agenda-resource-box", style: "padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;",
+                        h4 { style: "margin: 0 0 6px 0; font-size: 13.5px; font-weight: 600; color: #1e293b;", "Disparo de Teste" }
+                        p { style: "margin: 0 0 10px 0; font-size: 12px; color: #64748b;", "Envie uma mensagem de teste para confirmar que seu WhatsApp está enviando mensagens normalmente." }
                         div { style: "display: flex; gap: 10px;",
                             input {
                                 class: "form-input",
-                                style: "max-width: 260px;",
+                                style: "max-width: 260px; font-size: 13px; padding: 6px 12px;",
                                 placeholder: "(11) 98888-8888",
                                 value: "{test_phone}",
                                 oninput: move |e| test_phone.set(e.value())
                             }
                             button {
                                 class: "btn-primary",
-                                style: "background-color: #25D366; border-color: #25D366; font-size: 13px; padding: 8px 16px;",
+                                style: "background-color: #25D366; border-color: #25D366; font-size: 12.5px; padding: 6px 14px;",
                                 disabled: is_sending_test(),
                                 onclick: handle_send_test,
                                 if is_sending_test() { "Enviando..." } else { "Enviar Teste" }
@@ -639,10 +644,10 @@ fn WhatsAppTab(
                     }
 
                     if can_write {
-                        div { style: "display: flex; justify-content: flex-end; margin-top: 8px;",
+                        div { style: "display: flex; justify-content: flex-end;",
                             button {
                                 class: "btn-danger-ghost",
-                                style: "font-size: 13px; color: #dc2626; border: 1px solid #fecaca; background: #fef2f2; padding: 8px 16px; border-radius: 8px; font-weight: 600;",
+                                style: "font-size: 12.5px; color: #dc2626; border: 1px solid #fecaca; background: #fef2f2; padding: 6px 14px; border-radius: 8px; font-weight: 600;",
                                 disabled: is_disconnecting(),
                                 onclick: handle_disconnect,
                                 if is_disconnecting() { "Desconectando..." } else { "Desconectar WhatsApp" }
@@ -651,26 +656,27 @@ fn WhatsAppTab(
                     }
                 }
             } else if let Some(ref img_src) = qr_img_src {
-                div { class: "qr-code-wrapper", style: "text-align: center; padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;",
-                    div { style: "display: inline-block; padding: 12px; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #cbd5e1;",
+                div { class: "qr-code-wrapper", style: "text-align: center; padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;",
+                    div { style: "display: inline-block; padding: 10px; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #cbd5e1;",
                         img {
                             class: "qr-code-image",
-                            style: "width: 250px; height: 250px; display: block; border-radius: 8px;",
+                            style: "width: 170px; height: 170px; display: block; border-radius: 6px;",
                             src: "{img_src}",
                             alt: "QR Code WhatsApp"
                         }
                     }
-                    h4 { style: "margin: 16px 0 6px 0; font-size: 15px; font-weight: 700; color: #0f172a;", "Aponte a câmera do seu WhatsApp" }
-                    p { style: "margin: 0 auto; max-width: 380px; font-size: 12px; color: #64748b; line-height: 1.4;",
-                        "No celular, abra o WhatsApp > Configurações (ou 3 pontinhos) > ",
+                    h4 { style: "margin: 10px 0 4px 0; font-size: 14px; font-weight: 700; color: #0f172a;", "Aponte a câmera do seu WhatsApp" }
+                    p { style: "margin: 0 auto; max-width: 380px; font-size: 11.5px; color: #64748b; line-height: 1.3;",
+                        "No celular, abra o WhatsApp > Configurações > ",
                         strong { "Aparelhos Conectados" },
                         " > ",
                         strong { "Conectar um aparelho" },
                         " e aponte para a tela."
                     }
-                    div { style: "margin-top: 14px; display: flex; justify-content: center; gap: 10px;",
+                    div { style: "margin-top: 10px; display: flex; justify-content: center; gap: 10px;",
                         button {
                             class: "btn-secondary btn-sm",
+                            style: "font-size: 12px; padding: 5px 12px;",
                             disabled: is_loading_qr(),
                             onclick: handle_connect,
                             if is_loading_qr() { "Atualizando..." } else { "🔄 Atualizar QR Code" }
@@ -678,18 +684,18 @@ fn WhatsAppTab(
                     }
                 }
             } else {
-                div { class: "qr-placeholder", style: "width: 100%; height: auto; padding: 40px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;",
-                    div { style: "width: 56px; height: 56px; border-radius: 50%; background: #eff6ff; display: flex; align-items: center; justify-content: center; color: #0052cc;",
-                        crate::components::icons::IconQrCode { size: 28, color: "#0052cc".to_string() }
+                div { class: "qr-placeholder", style: "width: 100%; height: auto; padding: 24px 16px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1; box-sizing: border-box;",
+                    div { style: "width: 46px; height: 46px; border-radius: 50%; background: #eff6ff; display: flex; align-items: center; justify-content: center; color: #0052cc;",
+                        crate::components::icons::IconQrCode { size: 24, color: "#0052cc".to_string() }
                     }
                     div {
-                        h4 { style: "margin: 0; font-size: 15px; font-weight: 600; color: #1e293b;", "Nenhuma sessão ativa no momento" }
-                        p { style: "margin: 4px 0 0 0; font-size: 12px; color: #64748b;", "Clique no botão abaixo para gerar o QR Code e conectar o número da clínica." }
+                        h4 { style: "margin: 0; font-size: 14px; font-weight: 600; color: #1e293b;", "Nenhuma sessão ativa no momento" }
+                        p { style: "margin: 3px 0 0 0; font-size: 12px; color: #64748b;", "Clique no botão abaixo para gerar o QR Code e conectar o número da clínica." }
                     }
                     if can_write {
                         button {
                             class: "btn-primary",
-                            style: "padding: 10px 24px; font-weight: 600;",
+                            style: "padding: 8px 22px; font-weight: 600; font-size: 13px;",
                             disabled: is_loading_qr(),
                             onclick: handle_connect,
                             if is_loading_qr() { "Conectando ao Evolution API..." } else { "Gerar QR Code de Conexão" }

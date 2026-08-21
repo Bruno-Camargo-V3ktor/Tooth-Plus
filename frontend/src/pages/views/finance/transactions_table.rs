@@ -130,6 +130,9 @@ pub fn TransactionsTableSection(
                                         if tx.appointment_id.is_some() || tx.is_calculated_pending {
                                             span { class: "fin-simulated-badge", "Agenda Automática" }
                                         }
+                                        if tx.treatment_plan_id.is_some() {
+                                            span { class: "fin-treatment-plan-badge", "🦷 Orçamento Clínico" }
+                                        }
                                     }
                                     div { class: "fin-card-meta-row",
                                         span { class: "fin-meta-item", "Vencimento: {date_display}" }

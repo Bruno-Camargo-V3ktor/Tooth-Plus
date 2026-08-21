@@ -9,6 +9,7 @@ pub fn Sidebar(
     is_collapsed: bool,
     can_see_agenda: bool,
     can_see_patients: bool,
+    can_see_treatments: bool,
     can_see_finance: bool,
     can_see_stock: bool,
     can_see_documents: bool,
@@ -48,6 +49,12 @@ pub fn Sidebar(
                     Link { to: Route::PatientsView {}, class: "nav-item", active_class: "nav-item-active",
                         IconUsers { size: 20, color: icon_color.clone() }
                         span { class: "nav-text", "Pacientes" }
+                    }
+                }
+                if can_see_treatments {
+                    Link { to: Route::TreatmentsView {}, class: "nav-item", active_class: "nav-item-active",
+                        IconTooth { size: 20, color: icon_color.clone() }
+                        span { class: "nav-text", "Tratamentos" }
                     }
                 }
                 if can_see_finance {

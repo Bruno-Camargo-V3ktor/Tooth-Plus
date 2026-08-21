@@ -74,6 +74,11 @@ pub fn PatientDocumentsTab(
     let mut emit_template_id = use_signal(String::new);
     let mut is_emitting = use_signal(|| false);
 
+    // Signature requirements
+    let mut req_patient_sign = use_signal(|| true);
+    let mut req_doctor_sign = use_signal(|| false);
+    let mut dentist_sign_mode = use_signal(|| "any".to_string());
+
     let pat_id = patient_id.clone();
     let pat_name = patient_name.clone();
     let pat_cpf_str = patient_cpf.clone().unwrap_or_else(|| "000.000.000-00".into());
@@ -96,6 +101,8 @@ pub fn PatientDocumentsTab(
             Some(emit_template_id())
         };
 
+        let allow_any = dentist_sign_mode() == "any";
+
         let req = CreatePatientDocumentRequest {
             clinic_id: cid.clone(),
             patient_id: pat_id.clone(),
@@ -107,6 +114,9 @@ pub fn PatientDocumentsTab(
             pdf_url: None,
             signed_pdf_url: None,
             is_already_signed: Some(false),
+            requires_patient_signature: Some(req_patient_sign()),
+            requires_doctor_signature: Some(req_doctor_sign()),
+            allow_any_dentist_signature: Some(allow_any),
         };
 
         let t = tok.clone();
@@ -278,11 +288,46 @@ pub fn PatientDocumentsTab(
                                     select {
                                         class: "input-field",
                                         value: "{emit_template_id}",
-                                        onchange: move |e| emit_template_id.set(e.value()),
+                                        onchange: move |e| {
+                                            let val = e.value();
+                                            emit_template_id.set(val.clone());
+                                            if let Some(t) = templates.iter().find(|t| t.id == val) {
+                                                emit_doc_title.set(format!("{} - {}", t.title, pat_name));
+                                                emit_doc_type.set(t.category.clone());
+                                                req_patient_sign.set(t.requires_patient_signature);
+                                                req_doctor_sign.set(t.requires_doctor_signature);
+                                                if !t.allow_any_dentist_signature {
+                                                    dentist_sign_mode.set("specific".into());
+                                                }
+                                            }
+                                        },
                                         option { value: "", "Documento em Branco / Padrão" }
                                         for tpl in &templates {
                                             option { value: "{tpl.id}", "{tpl.title}" }
                                         }
+                                    }
+                                }
+                            }
+
+                            // Configuração de Requisitos de Assinatura
+                            div { style: "background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-top: 10px; display: flex; flex-direction: column; gap: 8px;",
+                                span { style: "font-size: 12.5px; font-weight: 700; color: #0f172a;", "Requisitos de Assinatura" }
+                                div { style: "display: grid; grid-template-columns: 1fr 1fr; gap: 10px;",
+                                    label { style: "display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #334155; cursor: pointer;",
+                                        input {
+                                            r#type: "checkbox",
+                                            checked: req_patient_sign(),
+                                            onchange: move |e| req_patient_sign.set(e.value() == "true"),
+                                        }
+                                        span { "Assinatura do Paciente" }
+                                    }
+                                    label { style: "display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #334155; cursor: pointer;",
+                                        input {
+                                            r#type: "checkbox",
+                                            checked: req_doctor_sign(),
+                                            onchange: move |e| req_doctor_sign.set(e.value() == "true"),
+                                        }
+                                        span { "Assinatura do Dentista" }
                                     }
                                 }
                             }

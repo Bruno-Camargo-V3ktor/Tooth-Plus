@@ -50,6 +50,7 @@ pub fn UsersView() -> Element {
     let mut is_delete_modal_open = use_signal(|| false);
     let mut selected_user = use_signal(|| None::<UserResponse>);
     let mut toast_msg = use_signal(|| None::<String>);
+    let mut error_toast = use_signal(|| None::<String>);
 
     if !can_read {
         return rsx! {
@@ -95,11 +96,17 @@ pub fn UsersView() -> Element {
 
     rsx! {
         div { class: "users-page-container",
-            // Toast de Feedback
+            // Toasts de Feedback
             if let Some(ref msg) = *toast_msg.read() {
-                div { class: "toast-error",
+                div { class: "toast toast-success",
                     span { "{msg}" }
-                    button { class: "toast-close-btn", onclick: move |_| toast_msg.set(None), "×" }
+                    button { class: "toast-close", onclick: move |_| toast_msg.set(None), "✕" }
+                }
+            }
+            if let Some(ref err) = *error_toast.read() {
+                div { class: "toast toast-error",
+                    span { "{err}" }
+                    button { class: "toast-close", onclick: move |_| error_toast.set(None), "✕" }
                 }
             }
 
@@ -242,8 +249,13 @@ pub fn UsersView() -> Element {
                                     let cid = cid.clone();
                                     spawn(async move {
                                         let req = ToggleStatusRequest { is_active: !u.is_active };
-                                        if let Err(err) = api::toggle_user_status(&t, &u.id, &cid, req).await {
-                                            toast_msg.set(Some(err));
+                                        match api::toggle_user_status(&t, &u.id, &cid, req).await {
+                                            Ok(_) => {
+                                                toast_msg.set(Some("Status do usuário alterado!".into()));
+                                            }
+                                            Err(err) => {
+                                                error_toast.set(Some(err));
+                                            }
                                         }
                                         users_resource.restart();
                                     });
@@ -264,9 +276,10 @@ pub fn UsersView() -> Element {
                     available_clinics: available_clinics.clone(),
                     on_success: move |_| {
                         is_form_modal_open.set(false);
+                        toast_msg.set(Some("Usuário salvo!".into()));
                         users_resource.restart();
                     },
-                    on_error: move |err| toast_msg.set(Some(err))
+                    on_error: move |err| error_toast.set(Some(err))
                 }
             }
 
@@ -278,9 +291,10 @@ pub fn UsersView() -> Element {
                     clinic_id: clinic_id.clone(),
                     on_success: move |_| {
                         is_delete_modal_open.set(false);
+                        toast_msg.set(Some("Usuário excluído!".into()));
                         users_resource.restart();
                     },
-                    on_error: move |err| toast_msg.set(Some(err))
+                    on_error: move |err| error_toast.set(Some(err))
                 }
             }
         }

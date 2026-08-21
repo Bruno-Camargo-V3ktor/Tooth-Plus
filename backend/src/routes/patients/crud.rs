@@ -388,17 +388,18 @@ pub async fn get_patient_details(
 
     let mut res = db
         .query(
-            "SELECT * FROM type::record($pid);
-             SELECT * FROM patient_anamnesis WHERE patient_id = type::record($pid) LIMIT 1;
-             SELECT * FROM patient_exam WHERE patient_id = type::record($pid) ORDER BY created_at DESC;
-             SELECT * FROM patient_treatment WHERE patient_id = type::record($pid) ORDER BY created_at DESC;
-             SELECT * FROM patient_document WHERE patient_id = type::record($pid) ORDER BY created_at DESC;",
+            "SELECT * FROM patient WHERE id = $pid LIMIT 1;
+             SELECT * FROM patient_anamnesis WHERE patient_id = $pid LIMIT 1;
+             SELECT * FROM patient_exam WHERE patient_id = $pid ORDER BY created_at DESC;
+             SELECT * FROM patient_treatment WHERE patient_id = $pid ORDER BY created_at DESC;
+             SELECT * FROM patient_document WHERE patient_id = $pid ORDER BY created_at DESC;
+             SELECT * FROM patient_treatment_plan WHERE patient_id = $pid ORDER BY created_at DESC;",
         )
         .bind(("pid", pat_rec))
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao consultar prontuário do paciente: {}", e)))?;
 
-    let pat_row: Option<DbPatientRow> = res.take(0).unwrap_or(None);
+    let pat_row: Option<DbPatientRow> = res.take(0).ok().and_then(|mut v: Vec<DbPatientRow>| v.pop());
     let Some(row) = pat_row else {
         return Err(ApiError::NotFound("Paciente não encontrado.".into()));
     };
@@ -418,7 +419,7 @@ pub async fn get_patient_details(
         .unwrap_or(false);
 
     let anam_row: Option<DbAnamnesisRow> = if can_read_anamnese {
-        res.take(1).unwrap_or(None)
+        res.take(1).ok().and_then(|mut v: Vec<DbAnamnesisRow>| v.pop())
     } else {
         None
     };
@@ -438,6 +439,10 @@ pub async fn get_patient_details(
         chief_complaint: a.chief_complaint,
         clinical_notes: a.clinical_notes,
         updated_at: a.updated_at.map(|d| d.to_rfc3339()).unwrap_or_default(),
+        signature_status: a.signature_status,
+        signing_token: a.signing_token,
+        signed_at: a.signed_at.map(|d| d.to_rfc3339()),
+        signed_pdf_url: a.signed_pdf_url,
     });
 
 
@@ -481,6 +486,8 @@ pub async fn get_patient_details(
             appointment_id: t.appointment_id.map(|a| a.to_sql()),
             document_id: t.document_id.map(|d| d.to_sql()),
             exam_id: t.exam_id.map(|e| e.to_sql()),
+            treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
+            transaction_id: t.transaction_id.map(|x| x.to_sql()),
             procedure_category: t.procedure_category,
             procedure_name: t.procedure_name,
             tooth_number: t.tooth_number,
@@ -503,40 +510,60 @@ pub async fn get_patient_details(
     };
     let documents: Vec<PatientDocument> = doc_rows
         .into_iter()
-        .map(|d| PatientDocument {
-            id: d.id.to_sql(),
-            clinic_id: d.clinic_id.to_sql(),
-            patient_id: d.patient_id.to_sql(),
-            patient_name: Some(patient.full_name.clone()),
-            template_id: d.template_id.map(|t| t.to_sql()),
+        .map(|d| {
+            let is_anam = d.document_type.as_deref() == Some("anamnesis");
+            let doc_type = d.document_type.unwrap_or_else(|| "contract".into());
+            let req_pat = if is_anam { true } else { d.requires_patient_signature.unwrap_or(true) };
+            let req_doc = if is_anam { false } else { d.requires_doctor_signature.unwrap_or(false) };
+            let allow_any = if is_anam { false } else { d.allow_any_dentist_signature.unwrap_or(true) };
 
-            template_title: None,
-            doctor_user_id: d.doctor_user_id.map(|u| u.to_sql()),
-            doctor_user_name: None,
-            appointment_id: d.appointment_id.map(|a| a.to_sql()),
-            title: d.title,
-            document_type: d.document_type.unwrap_or_else(|| "contract".into()),
-            original_pdf_url: d.original_pdf_url,
-            signed_pdf_url: d.signed_pdf_url,
-            status: d.status.unwrap_or_else(|| "pending_signatures".into()),
-            signing_token: d.signing_token,
-            patient_signed_at: d.patient_signed_at.map(|dt| dt.to_rfc3339()),
-            patient_signature_data: d.patient_signature_data,
-            doctor_signed_at: d.doctor_signed_at.map(|dt| dt.to_rfc3339()),
-            doctor_signature_data: d.doctor_signature_data,
-            patient_otp_verified: d.patient_otp_verified.unwrap_or(false),
-            checksum_sha256: d.final_checksum_sha256,
-            audit_trail: d.audit_trail.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default(),
-            created_at: d.created_at.to_rfc3339(),
-            updated_at: d.updated_at.to_rfc3339(),
+            PatientDocument {
+                id: d.id.to_sql(),
+                clinic_id: d.clinic_id.to_sql(),
+                patient_id: d.patient_id.to_sql(),
+                patient_name: Some(patient.full_name.clone()),
+                template_id: d.template_id.map(|t| t.to_sql()),
+                template_title: None,
+                doctor_user_id: d.doctor_user_id.map(|u| u.to_sql()),
+                doctor_user_name: None,
+                appointment_id: d.appointment_id.map(|a| a.to_sql()),
+                title: d.title,
+                document_type: doc_type,
+                original_pdf_url: d.original_pdf_url,
+                signed_pdf_url: d.signed_pdf_url,
+                status: d.status.unwrap_or_else(|| "pending_signatures".into()),
+                signing_token: d.signing_token,
+                requires_patient_signature: req_pat,
+                requires_doctor_signature: req_doc,
+                allow_any_dentist_signature: allow_any,
+                patient_signed_at: d.patient_signed_at.map(|dt| dt.to_rfc3339()),
+                patient_signature_data: d.patient_signature_data,
+                doctor_signed_at: d.doctor_signed_at.map(|dt| dt.to_rfc3339()),
+                doctor_signature_data: d.doctor_signature_data,
+                patient_otp_verified: d.patient_otp_verified.unwrap_or(false),
+                checksum_sha256: d.final_checksum_sha256,
+                audit_trail: d.audit_trail.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default(),
+                created_at: d.created_at.to_rfc3339(),
+                updated_at: d.updated_at.to_rfc3339(),
+            }
         })
         .collect();
+
+    use crate::routes::patients::treatment_plans::{DbTreatmentPlanRow, map_plan};
+    let plan_rows: Vec<DbTreatmentPlanRow> = if can_read_treatments {
+        res.take(5).unwrap_or_default()
+    } else {
+        vec![]
+    };
+    let treatment_plans: Vec<shared::treatments::PatientTreatmentPlan> =
+        plan_rows.into_iter().map(|r| map_plan(r, None)).collect();
 
     Ok(HttpResponse::Ok().json(PatientDetailsResponse {
         patient,
         anamnesis,
         exams,
         treatments,
+        treatment_plans,
         documents,
     }))
 }
@@ -761,11 +788,11 @@ pub async fn delete_patient(
     }
 
     db.query(
-        "DELETE patient_anamnesis WHERE patient_id = type::record($pid);
-         DELETE patient_exam WHERE patient_id = type::record($pid);
-         DELETE patient_treatment WHERE patient_id = type::record($pid);
-         DELETE patient_document WHERE patient_id = type::record($pid);
-         DELETE type::record($pid);",
+        "DELETE patient_anamnesis WHERE patient_id = $pid;
+         DELETE patient_exam WHERE patient_id = $pid;
+         DELETE patient_treatment WHERE patient_id = $pid;
+         DELETE patient_document WHERE patient_id = $pid;
+         DELETE patient WHERE id = $pid;",
     )
     .bind(("pid", pat_rec))
     .await

@@ -45,6 +45,9 @@ pub(crate) struct DbContractTemplateRow {
     pub description: Option<String>,
     pub pdf_url: String,
     pub signature_fields: Option<serde_json::Value>,
+    pub requires_patient_signature: Option<bool>,
+    pub requires_doctor_signature: Option<bool>,
+    pub allow_any_dentist_signature: Option<bool>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -64,6 +67,9 @@ pub(crate) struct DbPatientDocumentRow {
     pub signed_pdf_url: Option<String>,
     pub status: Option<String>,
     pub signing_token: String,
+    pub requires_patient_signature: Option<bool>,
+    pub requires_doctor_signature: Option<bool>,
+    pub allow_any_dentist_signature: Option<bool>,
     pub patient_signed_at: Option<DateTime<Utc>>,
     pub patient_signature_data: Option<String>,
     pub doctor_signed_at: Option<DateTime<Utc>>,
@@ -155,6 +161,9 @@ pub(crate) fn map_template(row: DbContractTemplateRow) -> ContractTemplate {
         description: row.description,
         pdf_url: row.pdf_url,
         signature_fields: fields,
+        requires_patient_signature: row.requires_patient_signature.unwrap_or(true),
+        requires_doctor_signature: row.requires_doctor_signature.unwrap_or(false),
+        allow_any_dentist_signature: row.allow_any_dentist_signature.unwrap_or(true),
         created_at: row.created_at.to_rfc3339(),
         updated_at: row.updated_at.to_rfc3339(),
     }
@@ -162,6 +171,11 @@ pub(crate) fn map_template(row: DbContractTemplateRow) -> ContractTemplate {
 
 /// Converte a linha de banco de dados `DbPatientDocumentRow` no modelo compartilhado `PatientDocument`.
 pub(crate) fn map_patient_document(row: DbPatientDocumentRow) -> PatientDocument {
+    let is_anamnesis = row.document_type.as_deref() == Some("anamnesis");
+    let req_pat = if is_anamnesis { true } else { row.requires_patient_signature.unwrap_or(true) };
+    let req_doc = if is_anamnesis { false } else { row.requires_doctor_signature.unwrap_or(false) };
+    let allow_any_doc = if is_anamnesis { false } else { row.allow_any_dentist_signature.unwrap_or(true) };
+
     PatientDocument {
         id: row.id.to_sql(),
         clinic_id: row.clinic_id.to_sql(),
@@ -178,6 +192,9 @@ pub(crate) fn map_patient_document(row: DbPatientDocumentRow) -> PatientDocument
         signed_pdf_url: row.signed_pdf_url,
         status: row.status.unwrap_or_else(|| "pending_signatures".into()),
         signing_token: row.signing_token,
+        requires_patient_signature: req_pat,
+        requires_doctor_signature: req_doc,
+        allow_any_dentist_signature: allow_any_doc,
         patient_signed_at: row.patient_signed_at.map(|d| d.to_rfc3339()),
         patient_signature_data: row.patient_signature_data,
         doctor_signed_at: row.doctor_signed_at.map(|d| d.to_rfc3339()),

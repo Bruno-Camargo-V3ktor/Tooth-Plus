@@ -39,6 +39,11 @@ pub fn IssueDocumentModal(
     let mut selected_patient_obj = use_signal(|| None::<Patient>);
     let mut is_submitting = use_signal(|| false);
 
+    // Signature requirements configuration
+    let mut req_patient_sign = use_signal(|| true);
+    let mut req_doctor_sign = use_signal(|| false);
+    let mut dentist_sign_mode = use_signal(|| "any".to_string()); // "any" | "specific"
+
     if !is_open() {
         return rsx! {};
     }
@@ -100,10 +105,11 @@ pub fn IssueDocumentModal(
             Some(emit_template_id())
         };
 
-        let doc_user_id = if emit_doctor_id().is_empty() {
-            None
-        } else {
+        let allow_any = dentist_sign_mode() == "any";
+        let doc_user_id = if req_doctor_sign() && !allow_any && !emit_doctor_id().is_empty() {
             Some(emit_doctor_id())
+        } else {
+            None
         };
 
         let title = if emit_doc_title().trim().is_empty() {
@@ -133,6 +139,9 @@ pub fn IssueDocumentModal(
             pdf_url: pdf.clone(),
             signed_pdf_url: if is_upload_mode { pdf } else { None },
             is_already_signed: Some(is_upload_mode),
+            requires_patient_signature: Some(req_patient_sign()),
+            requires_doctor_signature: Some(req_doctor_sign()),
+            allow_any_dentist_signature: Some(allow_any),
         };
 
         let t = tok_sub.clone();
@@ -192,45 +201,36 @@ pub fn IssueDocumentModal(
                 }
 
                 div { class: "modal-body",
-                    div { class: "form-row-2",
-                        div { class: "form-group",
-                            label { class: "form-label", "Paciente *" }
-                            select {
-                                class: "select-field",
-                                value: "{emit_patient_id}",
-                                onchange: move |e| {
+                    div { class: "form-group",
+                        label { class: "form-label", "Paciente do Documento *" }
+                        select {
+                            class: "select-field",
+                            value: "{emit_patient_id}",
+                            onchange: {
+                                let p_list = patients.clone();
+                                let t_list = templates.clone();
+                                move |e| {
                                     let val = e.value();
                                     emit_patient_id.set(val.clone());
-                                    if let Some(p) = patients.iter().find(|p| p.id == val).cloned() {
-                                        if emit_doc_title().is_empty() || emit_doc_title().starts_with("Contrato") {
-                                            emit_doc_title.set(format!("Contrato de Tratamento - {}", p.full_name));
+                                    if let Some(p) = p_list.iter().find(|p| p.id == val) {
+                                        selected_patient_obj.set(Some(p.clone()));
+                                        if !emit_template_id().is_empty() {
+                                            if let Some(t) = t_list.iter().find(|t| t.id == emit_template_id()) {
+                                                emit_doc_title.set(format!("{} - {}", t.title, p.full_name));
+                                            }
                                         }
-                                        selected_patient_obj.set(Some(p));
                                     } else {
                                         selected_patient_obj.set(None);
                                     }
-                                },
-                                option { value: "", "Selecione o paciente..." }
-                                for p in &patients {
-                                    {
-                                        let doc_lbl = p.document_cpf.as_deref().unwrap_or(p.document_rg.as_deref().unwrap_or("-"));
-                                        rsx! {
-                                            option { value: "{p.id}", "{p.full_name} ({doc_lbl})" }
-                                        }
-                                    }
                                 }
-                            }
-                        }
-
-                        div { class: "form-group",
-                            label { class: "form-label", "Cirurgião-Dentista Responsável" }
-                            select {
-                                class: "select-field",
-                                value: "{emit_doctor_id}",
-                                onchange: move |e| emit_doctor_id.set(e.value()),
-                                option { value: "", "Selecione o profissional (opcional)..." }
-                                for u in &users {
-                                    option { value: "{u.id}", "{u.full_name} ({u.role})" }
+                            },
+                            option { value: "", "Selecione o paciente cadastrado..." }
+                            for p in &patients {
+                                {
+                                    let doc_lbl = p.document_cpf.as_deref().unwrap_or(p.document_rg.as_deref().unwrap_or("-"));
+                                    rsx! {
+                                        option { value: "{p.id}", "{p.full_name} ({doc_lbl})" }
+                                    }
                                 }
                             }
                         }
@@ -243,16 +243,24 @@ pub fn IssueDocumentModal(
                             select {
                                 class: "select-field",
                                 value: "{emit_template_id}",
-                                onchange: move |e| {
-                                    let val = e.value();
-                                    emit_template_id.set(val.clone());
-                                    if let Some(t) = templates.iter().find(|t| t.id == val) {
-                                        if let Some(ref p) = *selected_patient_obj.read() {
-                                            emit_doc_title.set(format!("{} - {}", t.title, p.full_name));
-                                        } else {
-                                            emit_doc_title.set(t.title.clone());
+                                onchange: {
+                                    let t_list = templates.clone();
+                                    move |e| {
+                                        let val = e.value();
+                                        emit_template_id.set(val.clone());
+                                        if let Some(t) = t_list.iter().find(|t| t.id == val) {
+                                            if let Some(ref p) = *selected_patient_obj.read() {
+                                                emit_doc_title.set(format!("{} - {}", t.title, p.full_name));
+                                            } else {
+                                                emit_doc_title.set(t.title.clone());
+                                            }
+                                            emit_doc_type.set(t.category.clone());
+                                            req_patient_sign.set(t.requires_patient_signature);
+                                            req_doctor_sign.set(t.requires_doctor_signature);
+                                            if !t.allow_any_dentist_signature {
+                                                dentist_sign_mode.set("specific".into());
+                                            }
                                         }
-                                        emit_doc_type.set(t.category.clone());
                                     }
                                 },
                                 option { value: "", "Selecione o modelo cadastrado..." }
@@ -310,6 +318,73 @@ pub fn IssueDocumentModal(
                                 option { value: "implant", "Contrato de Implantodontia / Cirurgia" }
                                 option { value: "prescription", "Receituário / Atestado" }
                                 option { value: "other", "Outro Termo / Declaração" }
+                            }
+                        }
+                    }
+
+                    // Configuração de Requisitos de Assinatura Digital
+                    if emit_mode() == "request_sign" {
+                        div { style: "background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-top: 4px; display: flex; flex-direction: column; gap: 12px;",
+                            div { style: "display: flex; align-items: center; justify-content: space-between;",
+                                span { style: "font-size: 13px; font-weight: 700; color: #0f172a;", "Requisitos de Assinatura Digital" }
+                            }
+                            div { style: "display: grid; grid-template-columns: 1fr 1fr; gap: 12px;",
+                                label { style: "display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #334155; cursor: pointer;",
+                                    input {
+                                        r#type: "checkbox",
+                                        checked: req_patient_sign(),
+                                        onchange: move |e| req_patient_sign.set(e.value() == "true"),
+                                    }
+                                    span { "Assinatura do Paciente" }
+                                }
+                                label { style: "display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #334155; cursor: pointer;",
+                                    input {
+                                        r#type: "checkbox",
+                                        checked: req_doctor_sign(),
+                                        onchange: move |e| req_doctor_sign.set(e.value() == "true"),
+                                    }
+                                    span { "Assinatura do Dentista" }
+                                }
+                            }
+
+                            if req_doctor_sign() {
+                                div { style: "padding-top: 10px; border-top: 1px dashed #cbd5e1; display: flex; flex-direction: column; gap: 8px;",
+                                    span { style: "font-size: 12px; font-weight: 600; color: #475569;", "Quem pode assinar como Dentista?" }
+                                    div { style: "display: flex; gap: 16px;",
+                                        label { style: "display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;",
+                                            input {
+                                                r#type: "radio",
+                                                name: "dentist_mode",
+                                                checked: dentist_sign_mode() == "any",
+                                                onchange: move |_| dentist_sign_mode.set("any".into()),
+                                            }
+                                            span { "Qualquer Dentista da Clínica" }
+                                        }
+                                        label { style: "display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;",
+                                            input {
+                                                r#type: "radio",
+                                                name: "dentist_mode",
+                                                checked: dentist_sign_mode() == "specific",
+                                                onchange: move |_| dentist_sign_mode.set("specific".into()),
+                                            }
+                                            span { "Dentista Específico" }
+                                        }
+                                    }
+                                    if dentist_sign_mode() == "specific" {
+                                        div { class: "form-group mt-2",
+                                            label { class: "form-label", "Selecione o Dentista Obrigatório *" }
+                                            select {
+                                                class: "select-field",
+                                                value: "{emit_doctor_id}",
+                                                onchange: move |e| emit_doctor_id.set(e.value()),
+                                                option { value: "", "Selecione o dentista responsável..." }
+                                                for u in &users {
+                                                    option { value: "{u.id}", "{u.full_name} ({u.role})" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

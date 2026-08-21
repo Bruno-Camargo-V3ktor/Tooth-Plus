@@ -155,6 +155,10 @@ pub struct PatientAnamnesis {
     pub chief_complaint: Option<String>,
     pub clinical_notes: Option<String>,
     pub updated_at: String,
+    pub signature_status: Option<String>,
+    pub signing_token: Option<String>,
+    pub signed_at: Option<String>,
+    pub signed_pdf_url: Option<String>,
 }
 
 /// Requisição para salvar ou atualizar a ficha de anamnese do paciente.
@@ -228,6 +232,10 @@ pub struct PatientTreatment {
     pub appointment_id: Option<String>,
     pub document_id: Option<String>,
     pub exam_id: Option<String>,
+    /// Vínculo com o plano/orçamento de tratamento gerador.
+    pub treatment_plan_id: Option<String>,
+    /// ID da transação financeira vinculada.
+    pub transaction_id: Option<String>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,
@@ -249,6 +257,8 @@ pub struct CreatePatientTreatmentRequest {
     pub appointment_id: Option<String>,
     pub document_id: Option<String>,
     pub exam_id: Option<String>,
+    pub treatment_plan_id: Option<String>,
+    pub transaction_id: Option<String>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,
@@ -269,6 +279,8 @@ pub struct UpdatePatientTreatmentRequest {
     pub appointment_id: Option<String>,
     pub document_id: Option<String>,
     pub exam_id: Option<String>,
+    pub treatment_plan_id: Option<String>,
+    pub transaction_id: Option<String>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,
@@ -306,6 +318,7 @@ pub struct PatientDetailsResponse {
     pub anamnesis: Option<PatientAnamnesis>,
     pub exams: Vec<PatientExam>,
     pub treatments: Vec<PatientTreatment>,
+    pub treatment_plans: Vec<crate::treatments::PatientTreatmentPlan>,
     pub documents: Vec<crate::documents::PatientDocument>,
 }
 

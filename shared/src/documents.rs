@@ -28,6 +28,14 @@ pub struct SignatureField {
     pub is_required: bool,
 }
 
+fn default_true() -> bool {
+    true
+}
+
+fn default_false() -> bool {
+    false
+}
+
 /// Modelo/Template de contrato cadastrado na clínica.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ContractTemplate {
@@ -38,6 +46,12 @@ pub struct ContractTemplate {
     pub description: Option<String>,
     pub pdf_url: String,
     pub signature_fields: Vec<SignatureField>,
+    #[serde(default = "default_true")]
+    pub requires_patient_signature: bool,
+    #[serde(default = "default_false")]
+    pub requires_doctor_signature: bool,
+    #[serde(default = "default_true")]
+    pub allow_any_dentist_signature: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -51,6 +65,9 @@ pub struct CreateContractTemplateRequest {
     pub description: Option<String>,
     pub pdf_url: String,
     pub signature_fields: Vec<SignatureField>,
+    pub requires_patient_signature: Option<bool>,
+    pub requires_doctor_signature: Option<bool>,
+    pub allow_any_dentist_signature: Option<bool>,
 }
 
 /// Requisição para atualização de modelo de contrato existente.
@@ -62,6 +79,9 @@ pub struct UpdateContractTemplateRequest {
     pub description: Option<String>,
     pub pdf_url: String,
     pub signature_fields: Vec<SignatureField>,
+    pub requires_patient_signature: Option<bool>,
+    pub requires_doctor_signature: Option<bool>,
+    pub allow_any_dentist_signature: Option<bool>,
 }
 
 /// Documento clínico emitido vinculado a um paciente e opcionalmente a um modelo.
@@ -82,6 +102,12 @@ pub struct PatientDocument {
     pub signed_pdf_url: Option<String>,
     pub status: String,
     pub signing_token: String,
+    #[serde(default = "default_true")]
+    pub requires_patient_signature: bool,
+    #[serde(default = "default_false")]
+    pub requires_doctor_signature: bool,
+    #[serde(default = "default_true")]
+    pub allow_any_dentist_signature: bool,
     pub patient_signed_at: Option<String>,
     pub patient_signature_data: Option<String>,
     pub doctor_signed_at: Option<String>,
@@ -107,7 +133,12 @@ pub struct CreatePatientDocumentRequest {
     pub pdf_url: Option<String>,
     pub signed_pdf_url: Option<String>,
     pub is_already_signed: Option<bool>,
+    pub requires_patient_signature: Option<bool>,
+    pub requires_doctor_signature: Option<bool>,
+    pub allow_any_dentist_signature: Option<bool>,
 }
+
+use crate::patients::PatientAnamnesis;
 
 /// Dados públicos do documento para renderização no portal de assinatura `/sign/:token`.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -117,12 +148,20 @@ pub struct PublicSigningDocumentResponse {
     pub clinic_theme_color: String,
     pub clinic_logo_url: Option<String>,
     pub template: Option<ContractTemplate>,
+    #[serde(default)]
+    pub anamnesis: Option<PatientAnamnesis>,
     pub patient_phone_masked: String,
     pub patient_email_masked: Option<String>,
     pub doctor_phone_masked: Option<String>,
     pub doctor_email_masked: Option<String>,
     pub require_whatsapp_otp: bool,
     pub has_email_channel: bool,
+    #[serde(default = "default_true")]
+    pub requires_patient_signature: bool,
+    #[serde(default = "default_false")]
+    pub requires_doctor_signature: bool,
+    #[serde(default = "default_true")]
+    pub allow_any_dentist_signature: bool,
 }
 
 /// Autenticação de paciente no portal de assinatura (CPF + Senha).
@@ -160,6 +199,8 @@ pub struct SubmitSignatureRequest {
     pub signature_base64: String,
     pub signer_type: String,
     pub otp_code: Option<String>,
+    #[serde(default)]
+    pub device_info: Option<String>,
 }
 
 /// Indicadores quantitativos de documentos clínicos e contratos.

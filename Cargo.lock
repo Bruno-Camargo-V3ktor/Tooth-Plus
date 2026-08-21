@@ -3345,6 +3345,7 @@ dependencies = [
  "chrono",
  "dioxus",
  "gloo-timers 0.4.0",
+ "js-sys",
  "qrcode",
  "reqwest 0.11.27",
  "serde",

@@ -59,6 +59,8 @@ pub struct Transaction {
     pub patient_name: Option<String>,
     pub user_id: Option<String>,
     pub user_name: Option<String>,
+    /// Vínculo com o plano de tratamento (orçamento) que gerou esta transação.
+    pub treatment_plan_id: Option<String>,
     pub direction: TransactionDirection,
     pub amount_cents: i64,
     pub description: String,
@@ -80,6 +82,7 @@ pub struct CreateTransactionRequest {
     pub patient_id: Option<String>,
     pub patient_name: Option<String>,
     pub user_id: Option<String>,
+    pub treatment_plan_id: Option<String>,
     pub direction: TransactionDirection,
     pub amount_cents: i64,
     pub description: String,

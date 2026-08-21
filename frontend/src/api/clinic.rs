@@ -207,4 +207,3 @@ pub async fn send_test_whatsapp_message(
         })
     }
 }
-

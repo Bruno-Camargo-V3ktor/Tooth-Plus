@@ -60,6 +60,7 @@ pub fn AgendaView() -> Element {
     let mut delete_target = use_signal(|| None::<AppointmentResponse>);
     let mut is_deleting = use_signal(|| false);
     let mut toast_msg = use_signal(|| None::<String>);
+    let mut error_toast = use_signal(|| None::<String>);
 
     let clinic_id = clinic
         .as_ref()
@@ -211,6 +212,7 @@ pub fn AgendaView() -> Element {
         let mut del_sig = delete_target;
         let mut del_modal = is_delete_modal_open;
         let mut toast = toast_msg;
+        let mut err_sig = error_toast;
         let mut is_del = is_deleting;
 
         is_del.set(true);
@@ -220,10 +222,10 @@ pub fn AgendaView() -> Element {
                     del_sig.set(None);
                     del_modal.set(false);
                     appointments_resource.restart();
-                    toast.set(Some("Agendamento excluído com sucesso!".into()));
+                    toast.set(Some("Agendamento excluído!".into()));
                 }
                 Err(e) => {
-                    toast.set(Some(format!("Erro ao excluir agendamento: {}", e)));
+                    err_sig.set(Some(format!("Erro ao excluir agendamento: {}", e)));
                 }
             }
             is_del.set(false);
@@ -232,10 +234,16 @@ pub fn AgendaView() -> Element {
 
     rsx! {
         div { class: "agenda-page-container",
-            if let Some(ref toast) = *toast_msg.read() {
-                div { class: "toast-error",
-                    span { "{toast}" }
-                    button { class: "toast-close-btn", onclick: move |_| toast_msg.set(None), "×" }
+            if let Some(ref msg) = *toast_msg.read() {
+                div { class: "toast toast-success",
+                    span { "{msg}" }
+                    button { class: "toast-close", onclick: move |_| toast_msg.set(None), "✕" }
+                }
+            }
+            if let Some(ref err) = *error_toast.read() {
+                div { class: "toast toast-error",
+                    span { "{err}" }
+                    button { class: "toast-close", onclick: move |_| error_toast.set(None), "✕" }
                 }
             }
 
@@ -335,6 +343,7 @@ pub fn AgendaView() -> Element {
                         appointments_resource.restart();
                     },
                     toast_msg,
+                    error_toast,
                 }
             }
 
@@ -350,6 +359,7 @@ pub fn AgendaView() -> Element {
                         appointments_resource.restart();
                     },
                     toast_msg,
+                    error_toast,
                 }
             }
 

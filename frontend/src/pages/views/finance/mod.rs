@@ -177,6 +177,7 @@ pub fn FinanceView() -> Element {
 
     let mut reload_counter = use_signal(|| 0);
     let mut toast_msg = use_signal(|| None::<String>);
+    let mut error_toast = use_signal(|| None::<String>);
 
     let tok = token.clone();
     let cid = clinic_id.clone();
@@ -266,6 +267,7 @@ pub fn FinanceView() -> Element {
         let mut rel_sig = reload_counter;
         let mut is_set = is_settling;
         let mut toast = toast_msg;
+        let mut err_sig = error_toast;
 
         is_set.set(true);
         spawn(async move {
@@ -278,10 +280,10 @@ pub fn FinanceView() -> Element {
                 Ok(_) => {
                     open_sig.set(false);
                     rel_sig.set(rel_sig() + 1);
-                    toast.set(Some("Lançamento liquidado com sucesso!".into()));
+                    toast.set(Some("Lançamento liquidado!".into()));
                 }
                 Err(e) => {
-                    toast.set(Some(format!("Erro ao liquidar lançamento: {}", e)));
+                    err_sig.set(Some(format!("Erro ao liquidar lançamento: {}", e)));
                 }
             }
             is_set.set(false);
@@ -302,6 +304,7 @@ pub fn FinanceView() -> Element {
         let mut rel_sig = reload_counter;
         let mut is_del = is_deleting;
         let mut toast = toast_msg;
+        let mut err_sig = error_toast;
 
         is_del.set(true);
         spawn(async move {
@@ -309,10 +312,10 @@ pub fn FinanceView() -> Element {
                 Ok(_) => {
                     open_sig.set(false);
                     rel_sig.set(rel_sig() + 1);
-                    toast.set(Some("Lançamento excluído com sucesso!".into()));
+                    toast.set(Some("Lançamento excluído!".into()));
                 }
                 Err(e) => {
-                    toast.set(Some(format!("Erro ao excluir lançamento: {}", e)));
+                    err_sig.set(Some(format!("Erro ao excluir lançamento: {}", e)));
                 }
             }
             is_del.set(false);
@@ -421,9 +424,15 @@ pub fn FinanceView() -> Element {
     rsx! {
         div { class: "documents-view-container",
             if let Some(ref msg) = *toast_msg.read() {
-                div { class: "toast toast-error",
+                div { class: "toast toast-success",
                     span { "{msg}" }
-                    button { class: "toast-close", onclick: move |_| toast_msg.set(None), "×" }
+                    button { class: "toast-close", onclick: move |_| toast_msg.set(None), "✕" }
+                }
+            }
+            if let Some(ref err) = *error_toast.read() {
+                div { class: "toast toast-error",
+                    span { "{err}" }
+                    button { class: "toast-close", onclick: move |_| error_toast.set(None), "✕" }
                 }
             }
 
@@ -787,6 +796,7 @@ pub fn FinanceView() -> Element {
                     can_write_expense,
                     reload_counter,
                     toast_msg,
+                    error_toast,
                 }
             }
 

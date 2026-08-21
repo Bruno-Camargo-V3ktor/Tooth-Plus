@@ -106,6 +106,7 @@ pub fn SignPortal(token: String) -> Element {
                                     } else {
                                         SignerAuthCard {
                                             token: token.clone(),
+                                            doc_info: Some(doc.clone()),
                                             auth_session,
                                             error_msg,
                                             success_msg,

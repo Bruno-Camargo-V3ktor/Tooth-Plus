@@ -25,6 +25,7 @@ struct InsertTransactionDb {
     appointment_id: Option<RecordId>,
     patient_id: Option<RecordId>,
     user_id: Option<RecordId>,
+    treatment_plan_id: Option<RecordId>,
     direction: String,
     amount_cents: i64,
     description: String,
@@ -63,6 +64,7 @@ pub async fn create_transaction(
         .map(|id| parse_record_id("appointment", &id));
     let patient_rec = req.patient_id.map(|id| parse_record_id("patient", &id));
     let user_rec = req.user_id.map(|id| parse_record_id("user", &id));
+    let treatment_plan_rec = req.treatment_plan_id.map(|id| parse_record_id("patient_treatment_plan", &id));
 
     let due_dt = DateTime::parse_from_rfc3339(&req.due_date)
         .map(|d| d.with_timezone(&Utc))
@@ -99,6 +101,7 @@ pub async fn create_transaction(
         appointment_id: appointment_rec,
         patient_id: patient_rec,
         user_id: user_rec,
+        treatment_plan_id: treatment_plan_rec,
         direction: dir_str.into(),
         amount_cents: req.amount_cents,
         description: req.description.clone(),
@@ -126,6 +129,7 @@ pub async fn create_transaction(
             patient_name: None,
             user_id: row.user_id.map(|id| id.to_sql()),
             user_name: None,
+            treatment_plan_id: row.treatment_plan_id.map(|id| id.to_sql()),
             direction: parse_direction(&row.direction),
             amount_cents: row.amount_cents,
             description: row.description,
@@ -211,6 +215,7 @@ pub async fn update_transaction_status(
             appointment_id: Some(app.id.clone()),
             patient_id: app.patient_id.clone(),
             user_id: None,
+            treatment_plan_id: None,
             direction: "income".into(),
             amount_cents: app.financial_amount_cents.unwrap_or(0),
             description: format!("Consulta: {}", app.title),
@@ -238,6 +243,7 @@ pub async fn update_transaction_status(
                 patient_name: app.patient_name,
                 user_id: row.user_id.map(|id| id.to_sql()),
                 user_name: None,
+                treatment_plan_id: row.treatment_plan_id.map(|id| id.to_sql()),
                 direction: parse_direction(&row.direction),
                 amount_cents: row.amount_cents,
                 description: row.description,
@@ -295,6 +301,7 @@ pub async fn update_transaction_status(
             patient_name: None,
             user_id: row.user_id.map(|id| id.to_sql()),
             user_name: None,
+            treatment_plan_id: row.treatment_plan_id.map(|id| id.to_sql()),
             direction: parse_direction(&row.direction),
             amount_cents: row.amount_cents,
             description: row.description,
