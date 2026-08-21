@@ -415,4 +415,48 @@ pub async fn delete_patient_exam(
     }
 }
 
+/// Estrutura de resposta da consulta de CEP via ViaCEP / BrasilAPI.
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default)]
+pub struct ViaCepResponse {
+    pub cep: Option<String>,
+    pub logradouro: Option<String>,
+    pub complemento: Option<String>,
+    pub bairro: Option<String>,
+    pub localidade: Option<String>,
+    pub uf: Option<String>,
+    pub erro: Option<serde_json::Value>,
+}
+
+/// Consulta os dados de endereço a partir de um CEP brasileiro (8 dígitos).
+pub async fn lookup_cep(cep_raw: &str) -> Result<ViaCepResponse, String> {
+    let clean_cep: String = cep_raw.chars().filter(|c| c.is_ascii_digit()).collect();
+    if clean_cep.len() != 8 {
+        return Err("CEP deve conter 8 dígitos".into());
+    }
+
+    let url = format!("https://viacep.com.br/ws/{}/json/", clean_cep);
+    let res = get_client()
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Falha de conexão ao buscar CEP: {}", e))?;
+
+    if res.status().is_success() {
+        let parsed = res
+            .json::<ViaCepResponse>()
+            .await
+            .map_err(|_| "Erro ao processar dados do endereço.".to_string())?;
+
+        if let Some(ref err) = parsed.erro {
+            if err.as_bool() == Some(true) || err.as_str() == Some("true") {
+                return Err("CEP não encontrado.".into());
+            }
+        }
+        Ok(parsed)
+    } else {
+        Err("CEP não encontrado.".into())
+    }
+}
+
+
 

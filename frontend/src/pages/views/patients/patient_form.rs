@@ -3,7 +3,7 @@
 //! Modal em 2 colunas com suporte a CPF ou RG protegidos, convênio
 //! e dados residenciais de acordo com o design system do Tooth-Plus.
 
-use crate::api::create_patient;
+use crate::api::{create_patient, lookup_cep};
 use dioxus::prelude::*;
 use shared::patients::CreatePatientRequest;
 
@@ -25,10 +25,75 @@ pub fn PatientFormModal(
     let mut form_birth_date = use_signal(String::new);
     let mut form_gender = use_signal(|| "Masculino".to_string());
     let mut form_insurance = use_signal(|| "Particular".to_string());
+    let mut form_zip = use_signal(String::new);
     let mut form_street = use_signal(String::new);
     let mut form_num_comp = use_signal(String::new);
+    let mut form_neighborhood = use_signal(String::new);
+    let mut form_city = use_signal(|| "São Paulo".to_string());
+    let mut form_state = use_signal(|| "SP".to_string());
 
     let mut is_submitting = use_signal(|| false);
+    let mut is_loading_cep = use_signal(|| false);
+
+    let mut handle_cep_input = move |raw: String| {
+        let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).take(8).collect();
+        let formatted = if digits.len() > 5 {
+            format!("{}-{}", &digits[..5], &digits[5..])
+        } else {
+            digits.clone()
+        };
+        form_zip.set(formatted);
+
+        if digits.len() == 8 {
+            is_loading_cep.set(true);
+            let mut street_sig = form_street;
+            let mut neigh_sig = form_neighborhood;
+            let mut city_sig = form_city;
+            let mut state_sig = form_state;
+            let mut loading_sig = is_loading_cep;
+            let mut toast = toast_msg;
+            let mut err_sig = error_toast;
+
+            spawn(async move {
+                match lookup_cep(&digits).await {
+                    Ok(info) => {
+                        let mut filled_any = false;
+                        if let Some(logr) = info.logradouro {
+                            if !logr.is_empty() {
+                                street_sig.set(logr);
+                                filled_any = true;
+                            }
+                        }
+                        if let Some(bairro) = info.bairro {
+                            if !bairro.is_empty() {
+                                neigh_sig.set(bairro);
+                                filled_any = true;
+                            }
+                        }
+                        if let Some(cidade) = info.localidade {
+                            if !cidade.is_empty() {
+                                city_sig.set(cidade);
+                                filled_any = true;
+                            }
+                        }
+                        if let Some(uf) = info.uf {
+                            if !uf.is_empty() {
+                                state_sig.set(uf);
+                                filled_any = true;
+                            }
+                        }
+                        if filled_any {
+                            toast.set(Some("Endereço preenchido automaticamente pelo CEP!".into()));
+                        }
+                    }
+                    Err(e) => {
+                        err_sig.set(Some(format!("CEP não encontrado: {}", e)));
+                    }
+                }
+                loading_sig.set(false);
+            });
+        }
+    };
 
     let tok = token.clone();
     let cid = clinic_id.clone();
@@ -62,6 +127,11 @@ pub fn PatientFormModal(
             (None, None)
         };
 
+        let zip_val = form_zip().trim().to_string();
+        let neigh_val = form_neighborhood().trim().to_string();
+        let city_val = form_city().trim().to_string();
+        let state_val = form_state().trim().to_string();
+
         let req = CreatePatientRequest {
             clinic_id: cid.clone(),
             full_name,
@@ -81,10 +151,10 @@ pub fn PatientFormModal(
             address_street: if form_street().trim().is_empty() { None } else { Some(form_street().trim().to_string()) },
             address_number: num_val,
             address_complement: comp_val,
-            address_neighborhood: None,
-            address_city: Some("São Paulo".to_string()),
-            address_state: Some("SP".to_string()),
-            address_zip: None,
+            address_neighborhood: if neigh_val.is_empty() { None } else { Some(neigh_val) },
+            address_city: if city_val.is_empty() { None } else { Some(city_val) },
+            address_state: if state_val.is_empty() { None } else { Some(state_val) },
+            address_zip: if zip_val.is_empty() { None } else { Some(zip_val) },
             insurance_plan: if form_insurance().trim().is_empty() { None } else { Some(form_insurance().trim().to_string()) },
             insurance_number: None,
         };
@@ -229,7 +299,33 @@ pub fn PatientFormModal(
                                 }
                             }
 
-                            // Linha 6: Endereço (Rua/Av) | Número / Complemento
+                            // Linha 6: CEP | Bairro
+                            div { class: "form-group",
+                                label {
+                                    span { "CEP" }
+                                    if is_loading_cep() {
+                                        span { style: "color: #0052cc; font-size: 11px; font-weight: 600; margin-left: 8px;", " (Buscando endereço...)" }
+                                    }
+                                }
+                                input {
+                                    class: "form-input font-mono",
+                                    placeholder: "00000-000",
+                                    maxlength: "9",
+                                    value: "{form_zip}",
+                                    oninput: move |e| handle_cep_input(e.value())
+                                }
+                            }
+                            div { class: "form-group",
+                                label { "Bairro" }
+                                input {
+                                    class: "form-input",
+                                    placeholder: "Ex: Jardins, Centro...",
+                                    value: "{form_neighborhood}",
+                                    oninput: move |e| form_neighborhood.set(e.value())
+                                }
+                            }
+
+                            // Linha 7: Endereço (Rua/Av) | Número / Complemento
                             div { class: "form-group",
                                 label { "Endereço (Rua/Av)" }
                                 input {
@@ -246,6 +342,24 @@ pub fn PatientFormModal(
                                     placeholder: "Ex: 1000, Apto 42",
                                     value: "{form_num_comp}",
                                     oninput: move |e| form_num_comp.set(e.value())
+                                }
+                            }
+
+                            // Linha 8: Cidade | Estado (UF)
+                            div { class: "form-group",
+                                label { "Cidade" }
+                                input {
+                                    class: "form-input",
+                                    value: "{form_city}",
+                                    oninput: move |e| form_city.set(e.value())
+                                }
+                            }
+                            div { class: "form-group",
+                                label { "Estado (UF)" }
+                                input {
+                                    class: "form-input",
+                                    value: "{form_state}",
+                                    oninput: move |e| form_state.set(e.value())
                                 }
                             }
                         }

@@ -3,7 +3,7 @@
 //! Permite editar todos os dados cadastrais, pessoais, contatos, convênio e endereço do paciente
 //! diretamente a partir da aba Visão Geral do Prontuário.
 
-use crate::api::update_patient;
+use crate::api::{lookup_cep, update_patient};
 use crate::components::icons::{IconCheck, IconEdit, IconUsers, IconX};
 use dioxus::prelude::*;
 use shared::patients::{Patient, UpdatePatientRequest};
@@ -42,6 +42,73 @@ pub fn EditPatientModal(
     let mut form_insurance_num = use_signal(|| patient.insurance_number.clone().unwrap_or_default());
 
     let mut is_submitting = use_signal(|| false);
+    let mut is_loading_cep = use_signal(|| false);
+
+    let mut handle_cep_input = move |raw: String| {
+        let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).take(8).collect();
+        let formatted = if digits.len() > 5 {
+            format!("{}-{}", &digits[..5], &digits[5..])
+        } else {
+            digits.clone()
+        };
+        form_zip.set(formatted);
+
+        if digits.len() == 8 {
+            is_loading_cep.set(true);
+            let mut street_sig = form_street;
+            let mut neigh_sig = form_neighborhood;
+            let mut city_sig = form_city;
+            let mut state_sig = form_state;
+            let mut comp_sig = form_complement;
+            let mut loading_sig = is_loading_cep;
+            let mut toast = toast_msg;
+            let mut err_sig = error_toast;
+
+            spawn(async move {
+                match lookup_cep(&digits).await {
+                    Ok(info) => {
+                        let mut filled_any = false;
+                        if let Some(logr) = info.logradouro {
+                            if !logr.is_empty() {
+                                street_sig.set(logr);
+                                filled_any = true;
+                            }
+                        }
+                        if let Some(bairro) = info.bairro {
+                            if !bairro.is_empty() {
+                                neigh_sig.set(bairro);
+                                filled_any = true;
+                            }
+                        }
+                        if let Some(cidade) = info.localidade {
+                            if !cidade.is_empty() {
+                                city_sig.set(cidade);
+                                filled_any = true;
+                            }
+                        }
+                        if let Some(uf) = info.uf {
+                            if !uf.is_empty() {
+                                state_sig.set(uf);
+                                filled_any = true;
+                            }
+                        }
+                        if let Some(comp) = info.complemento {
+                            if !comp.is_empty() && comp_sig().trim().is_empty() {
+                                comp_sig.set(comp);
+                            }
+                        }
+                        if filled_any {
+                            toast.set(Some("Endereço preenchido automaticamente pelo CEP!".into()));
+                        }
+                    }
+                    Err(e) => {
+                        err_sig.set(Some(format!("CEP não encontrado: {}", e)));
+                    }
+                }
+                loading_sig.set(false);
+            });
+        }
+    };
 
     let tok = token.clone();
     let pat_id = patient.id.clone();
@@ -280,6 +347,21 @@ pub fn EditPatientModal(
                             }
                             div { class: "form-grid-2", style: "margin-top: 10px;",
                                 div { class: "form-group",
+                                    label {
+                                        span { "CEP" }
+                                        if is_loading_cep() {
+                                            span { style: "color: #0052cc; font-size: 11px; font-weight: 600; margin-left: 8px;", " (Buscando endereço...)" }
+                                        }
+                                    }
+                                    input {
+                                        class: "form-input font-mono",
+                                        placeholder: "00000-000",
+                                        maxlength: "9",
+                                        value: "{form_zip}",
+                                        oninput: move |e| handle_cep_input(e.value())
+                                    }
+                                }
+                                div { class: "form-group",
                                     label { "Logradouro / Rua / Avenida" }
                                     input {
                                         class: "form-input",
@@ -329,15 +411,6 @@ pub fn EditPatientModal(
                                         class: "form-input",
                                         value: "{form_state}",
                                         oninput: move |e| form_state.set(e.value())
-                                    }
-                                }
-                                div { class: "form-group",
-                                    label { "CEP" }
-                                    input {
-                                        class: "form-input font-mono",
-                                        placeholder: "00000-000",
-                                        value: "{form_zip}",
-                                        oninput: move |e| form_zip.set(e.value())
                                     }
                                 }
                             }
