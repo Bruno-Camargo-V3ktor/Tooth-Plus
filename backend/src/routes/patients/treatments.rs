@@ -86,6 +86,7 @@ pub async fn create_treatment(
             exam_id: $eid,
             treatment_plan_id: $plan_id,
             transaction_id: $tx_id,
+            financial_status: $fin_status,
             procedure_category: $pcat,
             procedure_name: $pname,
             tooth_number: $tooth,
@@ -244,6 +245,7 @@ pub async fn update_treatment(
             dentist_user_id = IF $uid != NONE THEN $uid ELSE dentist_user_id END,
             treatment_plan_id = IF $plan_id != NONE THEN $plan_id ELSE treatment_plan_id END,
             transaction_id = IF $tx_id != NONE THEN $tx_id ELSE transaction_id END,
+            financial_status = IF $fin_status != NONE THEN $fin_status ELSE financial_status END,
             updated_at = time::now();",
         )
         .bind(("tid", treat_rec))
