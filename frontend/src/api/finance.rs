@@ -124,3 +124,32 @@ pub async fn delete_transaction(token: &str, clinic_id: &str, id: &str) -> Resul
         })
     }
 }
+
+pub async fn register_transaction_payment(
+    token: &str,
+    tx_id: &str,
+    req: shared::finance::RegisterPaymentRequest,
+) -> Result<shared::finance::Transaction, String> {
+    let url = format!("{}/finance/{}/pay", API_BASE, tx_id);
+
+    let res = get_client()
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha ao registrar pagamento financeiro.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<shared::finance::Transaction>()
+            .await
+            .map_err(|_| "Erro ao processar resposta do pagamento.".into())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao registrar pagamento.".into()
+        } else {
+            err
+        })
+    }
+}

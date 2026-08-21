@@ -2,7 +2,7 @@ mod appointments;
 mod auth;
 mod clinic;
 pub mod documents;
-mod finance;
+pub mod finance;
 mod patients;
 mod stock;
 pub mod treatments;
@@ -20,5 +20,5 @@ pub use user::*;
 
 pub const API_BASE: &str = match option_env!("API_BASE_URL") {
     Some(url) => url,
-    None => "http://127.0.0.1:4000/api",
+    None => "https://toothplus-api.bluerosestudio.com.br/api",
 };

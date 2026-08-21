@@ -165,6 +165,14 @@ pub struct PatientTreatmentPlan {
     pub status: TreatmentPlanStatus,
     pub items: Vec<TreatmentPlanItem>,
     pub total_price_cents: i64,
+    #[serde(default)]
+    pub paid_amount_cents: i64,
+    #[serde(default)]
+    pub remaining_amount_cents: i64,
+    #[serde(default)]
+    pub financial_status: Option<String>,
+    #[serde(default)]
+    pub payments: Vec<crate::finance::TransactionPaymentEntry>,
     pub notes: Option<String>,
     pub planned_start_date: Option<String>,
     pub planned_end_date: Option<String>,

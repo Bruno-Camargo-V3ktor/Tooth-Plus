@@ -54,6 +54,49 @@ pub async fn update_appointment_status(
     .await
     .map_err(|_| ApiError::Database("Falha ao atualizar status do agendamento.".into()))?;
 
+    // Sincroniza o status dos procedimentos vinculados a este agendamento no prontuário
+    match data.status {
+        AppointmentStatus::InProgress => {
+            let _ = db
+                .query(
+                    "UPDATE patient_treatment SET
+                    status = 'in_consultation',
+                    updated_at = time::now()
+                    WHERE appointment_id = type::record($aid);",
+                )
+                .bind(("aid", app_rec.clone()))
+                .await;
+        }
+        AppointmentStatus::Completed => {
+            let _ = db
+                .query(
+                    "UPDATE patient_treatment SET
+                    status = 'completed',
+                    performed_at = time::now(),
+                    updated_at = time::now()
+                    WHERE appointment_id = type::record($aid);",
+                )
+                .bind(("aid", app_rec.clone()))
+                .await;
+        }
+        AppointmentStatus::Canceled
+        | AppointmentStatus::CanceledByDoctor
+        | AppointmentStatus::CanceledByPatient
+        | AppointmentStatus::NoShow => {
+            let _ = db
+                .query(
+                    "UPDATE patient_treatment SET
+                    status = 'pending',
+                    appointment_id = NONE,
+                    updated_at = time::now()
+                    WHERE appointment_id = type::record($aid);",
+                )
+                .bind(("aid", app_rec.clone()))
+                .await;
+        }
+        _ => {}
+    }
+
     if data.status == AppointmentStatus::Completed {
         if let Some(ref items) = data.consumed_items {
             for item in items {

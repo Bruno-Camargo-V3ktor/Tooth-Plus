@@ -94,10 +94,17 @@ pub fn DocumentsListSection(
     let filtered_docs: Vec<&PatientDocument> = documents
         .iter()
         .filter(|d| {
+            let patient_completed = !d.requires_patient_signature || d.patient_signed_at.is_some();
+            let doctor_completed = !d.requires_doctor_signature || d.doctor_signed_at.is_some();
+            let has_any_sign = d.patient_signed_at.is_some() || d.doctor_signed_at.is_some();
+            let is_done = d.status == "signed"
+                || d.status == "completed"
+                || (patient_completed && doctor_completed && (d.requires_patient_signature || d.requires_doctor_signature) && has_any_sign);
+
             if s_filter == "pending" {
-                d.status != "signed" && d.status != "completed"
+                !is_done
             } else if s_filter == "signed" {
-                d.status == "signed" || d.status == "completed"
+                is_done
             } else {
                 true
             }
@@ -232,7 +239,13 @@ pub fn DocumentsListSection(
                                     let doc_for_audit = doc.clone();
                                     let doc_id_for_del = doc.id.clone();
                                     let doc_title_for_del = doc.title.clone();
-                                    let is_signed = doc.status == "signed" || doc.status == "completed";
+                                    let patient_completed = !doc.requires_patient_signature || doc.patient_signed_at.is_some();
+                                    let doctor_completed = !doc.requires_doctor_signature || doc.doctor_signed_at.is_some();
+                                    let has_any_sign = doc.patient_signed_at.is_some() || doc.doctor_signed_at.is_some();
+                                    let is_signed = doc.status == "signed"
+                                        || doc.status == "completed"
+                                        || (patient_completed && doctor_completed && (doc.requires_patient_signature || doc.requires_doctor_signature) && has_any_sign);
+
                                     let raw_url = if let Some(ref s) = doc.signed_pdf_url {
                                         s.clone()
                                     } else {
@@ -254,7 +267,9 @@ pub fn DocumentsListSection(
                                             }
                                             td { "{format_br_date(&doc.created_at)}" }
                                             td {
-                                                if doc.patient_signed_at.is_some() {
+                                                if !doc.requires_patient_signature {
+                                                    span { class: "badge-status-neutral", "Não Exigida" }
+                                                } else if doc.patient_signed_at.is_some() {
                                                     span { class: "badge-status-completed",
                                                         IconCheckCircle { size: 14, color: "#10b981".to_string() }
                                                         span { " Assinado" }
@@ -264,7 +279,9 @@ pub fn DocumentsListSection(
                                                 }
                                             }
                                             td {
-                                                if doc.doctor_signed_at.is_some() {
+                                                if !doc.requires_doctor_signature {
+                                                    span { class: "badge-status-neutral", "Não Exigida" }
+                                                } else if doc.doctor_signed_at.is_some() {
                                                     span { class: "badge-status-completed",
                                                         IconCheckCircle { size: 14, color: "#10b981".to_string() }
                                                         span { " Assinado" }
@@ -423,7 +440,13 @@ pub fn DocumentsListSection(
                                     div { class: "audit-card-item",
                                         span { class: "audit-item-label", "Assinatura Cirurgião-Dentista" }
                                         div { class: "audit-signer-status",
-                                            if let Some(ref doc_time) = doc.doctor_signed_at {
+                                            if !doc.requires_doctor_signature {
+                                                IconCheckCircle { size: 16, color: "#64748b".to_string() }
+                                                div {
+                                                    span { class: "signer-status-text text-muted font-semibold", "Não Exigida" }
+                                                    span { class: "signer-time-text", "Dispensada no modelo" }
+                                                }
+                                            } else if let Some(ref doc_time) = doc.doctor_signed_at {
                                                 IconCheckCircle { size: 16, color: "#10b981".to_string() }
                                                 div {
                                                     span { class: "signer-status-text text-success font-semibold", "Assinado Digitalmente" }
@@ -431,7 +454,7 @@ pub fn DocumentsListSection(
                                                 }
                                             } else {
                                                 IconClock { size: 16, color: "#94a3b8".to_string() }
-                                                span { class: "signer-status-text text-muted", "Não assinado" }
+                                                span { class: "signer-status-text text-muted", "Pendente" }
                                             }
                                         }
                                     }

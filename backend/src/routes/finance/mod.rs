@@ -12,7 +12,7 @@ pub use transactions::*;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use shared::finance::{TransactionDirection, TransactionStatus};
-use surrealdb::types::{RecordId, SurrealValue};
+use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
 /// Parâmetro de busca comum com identificador da clínica.
 #[derive(Deserialize, Debug, Clone)]
@@ -24,10 +24,15 @@ pub struct ClinicQuery {
 pub(crate) fn parse_record_id(table: &str, raw: &str) -> RecordId {
     let key = if let Some(stripped) = raw.strip_prefix(&format!("{}:", table)) {
         stripped
+    } else if let Some(stripped) = raw.strip_prefix(&format!("{}s:", table)) {
+        stripped
+    } else if let Some(pos) = raw.find(':') {
+        &raw[pos + 1..]
     } else {
         raw
     };
-    RecordId::new(table, key)
+    let clean_key = key.trim_matches(|c| c == '⟨' || c == '⟩');
+    RecordId::new(table, clean_key)
 }
 
 /// Normaliza identificador de clínica.
@@ -59,12 +64,16 @@ pub(crate) struct DbTransactionRow {
     pub treatment_plan_id: Option<RecordId>,
     pub direction: String,
     pub amount_cents: i64,
+    #[serde(default)]
+    pub paid_amount_cents: Option<i64>,
     pub description: String,
     pub category: String,
     pub status: String,
     pub due_date: DateTime<Utc>,
     pub paid_date: Option<DateTime<Utc>>,
     pub payment_method: Option<String>,
+    #[serde(default)]
+    pub payments: Option<Vec<serde_json::Value>>,
     #[serde(default = "default_one")]
     pub installment_current: i32,
     #[serde(default = "default_one")]
@@ -100,8 +109,57 @@ pub(crate) fn parse_direction(d: &str) -> TransactionDirection {
 pub(crate) fn parse_status(s: &str) -> TransactionStatus {
     match s {
         "paid" => TransactionStatus::Paid,
+        "partial" | "partially_paid" => TransactionStatus::Partial,
         "canceled" => TransactionStatus::Canceled,
         "refunded" => TransactionStatus::Refunded,
         _ => TransactionStatus::Pending,
+    }
+}
+
+pub(crate) fn map_transaction(
+    row: DbTransactionRow,
+    patient_name: Option<String>,
+    user_name: Option<String>,
+) -> shared::finance::Transaction {
+    let amount_cents = row.amount_cents;
+    let paid_amount_cents = row.paid_amount_cents.unwrap_or_else(|| {
+        if row.status == "paid" {
+            amount_cents
+        } else {
+            0
+        }
+    });
+    let remaining_amount_cents = (amount_cents - paid_amount_cents).max(0);
+
+    let payments: Vec<shared::finance::TransactionPaymentEntry> = row
+        .payments
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|v| serde_json::from_value(v).ok())
+        .collect();
+
+    shared::finance::Transaction {
+        id: row.id.to_sql(),
+        clinic_id: row.clinic_id.to_sql(),
+        appointment_id: row.appointment_id.map(|id| id.to_sql()),
+        patient_id: row.patient_id.map(|id| id.to_sql()),
+        patient_name,
+        user_id: row.user_id.map(|id| id.to_sql()),
+        user_name,
+        treatment_plan_id: row.treatment_plan_id.map(|id| id.to_sql()),
+        direction: parse_direction(&row.direction),
+        amount_cents,
+        paid_amount_cents,
+        remaining_amount_cents,
+        description: row.description,
+        category: row.category,
+        status: parse_status(&row.status),
+        due_date: row.due_date.to_rfc3339(),
+        paid_date: row.paid_date.map(|d| d.to_rfc3339()),
+        payment_method: row.payment_method,
+        payments,
+        installment_current: row.installment_current,
+        installment_total: row.installment_total,
+        is_calculated_pending: false,
     }
 }

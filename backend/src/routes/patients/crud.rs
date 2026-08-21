@@ -475,33 +475,6 @@ pub async fn get_patient_details(
     } else {
         vec![]
     };
-    let treatments: Vec<PatientTreatment> = treat_rows
-        .into_iter()
-        .map(|t| PatientTreatment {
-            id: t.id.to_sql(),
-            patient_id: t.patient_id.to_sql(),
-            clinic_id: t.clinic_id.to_sql(),
-            dentist_user_id: t.dentist_user_id.map(|u| u.to_sql()),
-            dentist_user_name: None,
-            appointment_id: t.appointment_id.map(|a| a.to_sql()),
-            document_id: t.document_id.map(|d| d.to_sql()),
-            exam_id: t.exam_id.map(|e| e.to_sql()),
-            treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
-            transaction_id: t.transaction_id.map(|x| x.to_sql()),
-            procedure_category: t.procedure_category,
-            procedure_name: t.procedure_name,
-            tooth_number: t.tooth_number,
-            surfaces: t.surfaces,
-            materials_used: t.materials_used,
-            status: t.status.unwrap_or_else(|| "planned".into()),
-            cost_cents: t.cost_cents.unwrap_or(0),
-            post_care_instructions: t.post_care_instructions,
-            clinical_notes: t.clinical_notes,
-            performed_at: t.performed_at.map(|d| d.to_rfc3339()),
-            created_at: t.created_at.to_rfc3339(),
-        })
-        .collect();
-
 
     let doc_rows: Vec<DbDocumentRow> = if can_read_documents {
         res.take(4).unwrap_or_default()
@@ -517,6 +490,17 @@ pub async fn get_patient_details(
             let req_doc = if is_anam { false } else { d.requires_doctor_signature.unwrap_or(false) };
             let allow_any = if is_anam { false } else { d.allow_any_dentist_signature.unwrap_or(true) };
 
+            let pat_ok = !req_pat || d.patient_signed_at.is_some();
+            let doc_ok = !req_doc || d.doctor_signed_at.is_some();
+            let has_sign = d.patient_signed_at.is_some() || d.doctor_signed_at.is_some();
+            let is_done = pat_ok && doc_ok && (req_pat || req_doc) && has_sign;
+
+            let final_status = if is_done {
+                "signed".to_string()
+            } else {
+                d.status.unwrap_or_else(|| "pending_signatures".into())
+            };
+
             PatientDocument {
                 id: d.id.to_sql(),
                 clinic_id: d.clinic_id.to_sql(),
@@ -531,7 +515,7 @@ pub async fn get_patient_details(
                 document_type: doc_type,
                 original_pdf_url: d.original_pdf_url,
                 signed_pdf_url: d.signed_pdf_url,
-                status: d.status.unwrap_or_else(|| "pending_signatures".into()),
+                status: final_status,
                 signing_token: d.signing_token,
                 requires_patient_signature: req_pat,
                 requires_doctor_signature: req_doc,
@@ -557,6 +541,50 @@ pub async fn get_patient_details(
     };
     let treatment_plans: Vec<shared::treatments::PatientTreatmentPlan> =
         plan_rows.into_iter().map(|r| map_plan(r, None)).collect();
+
+    let treatments: Vec<PatientTreatment> = treat_rows
+        .into_iter()
+        .map(|t| {
+            let fin_status = if let Some(ref p_id) = t.treatment_plan_id {
+                let p_id_str = p_id.to_sql();
+                treatment_plans.iter()
+                    .find(|p| p.id == p_id_str || p.id.ends_with(&p_id_str) || p_id_str.ends_with(&p.id))
+                    .and_then(|p| p.financial_status.clone())
+                    .or(Some("unpaid".into()))
+            } else if t.cost_cents.unwrap_or(0) == 0 {
+                Some("paid".into())
+            } else {
+                Some("unpaid".into())
+            };
+
+            PatientTreatment {
+                id: t.id.to_sql(),
+                patient_id: t.patient_id.to_sql(),
+                clinic_id: t.clinic_id.to_sql(),
+                dentist_user_id: t.dentist_user_id.map(|u| u.to_sql()),
+                dentist_user_name: None,
+                appointment_id: t.appointment_id.as_ref().map(|a| a.to_sql()),
+                appointment_date: t.performed_at.map(|d| d.to_rfc3339()),
+                document_id: t.document_id.map(|d| d.to_sql()),
+                exam_id: t.exam_id.map(|e| e.to_sql()),
+                treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
+                treatment_plan_item_id: t.treatment_plan_item_id,
+                transaction_id: t.transaction_id.map(|x| x.to_sql()),
+                financial_status: fin_status,
+                procedure_category: t.procedure_category,
+                procedure_name: t.procedure_name,
+                tooth_number: t.tooth_number,
+                surfaces: t.surfaces,
+                materials_used: t.materials_used,
+                status: t.status.unwrap_or_else(|| "pending".into()),
+                cost_cents: t.cost_cents.unwrap_or(0),
+                post_care_instructions: t.post_care_instructions,
+                clinical_notes: t.clinical_notes,
+                performed_at: t.performed_at.map(|d| d.to_rfc3339()),
+                created_at: t.created_at.to_rfc3339(),
+            }
+        })
+        .collect();
 
     Ok(HttpResponse::Ok().json(PatientDetailsResponse {
         patient,

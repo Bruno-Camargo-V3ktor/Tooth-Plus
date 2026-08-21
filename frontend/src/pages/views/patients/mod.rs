@@ -5,6 +5,7 @@
 
 pub mod anamnese_tab;
 pub mod anamnese_templates_modal;
+pub mod budgets_tab;
 pub mod documents_tab;
 pub mod edit_patient_modal;
 pub mod odontogram_tab;
@@ -17,6 +18,7 @@ pub mod treatments_tab;
 
 pub use anamnese_tab::*;
 pub use anamnese_templates_modal::*;
+pub use budgets_tab::*;
 pub use documents_tab::*;
 pub use edit_patient_modal::*;
 pub use odontogram_tab::*;
@@ -27,9 +29,9 @@ pub use photos_tab::*;
 pub use treatment_plan_modal::*;
 pub use treatments_tab::*;
 
-use crate::api::{fetch_patient_details, fetch_patients, fetch_templates};
+use crate::api::{fetch_patient_details, fetch_patients, fetch_templates, fetch_users};
 use crate::components::icons::{
-    IconCalendar, IconChevronLeft, IconEdit, IconEye, IconFile, IconFolder, IconHeartPulse,
+    IconCalendar, IconChevronLeft, IconEdit, IconEye, IconFile, IconFinance, IconFolder, IconHeartPulse,
     IconLock, IconMail, IconPhone, IconSignature, IconTooth, IconUsers, 
 };
 use crate::permissions;
@@ -149,6 +151,25 @@ pub fn PatientsView() -> Element {
 
     let templates_list = match &*templates_resource.read() {
         Some(Ok(tpls)) => tpls.clone(),
+        _ => vec![],
+    };
+
+    let tok_usr = token.clone();
+    let cid_usr = clinic_id.clone();
+    let users_resource = use_resource(move || {
+        let t = tok_usr.clone();
+        let cid = cid_usr.clone();
+        let _ = reload_trigger();
+        async move {
+            if t.is_empty() || cid.is_empty() {
+                return Ok(vec![]);
+            }
+            fetch_users(&t, &cid).await
+        }
+    });
+
+    let users_list = match &*users_resource.read() {
+        Some(Ok(u)) => u.clone(),
         _ => vec![],
     };
 
@@ -315,10 +336,16 @@ pub fn PatientsView() -> Element {
                                     }
                                     if can_read_treatments {
                                         button {
-                                            class: if active_patient_tab() == "odontogram" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
-                                            onclick: move |_| active_patient_tab.set("odontogram".to_string()),
+                                            class: if active_patient_tab() == "treatments" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
+                                            onclick: move |_| active_patient_tab.set("treatments".to_string()),
                                             IconTooth { size: 15, color: "currentColor".to_string() }
-                                            span { " Tratamentos & Orçamentos ({det.treatment_plans.len()})" }
+                                            span { " Tratamentos ({det.treatments.len()})" }
+                                        }
+                                        button {
+                                            class: if active_patient_tab() == "budgets" { "patient-subtab-btn active" } else { "patient-subtab-btn" },
+                                            onclick: move |_| active_patient_tab.set("budgets".to_string()),
+                                            IconFinance { size: 15, color: "currentColor".to_string() }
+                                            span { " Orçamentos ({det.treatment_plans.len()})" }
                                         }
                                     }
                                     if can_read_documents {
@@ -357,7 +384,7 @@ pub fn PatientsView() -> Element {
                                             }
                                         }
                                     },
-                                    "odontogram" => {
+                                    "treatments" => {
                                         if can_read_treatments {
                                             rsx! {
                                                 PatientTreatmentsTab {
@@ -366,7 +393,6 @@ pub fn PatientsView() -> Element {
                                                     clinic_id: clinic_id.clone(),
                                                     token: token.clone(),
                                                     treatments: det.treatments.clone(),
-                                                    treatment_plans: det.treatment_plans.clone(),
                                                     can_write: can_write_treatments,
                                                     can_delete: can_delete_treatments,
                                                     reload_patient_details: reload_fn.clone(),
@@ -380,6 +406,32 @@ pub fn PatientsView() -> Element {
                                                     div { class: "permission-denied-icon", "🔒" }
                                                     h3 { class: "permission-denied-title", "Acesso Restrito aos Tratamentos" }
                                                     p { class: "permission-denied-desc", "Você não possui a permissão 'treatments:read' para visualizar os procedimentos." }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "budgets" => {
+                                        if can_read_treatments {
+                                            rsx! {
+                                                PatientBudgetsTab {
+                                                    patient_id: det.patient.id.clone(),
+                                                    patient_name: Some(det.patient.full_name.clone()),
+                                                    clinic_id: clinic_id.clone(),
+                                                    token: token.clone(),
+                                                    treatment_plans: det.treatment_plans.clone(),
+                                                    can_write: can_write_treatments,
+                                                    can_delete: can_delete_treatments,
+                                                    reload_patient_details: reload_fn.clone(),
+                                                    toast_msg,
+                                                    error_toast,
+                                                }
+                                            }
+                                        } else {
+                                            rsx! {
+                                                div { class: "permission-denied-state", style: "margin: 40px auto; max-width: 500px;",
+                                                    div { class: "permission-denied-icon", "🔒" }
+                                                    h3 { class: "permission-denied-title", "Acesso Restrito aos Orçamentos" }
+                                                    p { class: "permission-denied-desc", "Você não possui a permissão 'treatments:read' para visualizar os planos de tratamento." }
                                                 }
                                             }
                                         }
@@ -422,6 +474,8 @@ pub fn PatientsView() -> Element {
                                                     token: token.clone(),
                                                     documents: det.documents.clone(),
                                                     templates: templates_list.clone(),
+                                                    users: users_list.clone(),
+                                                    patients: patients_list.clone(),
                                                     can_write: can_write_documents,
                                                     reload_patient_details: reload_fn.clone(),
                                                     toast_msg,

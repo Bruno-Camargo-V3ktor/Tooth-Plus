@@ -20,10 +20,15 @@ use surrealdb::types::{RecordId, SurrealValue, ToSql};
 pub(crate) fn parse_record_id(table: &str, raw: &str) -> RecordId {
     let key = if let Some(stripped) = raw.strip_prefix(&format!("{}:", table)) {
         stripped
+    } else if let Some(stripped) = raw.strip_prefix(&format!("{}s:", table)) {
+        stripped
+    } else if let Some(pos) = raw.find(':') {
+        &raw[pos + 1..]
     } else {
         raw
     };
-    RecordId::new(table, key)
+    let clean_key = key.trim_matches(|c| c == '⟨' || c == '⟩');
+    RecordId::new(table, clean_key)
 }
 
 /// Normaliza o ID da clínica para o formato prefixado `clinic:UUID`.
@@ -176,6 +181,17 @@ pub(crate) fn map_patient_document(row: DbPatientDocumentRow) -> PatientDocument
     let req_doc = if is_anamnesis { false } else { row.requires_doctor_signature.unwrap_or(false) };
     let allow_any_doc = if is_anamnesis { false } else { row.allow_any_dentist_signature.unwrap_or(true) };
 
+    let pat_ok = !req_pat || row.patient_signed_at.is_some();
+    let doc_ok = !req_doc || row.doctor_signed_at.is_some();
+    let has_sign = row.patient_signed_at.is_some() || row.doctor_signed_at.is_some();
+    let is_done = pat_ok && doc_ok && (req_pat || req_doc) && has_sign;
+
+    let final_status = if is_done {
+        "signed".to_string()
+    } else {
+        row.status.unwrap_or_else(|| "pending_signatures".into())
+    };
+
     PatientDocument {
         id: row.id.to_sql(),
         clinic_id: row.clinic_id.to_sql(),
@@ -190,7 +206,7 @@ pub(crate) fn map_patient_document(row: DbPatientDocumentRow) -> PatientDocument
         document_type: row.document_type.unwrap_or_else(|| "contract".into()),
         original_pdf_url: row.original_pdf_url,
         signed_pdf_url: row.signed_pdf_url,
-        status: row.status.unwrap_or_else(|| "pending_signatures".into()),
+        status: final_status,
         signing_token: row.signing_token,
         requires_patient_signature: req_pat,
         requires_doctor_signature: req_doc,

@@ -132,10 +132,13 @@ pub async fn create_treatment(
         dentist_user_id: t.dentist_user_id.map(|u| u.to_sql()),
         dentist_user_name: None,
         appointment_id: t.appointment_id.map(|a| a.to_sql()),
+        appointment_date: t.performed_at.map(|d| d.to_rfc3339()),
         document_id: t.document_id.map(|d| d.to_sql()),
         exam_id: t.exam_id.map(|e| e.to_sql()),
         treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
+        treatment_plan_item_id: t.treatment_plan_item_id,
         transaction_id: t.transaction_id.map(|x| x.to_sql()),
+        financial_status: None,
         procedure_category: t.procedure_category,
         procedure_name: t.procedure_name,
         tooth_number: t.tooth_number,
@@ -264,6 +267,32 @@ pub async fn update_treatment(
         return Err(ApiError::NotFound("Procedimento não encontrado para atualização.".into()));
     };
 
+    let clinic_rec = parse_record_id("clinic", &data.clinic_id);
+
+    // Se o procedimento passou para "completed", dispara baixa automática de estoque para os materiais
+    if data.status == "completed" || data.status == "done" {
+        for mat_name in &materials_list {
+            let trimmed = mat_name.trim();
+            if !trimmed.is_empty() {
+                let _ = db
+                    .query(
+                        "UPDATE inventory_item SET current_stock = current_stock - 1, updated_at = time::now()
+                        WHERE clinic_id = type::record($cid) AND (name = $mname OR id = type::record($mname));
+                        CREATE stock_movement SET
+                            clinic_id = type::record($cid),
+                            quantity_change = -1,
+                            movement_type = 'procedure_consumed',
+                            reason = $reason,
+                            created_at = time::now();",
+                    )
+                    .bind(("cid", clinic_rec.clone()))
+                    .bind(("mname", trimmed.to_string()))
+                    .bind(("reason", format!("Baixa automática pelo procedimento: {}", data.procedure_name)))
+                    .await;
+            }
+        }
+    }
+
     Ok(HttpResponse::Ok().json(PatientTreatment {
         id: t.id.to_sql(),
         patient_id: t.patient_id.to_sql(),
@@ -271,10 +300,13 @@ pub async fn update_treatment(
         dentist_user_id: t.dentist_user_id.map(|u| u.to_sql()),
         dentist_user_name: None,
         appointment_id: t.appointment_id.map(|a| a.to_sql()),
+        appointment_date: t.performed_at.map(|d| d.to_rfc3339()),
         document_id: t.document_id.map(|d| d.to_sql()),
         exam_id: t.exam_id.map(|e| e.to_sql()),
         treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
+        treatment_plan_item_id: t.treatment_plan_item_id,
         transaction_id: t.transaction_id.map(|x| x.to_sql()),
+        financial_status: None,
         procedure_category: t.procedure_category,
         procedure_name: t.procedure_name,
         tooth_number: t.tooth_number,

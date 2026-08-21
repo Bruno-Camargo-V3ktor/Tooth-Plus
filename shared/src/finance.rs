@@ -21,10 +21,12 @@ impl TransactionDirection {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TransactionStatus {
+    #[default]
     Pending,
+    Partial,
     Paid,
     Canceled,
     Refunded,
@@ -33,8 +35,9 @@ pub enum TransactionStatus {
 impl TransactionStatus {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Pending => "Pendente",
-            Self::Paid => "Pago",
+            Self::Pending => "Não Pago / Pendente",
+            Self::Partial => "Parcialmente Pago",
+            Self::Paid => "Pago / Liquidado",
             Self::Canceled => "Cancelado",
             Self::Refunded => "Estornado",
         }
@@ -43,11 +46,24 @@ impl TransactionStatus {
     pub fn color_class(&self) -> &'static str {
         match self {
             Self::Pending => "fin-status-pending",
+            Self::Partial => "fin-status-partial",
             Self::Paid => "fin-status-paid",
             Self::Canceled => "fin-status-canceled",
             Self::Refunded => "fin-status-refunded",
         }
     }
+}
+
+/// Registro individual de pagamento realizado (para amortização total ou parcial).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TransactionPaymentEntry {
+    pub id: String,
+    pub paid_at: String,
+    pub amount_cents: i64,
+    pub payment_method: String,
+    pub notes: Option<String>,
+    pub registered_by_user_id: Option<String>,
+    pub registered_by_user_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -63,12 +79,18 @@ pub struct Transaction {
     pub treatment_plan_id: Option<String>,
     pub direction: TransactionDirection,
     pub amount_cents: i64,
+    #[serde(default)]
+    pub paid_amount_cents: i64,
+    #[serde(default)]
+    pub remaining_amount_cents: i64,
     pub description: String,
     pub category: String,
     pub status: TransactionStatus,
     pub due_date: String,
     pub paid_date: Option<String>,
     pub payment_method: Option<String>,
+    #[serde(default)]
+    pub payments: Vec<TransactionPaymentEntry>,
     pub installment_current: i32,
     pub installment_total: i32,
     #[serde(default)]
@@ -100,6 +122,16 @@ pub struct UpdateTransactionStatusRequest {
     pub status: TransactionStatus,
     pub paid_date: Option<String>,
     pub payment_method: Option<String>,
+}
+
+/// Requisição para registrar pagamento total ou parcial com método obrigatório.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RegisterPaymentRequest {
+    pub clinic_id: String,
+    pub amount_cents: i64,
+    pub payment_method: String,
+    pub paid_date: Option<String>,
+    pub notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

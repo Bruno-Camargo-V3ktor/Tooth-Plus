@@ -150,44 +150,40 @@ pub async fn get_finance_data(
             if dir == TransactionDirection::Expense && !has_read_expense {
                 continue;
             }
-            if status == TransactionStatus::Pending && !has_read_pending {
+            if (status == TransactionStatus::Pending || status == TransactionStatus::Partial) && !has_read_pending {
                 continue;
             }
         }
 
+        let amount = row.amount_cents;
+        let paid = row.paid_amount_cents.unwrap_or_else(|| {
+            if status == TransactionStatus::Paid { amount } else { 0 }
+        });
+        let rem = (amount - paid).max(0);
+
         match status {
             TransactionStatus::Paid => match dir {
-                TransactionDirection::Income => total_income += row.amount_cents,
-                TransactionDirection::Expense => total_expense += row.amount_cents,
+                TransactionDirection::Income => total_income += amount,
+                TransactionDirection::Expense => total_expense += amount,
+            },
+            TransactionStatus::Partial => match dir {
+                TransactionDirection::Income => {
+                    total_income += paid;
+                    pending_income += rem;
+                }
+                TransactionDirection::Expense => {
+                    total_expense += paid;
+                    pending_expense += rem;
+                }
             },
             TransactionStatus::Pending => match dir {
-                TransactionDirection::Income => pending_income += row.amount_cents,
-                TransactionDirection::Expense => pending_expense += row.amount_cents,
+                TransactionDirection::Income => pending_income += amount,
+                TransactionDirection::Expense => pending_expense += amount,
             },
             _ => {}
         }
 
-        transactions.push(Transaction {
-            id: row.id.to_sql(),
-            clinic_id: row.clinic_id.to_sql(),
-            appointment_id: row.appointment_id.map(|id| id.to_sql()),
-            patient_id: row.patient_id.map(|id| id.to_sql()),
-            patient_name: None,
-            user_id: row.user_id.map(|id| id.to_sql()),
-            user_name: None,
-            treatment_plan_id: row.treatment_plan_id.map(|id| id.to_sql()),
-            direction: dir,
-            amount_cents: row.amount_cents,
-            description: row.description,
-            category: row.category,
-            status,
-            due_date: row.due_date.to_rfc3339(),
-            paid_date: row.paid_date.map(|d| d.to_rfc3339()),
-            payment_method: row.payment_method,
-            installment_current: row.installment_current,
-            installment_total: row.installment_total,
-            is_calculated_pending: false,
-        });
+        transactions.push(super::map_transaction(row, None, None));
     }
 
     if has_read_all || has_read_pending || has_read_income {
@@ -215,12 +211,15 @@ pub async fn get_finance_data(
                 treatment_plan_id: None,
                 direction: TransactionDirection::Income,
                 amount_cents: cents,
+                paid_amount_cents: 0,
+                remaining_amount_cents: cents,
                 description: format!("Consulta: {}", app.title),
                 category: "consultation".into(),
                 status: TransactionStatus::Pending,
                 due_date: app.scheduled_for.to_rfc3339(),
                 paid_date: None,
                 payment_method: None,
+                payments: vec![],
                 installment_current: 1,
                 installment_total: 1,
                 is_calculated_pending: true,

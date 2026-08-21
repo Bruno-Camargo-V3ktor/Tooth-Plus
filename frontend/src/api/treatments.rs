@@ -1,29 +1,36 @@
-//! # Cliente de API — Tratamentos Padrão e Orçamentos Clínicos
+//! # API Client para Tratamentos e Orçamentos
 //!
-//! Funções para comunicação com os endpoints de templates de tratamento
-//! e planos de tratamento / orçamentos de pacientes.
+//! Funções assíncronas para comunicação com o backend dos módulos de
+//! Catálogo de Tratamentos (Templates) e Orçamentos de Pacientes (Treatment Plans).
 
 use super::API_BASE;
 use reqwest::Client;
+
+fn get_client() -> Client {
+    Client::new()
+}
 use shared::treatments::{
     CreateTreatmentPlanRequest, CreateTreatmentTemplateRequest, PatientTreatmentPlan,
     TreatmentTemplate, UpdateTreatmentPlanRequest, UpdateTreatmentPlanStatusRequest,
     UpdateTreatmentTemplateRequest,
 };
 
-fn get_client() -> Client {
-    Client::new()
+fn clean_id(raw: &str) -> &str {
+    let s = raw.strip_prefix("patient:").unwrap_or(raw);
+    let s = s.strip_prefix("patient_treatment_plan:").unwrap_or(s);
+    let s = s.strip_prefix("clinic:").unwrap_or(s);
+    s.trim_matches(|c| c == '⟨' || c == '⟩')
 }
 
 // ─────────────────────────────────────────────────────────────
-// Treatment Templates (Catálogo da Clínica)
+// Treatment Templates (Catálogo de Procedimentos Padrão)
 // ─────────────────────────────────────────────────────────────
 
 pub async fn fetch_treatment_templates(
     token: &str,
     clinic_id: &str,
 ) -> Result<Vec<TreatmentTemplate>, String> {
-    let url = format!("{}/clinics/{}/treatment-templates", API_BASE, clinic_id);
+    let url = format!("{}/clinics/{}/treatment-templates", API_BASE, clean_id(clinic_id));
     let res = get_client()
         .get(&url)
         .header("Authorization", format!("Bearer {}", token))
@@ -36,7 +43,12 @@ pub async fn fetch_treatment_templates(
             .await
             .map_err(|e| format!("Erro ao processar catálogo de tratamentos: {}", e))
     } else {
-        Err("Não foi possível carregar os tratamentos padrão.".to_string())
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível carregar os tratamentos padrão.".to_string()
+        } else {
+            err
+        })
     }
 }
 
@@ -45,7 +57,7 @@ pub async fn create_treatment_template(
     clinic_id: &str,
     req: CreateTreatmentTemplateRequest,
 ) -> Result<TreatmentTemplate, String> {
-    let url = format!("{}/clinics/{}/treatment-templates", API_BASE, clinic_id);
+    let url = format!("{}/clinics/{}/treatment-templates", API_BASE, clean_id(clinic_id));
     let res = get_client()
         .post(&url)
         .header("Authorization", format!("Bearer {}", token))
@@ -57,9 +69,14 @@ pub async fn create_treatment_template(
     if res.status().is_success() {
         res.json::<TreatmentTemplate>()
             .await
-            .map_err(|_| "Erro ao ler resposta do servidor.".to_string())
+            .map_err(|e| format!("Erro ao ler resposta do servidor: {}", e))
     } else {
-        Err("Não foi possível salvar o tratamento padrão.".to_string())
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível salvar o tratamento padrão.".to_string()
+        } else {
+            err
+        })
     }
 }
 
@@ -71,7 +88,7 @@ pub async fn update_treatment_template(
 ) -> Result<TreatmentTemplate, String> {
     let url = format!(
         "{}/clinics/{}/treatment-templates/{}",
-        API_BASE, clinic_id, template_id
+        API_BASE, clean_id(clinic_id), clean_id(template_id)
     );
     let res = get_client()
         .put(&url)
@@ -84,9 +101,14 @@ pub async fn update_treatment_template(
     if res.status().is_success() {
         res.json::<TreatmentTemplate>()
             .await
-            .map_err(|_| "Erro ao ler resposta do servidor.".to_string())
+            .map_err(|e| format!("Erro ao ler resposta do servidor: {}", e))
     } else {
-        Err("Não foi possível atualizar o tratamento padrão.".to_string())
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível atualizar o tratamento padrão.".to_string()
+        } else {
+            err
+        })
     }
 }
 
@@ -97,7 +119,7 @@ pub async fn delete_treatment_template(
 ) -> Result<(), String> {
     let url = format!(
         "{}/clinics/{}/treatment-templates/{}",
-        API_BASE, clinic_id, template_id
+        API_BASE, clean_id(clinic_id), clean_id(template_id)
     );
     let res = get_client()
         .delete(&url)
@@ -109,7 +131,12 @@ pub async fn delete_treatment_template(
     if res.status().is_success() {
         Ok(())
     } else {
-        Err("Não foi possível excluir o tratamento padrão.".to_string())
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível excluir o tratamento padrão.".to_string()
+        } else {
+            err
+        })
     }
 }
 
@@ -124,7 +151,7 @@ pub async fn fetch_patient_treatment_plans(
 ) -> Result<Vec<PatientTreatmentPlan>, String> {
     let url = format!(
         "{}/patients/{}/treatment-plans?clinic_id={}",
-        API_BASE, patient_id, clinic_id
+        API_BASE, clean_id(patient_id), clean_id(clinic_id)
     );
     let res = get_client()
         .get(&url)
@@ -138,7 +165,12 @@ pub async fn fetch_patient_treatment_plans(
             .await
             .map_err(|e| format!("Erro ao processar orçamentos: {}", e))
     } else {
-        Err("Não foi possível obter os orçamentos do paciente.".to_string())
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível obter os orçamentos do paciente.".to_string()
+        } else {
+            err
+        })
     }
 }
 
@@ -147,7 +179,7 @@ pub async fn create_treatment_plan(
     patient_id: &str,
     req: CreateTreatmentPlanRequest,
 ) -> Result<PatientTreatmentPlan, String> {
-    let url = format!("{}/patients/{}/treatment-plans", API_BASE, patient_id);
+    let url = format!("{}/patients/{}/treatment-plans", API_BASE, clean_id(patient_id));
     let res = get_client()
         .post(&url)
         .header("Authorization", format!("Bearer {}", token))
@@ -159,9 +191,14 @@ pub async fn create_treatment_plan(
     if res.status().is_success() {
         res.json::<PatientTreatmentPlan>()
             .await
-            .map_err(|_| "Erro ao ler resposta do servidor.".to_string())
+            .map_err(|e| format!("Erro ao ler resposta do servidor: {}", e))
     } else {
-        Err("Não foi possível criar o orçamento de tratamento.".to_string())
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível criar o orçamento de tratamento.".to_string()
+        } else {
+            err
+        })
     }
 }
 
@@ -173,7 +210,7 @@ pub async fn update_treatment_plan(
 ) -> Result<PatientTreatmentPlan, String> {
     let url = format!(
         "{}/patients/{}/treatment-plans/{}",
-        API_BASE, patient_id, plan_id
+        API_BASE, clean_id(patient_id), clean_id(plan_id)
     );
     let res = get_client()
         .put(&url)
@@ -186,9 +223,14 @@ pub async fn update_treatment_plan(
     if res.status().is_success() {
         res.json::<PatientTreatmentPlan>()
             .await
-            .map_err(|_| "Erro ao ler resposta do servidor.".to_string())
+            .map_err(|e| format!("Erro ao ler resposta do servidor: {}", e))
     } else {
-        Err("Não foi possível atualizar o orçamento de tratamento.".to_string())
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível atualizar o orçamento de tratamento.".to_string()
+        } else {
+            err
+        })
     }
 }
 
@@ -200,7 +242,7 @@ pub async fn update_treatment_plan_status(
 ) -> Result<PatientTreatmentPlan, String> {
     let url = format!(
         "{}/patients/{}/treatment-plans/{}/status",
-        API_BASE, patient_id, plan_id
+        API_BASE, clean_id(patient_id), clean_id(plan_id)
     );
     let res = get_client()
         .patch(&url)
@@ -213,9 +255,14 @@ pub async fn update_treatment_plan_status(
     if res.status().is_success() {
         res.json::<PatientTreatmentPlan>()
             .await
-            .map_err(|_| "Erro ao ler resposta do servidor.".to_string())
+            .map_err(|e| format!("Erro ao ler resposta do servidor: {}", e))
     } else {
-        Err("Não foi possível atualizar o status do orçamento.".to_string())
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível atualizar o status do orçamento.".to_string()
+        } else {
+            err
+        })
     }
 }
 
@@ -227,7 +274,7 @@ pub async fn delete_treatment_plan(
 ) -> Result<(), String> {
     let url = format!(
         "{}/patients/{}/treatment-plans/{}?clinic_id={}",
-        API_BASE, patient_id, plan_id, clinic_id
+        API_BASE, clean_id(patient_id), clean_id(plan_id), clean_id(clinic_id)
     );
     let res = get_client()
         .delete(&url)
@@ -239,6 +286,43 @@ pub async fn delete_treatment_plan(
     if res.status().is_success() {
         Ok(())
     } else {
-        Err("Não foi possível excluir o orçamento de tratamento.".to_string())
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível excluir o orçamento de tratamento.".to_string()
+        } else {
+            err
+        })
+    }
+}
+
+pub async fn pay_treatment_plan(
+    token: &str,
+    patient_id: &str,
+    plan_id: &str,
+    req: shared::finance::RegisterPaymentRequest,
+) -> Result<PatientTreatmentPlan, String> {
+    let url = format!(
+        "{}/patients/{}/treatment-plans/{}/pay",
+        API_BASE, clean_id(patient_id), clean_id(plan_id)
+    );
+    let res = get_client()
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Sem conexão com o servidor ao registrar pagamento do orçamento.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<PatientTreatmentPlan>()
+            .await
+            .map_err(|e| format!("Erro ao ler resposta do pagamento: {}", e))
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Não foi possível registrar o pagamento do orçamento.".into()
+        } else {
+            err
+        })
     }
 }

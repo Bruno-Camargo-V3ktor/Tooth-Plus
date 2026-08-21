@@ -73,18 +73,22 @@ pub fn TransactionsTableSection(
                     let tx_clone_del = tx.clone();
                     let is_income = tx.direction == TransactionDirection::Income;
                     let is_pending = tx.status == TransactionStatus::Pending;
+                    let is_partial = tx.status == TransactionStatus::Partial;
+                    let can_settle_now = is_pending || is_partial;
                     let val_prefix = if is_income { "+ " } else { "- " };
                     let amount_color_cls = if is_income { "text-success" } else { "text-danger" };
 
                     let status_cls = match tx.status {
                         TransactionStatus::Paid => "status-paid",
+                        TransactionStatus::Partial => "status-pending",
                         TransactionStatus::Pending => "status-pending",
                         TransactionStatus::Canceled => "status-canceled",
                         TransactionStatus::Refunded => "status-refunded",
                     };
                     let status_label = match tx.status {
                         TransactionStatus::Paid => "Liquidado",
-                        TransactionStatus::Pending => "Pendente",
+                        TransactionStatus::Partial => "Parcialmente Pago",
+                        TransactionStatus::Pending => "Não Pago / Pendente",
                         TransactionStatus::Canceled => "Cancelado",
                         TransactionStatus::Refunded => "Estornado",
                     };
@@ -154,13 +158,13 @@ pub fn TransactionsTableSection(
                                     span { class: "fin-status-pill {status_cls}", "{status_label}" }
                                 }
                                 div { class: "fin-card-actions",
-                                    if is_pending && can_update_status {
+                                    if can_settle_now && can_update_status {
                                         button {
                                             class: "btn-liquidar-action",
-                                            title: "Confirmar recebimento / pagamento",
+                                            title: "Registrar pagamento / liquidação",
                                             onclick: move |_| on_settle.call(tx_clone.clone()),
                                             IconCheck { size: 14, color: "currentColor".to_string() }
-                                            span { " Liquidar" }
+                                            span { if is_partial { " Pagar Saldo" } else { " Liquidar" } }
                                         }
                                     }
                                     if can_delete {

@@ -110,6 +110,10 @@ pub struct AppointmentResponse {
     pub clinic_id: String,
     pub patient_id: Option<String>,
     pub patient_name: Option<String>,
+    #[serde(default)]
+    pub treatment_id: Option<String>,
+    #[serde(default)]
+    pub treatment_plan_id: Option<String>,
     pub title: String,
     pub scheduled_for: String,
     pub duration_minutes: i32,
@@ -129,6 +133,10 @@ pub struct CreateAppointmentRequest {
     pub clinic_id: String,
     pub patient_id: Option<String>,
     pub patient_name: Option<String>,
+    #[serde(default)]
+    pub treatment_id: Option<String>,
+    #[serde(default)]
+    pub treatment_plan_id: Option<String>,
     pub title: String,
     pub scheduled_for: String,
     pub duration_minutes: i32,
@@ -149,6 +157,10 @@ pub struct UpdateAppointmentRequest {
     pub appointment_type: Option<AppointmentType>,
     pub patient_id: Option<String>,
     pub patient_name: Option<String>,
+    #[serde(default)]
+    pub treatment_id: Option<String>,
+    #[serde(default)]
+    pub treatment_plan_id: Option<String>,
     pub financial_amount_cents: Option<i64>,
     pub financial_type: Option<String>,
     pub notes: Option<String>,
@@ -171,10 +183,25 @@ pub struct AgendaResourceOption {
     pub extra_info: Option<String>,
 }
 
+/// Procedimento pendente disponível para agendamento na agenda.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct AgendaTreatmentOption {
+    pub id: String,
+    pub patient_id: String,
+    pub patient_name: String,
+    pub procedure_name: String,
+    pub category: Option<String>,
+    pub tooth_number: Option<String>,
+    pub cost_cents: i64,
+    pub treatment_plan_id: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct AgendaResourcesResponse {
     pub team_members: Vec<AgendaResourceOption>,
     pub patients: Vec<AgendaResourceOption>,
     pub inventory_items: Vec<AgendaResourceOption>,
     pub equipment_items: Vec<AgendaResourceOption>,
+    #[serde(default)]
+    pub pending_treatments: Vec<AgendaTreatmentOption>,
 }

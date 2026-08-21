@@ -98,6 +98,7 @@ pub fn AgendaView() -> Element {
                     patients: vec![],
                     inventory_items: vec![],
                     equipment_items: vec![],
+                    pending_treatments: vec![],
                 }
             } else {
                 fetch_agenda_resources(&t, &cid).await.unwrap_or(AgendaResourcesResponse {
@@ -105,6 +106,7 @@ pub fn AgendaView() -> Element {
                     patients: vec![],
                     inventory_items: vec![],
                     equipment_items: vec![],
+                    pending_treatments: vec![],
                 })
             }
         }
@@ -116,6 +118,7 @@ pub fn AgendaView() -> Element {
         patients: vec![],
         inventory_items: vec![],
         equipment_items: vec![],
+        pending_treatments: vec![],
     });
 
     let s_query = search_query().to_lowercase();

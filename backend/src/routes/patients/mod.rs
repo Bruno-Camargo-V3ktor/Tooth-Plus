@@ -26,10 +26,15 @@ use surrealdb::types::{RecordId, SurrealValue, ToSql};
 pub(crate) fn parse_record_id(table: &str, raw: &str) -> RecordId {
     let key = if let Some(stripped) = raw.strip_prefix(&format!("{}:", table)) {
         stripped
+    } else if let Some(stripped) = raw.strip_prefix(&format!("{}s:", table)) {
+        stripped
+    } else if let Some(pos) = raw.find(':') {
+        &raw[pos + 1..]
     } else {
         raw
     };
-    RecordId::new(table, key)
+    let clean_key = key.trim_matches(|c| c == '⟨' || c == '⟩');
+    RecordId::new(table, clean_key)
 }
 
 /// Normaliza o ID da clínica para o formato prefixado `clinic:UUID`.
@@ -140,6 +145,8 @@ pub(crate) struct DbTreatmentRow {
     pub document_id: Option<RecordId>,
     pub exam_id: Option<RecordId>,
     pub treatment_plan_id: Option<RecordId>,
+    #[serde(default)]
+    pub treatment_plan_item_id: Option<String>,
     pub transaction_id: Option<RecordId>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,

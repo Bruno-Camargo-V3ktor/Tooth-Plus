@@ -230,12 +230,20 @@ pub struct PatientTreatment {
     pub dentist_user_id: Option<String>,
     pub dentist_user_name: Option<String>,
     pub appointment_id: Option<String>,
+    #[serde(default)]
+    pub appointment_date: Option<String>,
     pub document_id: Option<String>,
     pub exam_id: Option<String>,
     /// Vínculo com o plano/orçamento de tratamento gerador.
     pub treatment_plan_id: Option<String>,
+    /// Vínculo com o item individual do orçamento.
+    #[serde(default)]
+    pub treatment_plan_item_id: Option<String>,
     /// ID da transação financeira vinculada.
     pub transaction_id: Option<String>,
+    /// Status financeiro herdado do orçamento pai ou transação: "unpaid", "partial", "paid".
+    #[serde(default)]
+    pub financial_status: Option<String>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,
@@ -258,6 +266,8 @@ pub struct CreatePatientTreatmentRequest {
     pub document_id: Option<String>,
     pub exam_id: Option<String>,
     pub treatment_plan_id: Option<String>,
+    #[serde(default)]
+    pub treatment_plan_item_id: Option<String>,
     pub transaction_id: Option<String>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,
@@ -280,6 +290,8 @@ pub struct UpdatePatientTreatmentRequest {
     pub document_id: Option<String>,
     pub exam_id: Option<String>,
     pub treatment_plan_id: Option<String>,
+    #[serde(default)]
+    pub treatment_plan_item_id: Option<String>,
     pub transaction_id: Option<String>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,

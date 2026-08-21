@@ -24,6 +24,31 @@ pub const ALL_PERMISSION_GROUPS: &[PermGroup] = &[
         ],
     },
     PermGroup {
+        label: "Módulo: Orçamentos & Planos Clínicos",
+        items: &[
+            ("treatment_plans:read", "Visualizar Orçamentos e Propostas"),
+            ("treatment_plans:write", "Criar, Editar e Aprovar Orçamentos"),
+            ("treatment_plans:delete", "Excluir Orçamentos"),
+            ("treatment_plans:pay", "Registrar Pagamentos / Amortização de Orçamentos"),
+        ],
+    },
+    PermGroup {
+        label: "Módulo: Procedimentos e Evolução",
+        items: &[
+            ("treatments:read", "Visualizar Histórico de Procedimentos"),
+            ("treatments:write", "Registrar e Evoluir Procedimentos"),
+            ("treatments:delete", "Excluir Registros de Procedimentos"),
+        ],
+    },
+    PermGroup {
+        label: "Módulo: Catálogo de Tratamentos (Templates)",
+        items: &[
+            ("treatment_templates:read", "Visualizar Catálogo de Tratamentos"),
+            ("treatment_templates:write", "Criar e Editar Templates de Tratamentos"),
+            ("treatment_templates:delete", "Excluir Templates do Catálogo"),
+        ],
+    },
+    PermGroup {
         label: "Módulo: Anamnese Clínica",
         items: &[
             ("anamnese:read", "Visualizar Ficha de Anamnese"),
@@ -38,14 +63,6 @@ pub const ALL_PERMISSION_GROUPS: &[PermGroup] = &[
             ("exams:upload", "Enviar e Anexar Novos Exames"),
             ("exams:edit", "Editar Laudos e Diagnósticos"),
             ("exams:delete", "Excluir Exames"),
-        ],
-    },
-    PermGroup {
-        label: "Módulo: Procedimentos e Evolução",
-        items: &[
-            ("treatments:read", "Visualizar Histórico de Procedimentos"),
-            ("treatments:write", "Registrar e Evoluir Procedimentos"),
-            ("treatments:delete", "Excluir Registros de Procedimentos"),
         ],
     },
     PermGroup {
@@ -126,6 +143,10 @@ pub fn has_permission(session: &SessionState, active: &ActiveClinicState, perm: 
         Some(perm.replace("appointments:", "agenda:"))
     } else if perm.starts_with("agenda:") {
         Some(perm.replace("agenda:", "appointments:"))
+    } else if perm.starts_with("treatment_plans:") {
+        Some(perm.replace("treatment_plans:", "treatments:"))
+    } else if perm.starts_with("treatment_templates:") {
+        Some(perm.replace("treatment_templates:", "treatments:"))
     } else if perm == "finance:read" {
         Some("finance:read_all".to_string())
     } else if perm == "finance:write" {
@@ -143,6 +164,9 @@ pub fn has_permission(session: &SessionState, active: &ActiveClinicState, perm: 
             || (perm == "finance:read_pending" && (p == "finance:read_all" || p == "finance:read"))
             || (perm == "finance:write_income" && p == "finance:write")
             || (perm == "finance:write_expense" && p == "finance:write")
+            || (perm.starts_with("treatments:") && p == "patients:write")
+            || (perm.starts_with("treatment_plans:") && (p == "treatments:write" || p == "patients:write"))
+            || (perm.starts_with("treatment_templates:") && (p == "treatments:write" || p == "patients:write"))
     })
 }
 
@@ -153,4 +177,3 @@ pub fn has_any_permission(
 ) -> bool {
     perms.iter().any(|p| has_permission(session, active, p))
 }
-

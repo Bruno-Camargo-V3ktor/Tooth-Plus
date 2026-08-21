@@ -51,10 +51,15 @@ fn clinic_record_id(id: &str) -> String {
 fn parse_record_id(table: &str, raw: &str) -> RecordId {
     let key = if let Some(stripped) = raw.strip_prefix(&format!("{}:", table)) {
         stripped
+    } else if let Some(stripped) = raw.strip_prefix(&format!("{}s:", table)) {
+        stripped
+    } else if let Some(pos) = raw.find(':') {
+        &raw[pos + 1..]
     } else {
         raw
     };
-    RecordId::new(table, key)
+    let clean_key = key.trim_matches(|c| c == '⟨' || c == '⟩');
+    RecordId::new(table, clean_key)
 }
 
 #[post("/users")]

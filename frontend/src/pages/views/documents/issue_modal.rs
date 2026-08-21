@@ -26,9 +26,16 @@ pub fn IssueDocumentModal(
     toast_msg: Signal<Option<String>>,
     error_toast: Signal<Option<String>>,
     qr_modal_doc: Signal<Option<PatientDocument>>,
+    #[props(default)]
+    preselected_patient_id: Option<String>,
+    #[props(default)]
+    preselected_patient_name: Option<String>,
+    #[props(default)]
+    on_document_created: Option<EventHandler<()>>,
 ) -> Element {
     let mut emit_mode = use_signal(|| "request_sign".to_string()); // "request_sign" | "upload_signed"
-    let mut emit_patient_id = use_signal(String::new);
+    let initial_pid = preselected_patient_id.clone().unwrap_or_default();
+    let mut emit_patient_id = use_signal(move || initial_pid.clone());
     let mut emit_doctor_id = use_signal(String::new);
     let mut emit_template_id = use_signal(String::new);
     let mut emit_doc_title = use_signal(String::new);
@@ -153,11 +160,15 @@ pub fn IssueDocumentModal(
         let mut sub_sig = is_submitting;
 
         sub_sig.set(true);
+        let on_created_cb = on_document_created.clone();
         spawn(async move {
             match create_patient_document(&t, req).await {
                 Ok(doc) => {
                     open_sig.set(false);
                     rel_sig.set(rel_sig() + 1);
+                    if let Some(ref cb) = on_created_cb {
+                        cb.call(());
+                    }
                     if is_upload_mode {
                         toast.set(Some("Documento assinado arquivado com sucesso!".into()));
                     } else {
@@ -201,35 +212,48 @@ pub fn IssueDocumentModal(
                 }
 
                 div { class: "modal-body",
-                    div { class: "form-group",
-                        label { class: "form-label", "Paciente do Documento *" }
-                        select {
-                            class: "select-field",
-                            value: "{emit_patient_id}",
-                            onchange: {
-                                let p_list = patients.clone();
-                                let t_list = templates.clone();
-                                move |e| {
-                                    let val = e.value();
-                                    emit_patient_id.set(val.clone());
-                                    if let Some(p) = p_list.iter().find(|p| p.id == val) {
-                                        selected_patient_obj.set(Some(p.clone()));
-                                        if !emit_template_id().is_empty() {
-                                            if let Some(t) = t_list.iter().find(|t| t.id == emit_template_id()) {
-                                                emit_doc_title.set(format!("{} - {}", t.title, p.full_name));
-                                            }
-                                        }
-                                    } else {
-                                        selected_patient_obj.set(None);
-                                    }
+                    if let Some(ref p_name) = preselected_patient_name {
+                        div { class: "form-group",
+                            label { class: "form-label", "Paciente do Documento" }
+                            div { style: "padding: 10px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; display: flex; align-items: center; gap: 10px;",
+                                IconUsers { size: 18, color: "#0052cc".to_string() }
+                                div {
+                                    strong { style: "color: #1e3a8a; font-size: 13.5px;", "{p_name}" }
+                                    span { style: "color: #3b82f6; font-size: 11.5px; display: block;", "Prontuário ativo • Documento vinculado diretamente" }
                                 }
-                            },
-                            option { value: "", "Selecione o paciente cadastrado..." }
-                            for p in &patients {
-                                {
-                                    let doc_lbl = p.document_cpf.as_deref().unwrap_or(p.document_rg.as_deref().unwrap_or("-"));
-                                    rsx! {
-                                        option { value: "{p.id}", "{p.full_name} ({doc_lbl})" }
+                            }
+                        }
+                    } else {
+                        div { class: "form-group",
+                            label { class: "form-label", "Paciente do Documento *" }
+                            select {
+                                class: "select-field",
+                                value: "{emit_patient_id}",
+                                onchange: {
+                                    let p_list = patients.clone();
+                                    let t_list = templates.clone();
+                                    move |e| {
+                                        let val = e.value();
+                                        emit_patient_id.set(val.clone());
+                                        if let Some(p) = p_list.iter().find(|p| p.id == val) {
+                                            selected_patient_obj.set(Some(p.clone()));
+                                            if !emit_template_id().is_empty() {
+                                                if let Some(t) = t_list.iter().find(|t| t.id == emit_template_id()) {
+                                                    emit_doc_title.set(format!("{} - {}", t.title, p.full_name));
+                                                }
+                                            }
+                                        } else {
+                                            selected_patient_obj.set(None);
+                                        }
+                                    }
+                                },
+                                option { value: "", "Selecione o paciente cadastrado..." }
+                                for p in &patients {
+                                    {
+                                        let doc_lbl = p.document_cpf.as_deref().unwrap_or(p.document_rg.as_deref().unwrap_or("-"));
+                                        rsx! {
+                                            option { value: "{p.id}", "{p.full_name} ({doc_lbl})" }
+                                        }
                                     }
                                 }
                             }
@@ -245,20 +269,26 @@ pub fn IssueDocumentModal(
                                 value: "{emit_template_id}",
                                 onchange: {
                                     let t_list = templates.clone();
+                                    let p_name_opt = preselected_patient_name.clone();
                                     move |e| {
                                         let val = e.value();
                                         emit_template_id.set(val.clone());
                                         if let Some(t) = t_list.iter().find(|t| t.id == val) {
-                                            if let Some(ref p) = *selected_patient_obj.read() {
-                                                emit_doc_title.set(format!("{} - {}", t.title, p.full_name));
+                                            let p_name = if let Some(ref p) = *selected_patient_obj.read() {
+                                                p.full_name.clone()
+                                            } else if let Some(ref pn) = p_name_opt {
+                                                pn.clone()
                                             } else {
-                                                emit_doc_title.set(t.title.clone());
-                                            }
+                                                "Paciente".to_string()
+                                            };
+                                            emit_doc_title.set(format!("{} - {}", t.title, p_name));
                                             emit_doc_type.set(t.category.clone());
                                             req_patient_sign.set(t.requires_patient_signature);
                                             req_doctor_sign.set(t.requires_doctor_signature);
                                             if !t.allow_any_dentist_signature {
                                                 dentist_sign_mode.set("specific".into());
+                                            } else {
+                                                dentist_sign_mode.set("any".into());
                                             }
                                         }
                                     }

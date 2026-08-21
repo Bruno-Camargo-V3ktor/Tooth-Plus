@@ -169,6 +169,9 @@ pub fn FinanceView() -> Element {
 
     let mut is_settle_modal_open = use_signal(|| false);
     let mut settle_target_tx = use_signal(|| None::<Transaction>);
+    let mut settle_amount_input = use_signal(String::new);
+    let mut settle_payment_method = use_signal(|| "Pix".to_string());
+    let mut settle_notes = use_signal(String::new);
     let mut is_settling = use_signal(|| false);
 
     let mut is_delete_modal_open = use_signal(|| false);
@@ -260,27 +263,54 @@ pub fn FinanceView() -> Element {
         let Some(ref tx) = *settle_target_tx.read() else {
             return;
         };
+        let method = settle_payment_method().trim().to_string();
+        if method.is_empty() {
+            let mut err = error_toast;
+            err.set(Some("Escolha um método de pagamento obrigatório.".into()));
+            return;
+        }
+
+        let clean_val = settle_amount_input()
+            .replace("R$", "")
+            .replace(".", "")
+            .replace(",", ".")
+            .trim()
+            .to_string();
+
+        let amount_float: f64 = match clean_val.parse() {
+            Ok(v) if v > 0.0 => v,
+            _ => {
+                let mut err = error_toast;
+                err.set(Some("Informe um valor de liquidação válido maior que zero.".into()));
+                return;
+            }
+        };
+
+        let amount_cents = (amount_float * 100.0).round() as i64;
         let tx_id = tx.id.clone();
         let t = tok_set.clone();
         let c = cid_set.clone();
+        let notes_val = if settle_notes().trim().is_empty() { None } else { Some(settle_notes().trim().to_string()) };
+        let mut is_set = is_settling;
         let mut open_sig = is_settle_modal_open;
         let mut rel_sig = reload_counter;
-        let mut is_set = is_settling;
         let mut toast = toast_msg;
         let mut err_sig = error_toast;
 
         is_set.set(true);
         spawn(async move {
-            let req = UpdateTransactionStatusRequest {
-                status: TransactionStatus::Paid,
-                paid_date: Some(chrono::Local::now().to_rfc3339()),
-                payment_method: Some("Pix".to_string()),
+            let req = shared::finance::RegisterPaymentRequest {
+                clinic_id: c,
+                amount_cents,
+                payment_method: method,
+                paid_date: Some(chrono::Utc::now().to_rfc3339()),
+                notes: notes_val,
             };
-            match update_transaction_status(&t, &c, &tx_id, req).await {
+            match crate::api::finance::register_transaction_payment(&t, &tx_id, req).await {
                 Ok(_) => {
                     open_sig.set(false);
                     rel_sig.set(rel_sig() + 1);
-                    toast.set(Some("Lançamento liquidado!".into()));
+                    toast.set(Some("Pagamento / liquidação registrada com sucesso!".into()));
                 }
                 Err(e) => {
                     err_sig.set(Some(format!("Erro ao liquidar lançamento: {}", e)));
@@ -774,6 +804,17 @@ pub fn FinanceView() -> Element {
                             can_update_status,
                             can_delete,
                             on_settle: move |tx: Transaction| {
+                                let rem_cents = if tx.remaining_amount_cents > 0 {
+                                    tx.remaining_amount_cents
+                                } else if tx.paid_amount_cents == 0 {
+                                    tx.amount_cents
+                                } else {
+                                    (tx.amount_cents - tx.paid_amount_cents).max(0)
+                                };
+                                let val_reals = (rem_cents as f64) / 100.0;
+                                settle_amount_input.set(format!("{:.2}", val_reals));
+                                settle_payment_method.set(tx.payment_method.clone().unwrap_or_else(|| "Pix".to_string()));
+                                settle_notes.set(String::new());
                                 settle_target_tx.set(Some(tx));
                                 is_settle_modal_open.set(true);
                             },
@@ -803,29 +844,98 @@ pub fn FinanceView() -> Element {
 
             if is_settle_modal_open() {
                 if let Some(ref tx) = *settle_target_tx.read() {
-                    div { class: "modal-overlay",
-                        div { class: "action-modal modal-small settle-modal-card",
-                            div { class: "settings-header",
-                                h2 { class: "settings-title text-primary", "Liquidar Movimentação" }
-                                button { class: "close-btn", onclick: move |_| is_settle_modal_open.set(false), "×" }
-                            }
-                            div { class: "settings-content",
-                                div { class: "fin-settle-info-card",
-                                    div { class: "fin-settle-desc", "{tx.description}" }
-                                    div { class: "fin-settle-val", "{format_currency(tx.amount_cents)}" }
-                                    div { class: "fin-settle-cat", "{format_category_display(&tx.category)}" }
-                                }
-                                div { class: "alert-banner alert-info mt-3",
-                                    span { "Confirmar a liquidação deste valor registrará a entrada/saída imediatamente no saldo da clínica." }
-                                }
-                            }
-                            div { class: "modal-footer-actions",
-                                button { class: "btn-secondary", onclick: move |_| is_settle_modal_open.set(false), "Cancelar" }
-                                button {
-                                    class: "btn-primary",
-                                    disabled: is_settling(),
-                                    onclick: move |e| handle_settle(e),
-                                    if is_settling() { "Liquidando..." } else { "Confirmar Liquidação" }
+                    {
+                        let total_cents = tx.amount_cents;
+                        let paid_cents = tx.paid_amount_cents;
+                        let rem_cents = if tx.remaining_amount_cents > 0 { tx.remaining_amount_cents } else { (total_cents - paid_cents).max(0) };
+
+                        rsx! {
+                            div { class: "modal-overlay",
+                                div { class: "action-modal modal-small settle-modal-card", style: "max-width: 480px;",
+                                    div { class: "settings-header",
+                                        h2 { class: "settings-title text-primary", "Liquidar / Receber Movimentação" }
+                                        button { class: "close-btn", onclick: move |_| is_settle_modal_open.set(false), "×" }
+                                    }
+                                    div { class: "settings-content",
+                                        div { class: "fin-settle-info-card mb-3",
+                                            div { class: "fin-settle-desc font-semibold text-slate-800", "{tx.description}" }
+                                            div { class: "flex justify-between items-center mt-2 text-xs text-muted",
+                                                span { "Categoria:" }
+                                                span { "{format_category_display(&tx.category)}" }
+                                            }
+                                            div { class: "flex justify-between items-center mt-1 text-xs text-muted",
+                                                span { "Valor Total:" }
+                                                strong { "{format_currency(total_cents)}" }
+                                            }
+                                            if paid_cents > 0 {
+                                                div { class: "flex justify-between items-center mt-1 text-xs text-success",
+                                                    span { "Já Pago:" }
+                                                    strong { "{format_currency(paid_cents)}" }
+                                                }
+                                            }
+                                            div { class: "flex justify-between items-center mt-2 pt-2 border-t font-semibold text-sm",
+                                                span { "Saldo a Liquidar:" }
+                                                span { class: "text-primary text-base", "{format_currency(rem_cents)}" }
+                                            }
+                                        }
+
+                                        div { class: "form-group mb-3",
+                                            label { class: "form-label font-xs font-semibold", "Valor do Pagamento (R$) *" }
+                                            div { class: "flex gap-2",
+                                                input {
+                                                    r#type: "text",
+                                                    class: "input-field font-mono",
+                                                    value: "{settle_amount_input}",
+                                                    oninput: move |e| settle_amount_input.set(e.value()),
+                                                    placeholder: "0.00",
+                                                }
+                                                button {
+                                                    class: "btn-secondary btn-sm",
+                                                    r#type: "button",
+                                                    onclick: move |_| {
+                                                        let val = (rem_cents as f64) / 100.0;
+                                                        settle_amount_input.set(format!("{:.2}", val));
+                                                    },
+                                                    "Totalidade"
+                                                }
+                                            }
+                                        }
+
+                                        div { class: "form-group mb-3",
+                                            label { class: "form-label font-xs font-semibold", "Método de Pagamento (Obrigatório) *" }
+                                            select {
+                                                class: "select-field",
+                                                value: "{settle_payment_method}",
+                                                onchange: move |e| settle_payment_method.set(e.value()),
+                                                option { value: "Pix", "Pix" }
+                                                option { value: "Cartão de Crédito", "Cartão de Crédito" }
+                                                option { value: "Cartão de Débito", "Cartão de Débito" }
+                                                option { value: "Dinheiro", "Dinheiro" }
+                                                option { value: "Boleto Bancário", "Boleto Bancário" }
+                                                option { value: "Transferência TED/DOC", "Transferência TED/DOC" }
+                                            }
+                                        }
+
+                                        div { class: "form-group mb-2",
+                                            label { class: "form-label font-xs", "Observações / Comprovante" }
+                                            input {
+                                                r#type: "text",
+                                                class: "input-field",
+                                                placeholder: "Ex: Comprovante Pix #1234, terminal 2...",
+                                                value: "{settle_notes}",
+                                                oninput: move |e| settle_notes.set(e.value()),
+                                            }
+                                        }
+                                    }
+                                    div { class: "modal-footer-actions",
+                                        button { class: "btn-secondary", onclick: move |_| is_settle_modal_open.set(false), "Cancelar" }
+                                        button {
+                                            class: "btn-primary",
+                                            disabled: is_settling(),
+                                            onclick: move |e| handle_settle(e),
+                                            if is_settling() { "Liquidando..." } else { "Confirmar Liquidação" }
+                                        }
+                                    }
                                 }
                             }
                         }

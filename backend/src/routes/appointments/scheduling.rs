@@ -179,6 +179,8 @@ pub async fn list_appointments(
             clinic_id: app.clinic_id.to_sql(),
             patient_id: app.patient_id.map(|p| p.to_sql()),
             patient_name: app.patient_name,
+            treatment_id: None,
+            treatment_plan_id: None,
             title: app.title,
             scheduled_for: app.scheduled_for.to_rfc3339(),
             duration_minutes: app.duration_minutes,
@@ -341,6 +343,23 @@ pub async fn create_appointment(
                 .await
                 .map_err(|_| ApiError::Database("Falha ao alocar equipamento.".into()))?;
         }
+    }
+
+    // Se vinculado a um procedimento do prontuário, atualiza status para agendado e associa ID da consulta
+    if let Some(ref treat_id) = data.treatment_id {
+        let treat_rec = parse_record_id("patient_treatment", treat_id);
+        let _ = db
+            .query(
+                "UPDATE type::record($tid) SET
+                appointment_id = $aid,
+                status = 'scheduled',
+                performed_at = $perf,
+                updated_at = time::now();",
+            )
+            .bind(("tid", treat_rec))
+            .bind(("aid", new_app_id.clone()))
+            .bind(("perf", parsed_dt))
+            .await;
     }
 
     Ok(HttpResponse::Created().json(serde_json::json!({

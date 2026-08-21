@@ -1,17 +1,32 @@
 //! # Recursos e Opções do Calendário de Atendimento (Backend)
 //!
-//! Fornece membros da equipe, pacientes cadastrados e insumos odontológicos
-//! para preenchimento ágil de formulários e filtros de agenda.
+//! Fornece membros da equipe, pacientes cadastrados, insumos odontológicos
+//! e procedimentos clínicos pendentes para vinculação direta nos agendamentos.
 
 use super::{clinic_record_id, ClinicQuery, DbResourceRecord};
 use crate::db::Db;
 use crate::error::ApiError;
 use crate::security::auth_guard::{check_permission, AuthenticatedUser};
 use actix_web::{get, web, HttpResponse};
-use shared::appointments::{AgendaResourceOption, AgendaResourcesResponse};
-use surrealdb::types::ToSql;
+use serde::Deserialize;
+use shared::appointments::{
+    AgendaResourceOption, AgendaResourcesResponse, AgendaTreatmentOption,
+};
+use surrealdb::types::{RecordId, SurrealValue, ToSql};
 
-/// Retorna listas de profissionais, pacientes e itens de estoque para alimentar os seletores da agenda.
+#[derive(Deserialize, SurrealValue)]
+struct DbPendingTreatRow {
+    id: RecordId,
+    patient_id: RecordId,
+    patient_name: Option<String>,
+    procedure_name: String,
+    procedure_category: Option<String>,
+    tooth_number: Option<String>,
+    cost_cents: Option<i64>,
+    treatment_plan_id: Option<RecordId>,
+}
+
+/// Retorna listas de profissionais, pacientes, itens de estoque e procedimentos pendentes.
 #[get("/appointments/resources")]
 pub async fn get_agenda_resources(
     auth: AuthenticatedUser,
@@ -122,10 +137,50 @@ pub async fn get_agenda_resources(
         })
         .collect();
 
+    let mut treats_resp = db
+        .query(
+            "SELECT
+                id,
+                patient_id,
+                patient_id.full_name AS patient_name,
+                procedure_name,
+                procedure_category,
+                tooth_number,
+                cost_cents,
+                treatment_plan_id
+            FROM patient_treatment
+            WHERE clinic_id = type::record($clinic_id)
+            AND (status = 'pending' OR status = 'planned')
+            ORDER BY created_at DESC",
+        )
+        .bind(("clinic_id", clinic_rec.clone()))
+        .await;
+
+    let treats_raw: Vec<DbPendingTreatRow> = treats_resp
+        .as_mut()
+        .ok()
+        .and_then(|r| r.take::<Vec<DbPendingTreatRow>>(0).ok())
+        .unwrap_or_default();
+
+    let pending_treatments = treats_raw
+        .into_iter()
+        .map(|t| AgendaTreatmentOption {
+            id: t.id.to_sql(),
+            patient_id: t.patient_id.to_sql(),
+            patient_name: t.patient_name.unwrap_or_else(|| "Paciente".into()),
+            procedure_name: t.procedure_name,
+            category: t.procedure_category,
+            tooth_number: t.tooth_number,
+            cost_cents: t.cost_cents.unwrap_or(0),
+            treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
+        })
+        .collect();
+
     Ok(HttpResponse::Ok().json(AgendaResourcesResponse {
         team_members,
         patients,
         inventory_items,
         equipment_items,
+        pending_treatments,
     }))
 }

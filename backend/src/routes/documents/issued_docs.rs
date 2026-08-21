@@ -70,10 +70,18 @@ pub async fn list_documents(
     let mut signed_cnt = 0;
 
     for row in raw_docs {
+        let is_anam = row.document_type.as_deref() == Some("anamnesis");
+        let req_pat = if is_anam { true } else { row.requires_patient_signature.unwrap_or(true) };
+        let req_doc = if is_anam { false } else { row.requires_doctor_signature.unwrap_or(false) };
+        let pat_ok = !req_pat || row.patient_signed_at.is_some();
+        let doc_ok = !req_doc || row.doctor_signed_at.is_some();
+        let has_sign = row.patient_signed_at.is_some() || row.doctor_signed_at.is_some();
         let st = row.status.as_deref().unwrap_or("pending_signatures");
-        if st == "signed" || st == "completed" {
+
+        let is_completed = st == "signed" || st == "completed" || (pat_ok && doc_ok && (req_pat || req_doc) && has_sign);
+        if is_completed {
             signed_cnt += 1;
-        } else if st == "pending_signatures" {
+        } else {
             pending_cnt += 1;
         }
         docs.push(map_patient_document(row));

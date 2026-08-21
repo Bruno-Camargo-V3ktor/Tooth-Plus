@@ -97,6 +97,12 @@ pub fn AppointmentModal(
             .unwrap_or_default()
     });
 
+    let mut selected_treatment_id = use_signal(|| {
+        editing_appointment
+            .as_ref()
+            .and_then(|a| a.treatment_id.clone())
+    });
+
     let mut assigned_users = use_signal(|| {
         if let Some(ref a) = editing_appointment {
             a.assigned_users.clone()
@@ -225,6 +231,8 @@ pub fn AppointmentModal(
                     } else {
                         Some(patient_name())
                     },
+                    treatment_id: selected_treatment_id(),
+                    treatment_plan_id: None,
                     title: Some(title()),
                     scheduled_for: Some(scheduled_for),
                     duration_minutes: Some(duration_minutes()),
@@ -260,6 +268,8 @@ pub fn AppointmentModal(
                     } else {
                         Some(patient_name())
                     },
+                    treatment_id: selected_treatment_id(),
+                    treatment_plan_id: None,
                     title: title(),
                     scheduled_for,
                     duration_minutes: duration_minutes(),
@@ -430,7 +440,44 @@ pub fn AppointmentModal(
                             }
                         }
 
-                        // 4. Paciente Vinculado
+                        // 4. Seletor de Procedimento Pendente do Prontuário (Destaque Principal)
+                        div { class: "input-group-wrapper full-width", style: "background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px; margin-bottom: 4px;",
+                            label { class: "font-semibold text-emerald-900 flex items-center gap-1", "Procedimento Pendente do Prontuário" }
+                            span { class: "text-xs text-emerald-700 block mb-2",
+                                "Selecione um procedimento pendente para auto-preencher o paciente, título, valor e sincronizar o status."
+                            }
+                            select {
+                                class: "modern-input-field modern-select",
+                                value: selected_treatment_id().unwrap_or_default(),
+                                onchange: move |e: FormEvent| {
+                                    let v = e.value();
+                                    if v.is_empty() {
+                                        selected_treatment_id.set(None);
+                                    } else {
+                                        if let Some(treat) = resources.pending_treatments.iter().find(|t| t.id == v) {
+                                            selected_treatment_id.set(Some(treat.id.clone()));
+                                            patient_id.set(Some(treat.patient_id.clone()));
+                                            patient_name.set(treat.patient_name.clone());
+                                            title.set(format!("{} - {}", treat.procedure_name, treat.patient_name));
+                                            app_type.set(AppointmentType::Treatment);
+                                            if can_finance && treat.cost_cents > 0 {
+                                                financial_amount_str.set(format!("{:.2}", (treat.cost_cents as f64) / 100.0));
+                                            }
+                                        }
+                                    }
+                                },
+                                option { value: "", "Nenhum (Consulta Geral / Avulsa)" }
+                                for t in &resources.pending_treatments {
+                                    option { key: "{t.id}", value: "{t.id}",
+                                        "[{t.patient_name}] {t.procedure_name}"
+                                        if let Some(ref d) = t.tooth_number { " (Dente {d})" }
+                                        " - R$ {(t.cost_cents as f64) / 100.0:.2}"
+                                    }
+                                }
+                            }
+                        }
+
+                        // 5. Paciente Vinculado
                         div { class: "input-group-wrapper full-width",
                             label { "Paciente Vinculado" }
                             select {
