@@ -39,39 +39,6 @@ pub(crate) fn clinic_record_id(clinic_id: &str) -> String {
     }
 }
 
-/// Helper para mascarar CPF protegendo privacidade dos dados (ex: ***.***.123-**).
-pub fn mask_cpf(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.starts_with("***.***.") && trimmed.ends_with("-**") && trimmed.len() == 14 {
-        return trimmed.to_string();
-    }
-    let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
-    if digits.len() == 11 {
-        format!("***.***.{}-**", &digits[6..9])
-    } else if digits.len() == 3 {
-        format!("***.***.{}-**", digits)
-    } else if digits.len() >= 4 {
-        let end = digits.len().saturating_sub(2);
-        let start = end.saturating_sub(3);
-        format!("***.***.{}-**", &digits[start..end])
-    } else {
-        "***.***.***-**".to_string()
-    }
-}
-
-/// Helper para mascarar RG (ex: **.***.678-*).
-pub fn mask_rg(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.starts_with("**.***.") {
-        return trimmed.to_string();
-    }
-    if trimmed.len() <= 3 {
-        return "**.*".to_string();
-    }
-    let visible = &trimmed[trimmed.len() - 2..];
-    format!("**.***.**{}", visible)
-}
-
 /// Linha da tabela `patient` no banco de dados.
 #[derive(Deserialize, Debug, SurrealValue)]
 pub(crate) struct DbPatientRow {
@@ -206,28 +173,28 @@ pub(crate) struct DbDocumentRow {
 }
 
 
-/// Converte a linha de banco de dados `DbPatientRow` no modelo compartilhado `Patient` com mascaramento protetivo.
+/// Converte a linha de banco de dados `DbPatientRow` no modelo compartilhado `Patient` descriptografando documentos sem mascaramento.
 pub(crate) fn map_patient(row: DbPatientRow) -> Patient {
-    let masked_cpf = if let Some(ref enc) = row.document_cpf_encrypted {
+    let plain_cpf = if let Some(ref enc) = row.document_cpf_encrypted {
         let dec = crate::security::crypto::decrypt_deterministic(enc).unwrap_or_else(|_| {
             row.document_cpf.clone().unwrap_or_default()
         });
         if dec.is_empty() {
             None
         } else {
-            Some(mask_cpf(&dec))
+            Some(dec)
         }
     } else if let Some(ref raw_cpf) = row.document_cpf {
         if raw_cpf.is_empty() {
             None
         } else {
-            Some(mask_cpf(raw_cpf))
+            Some(raw_cpf.clone())
         }
     } else {
         None
     };
 
-    let masked_rg = row.document_rg.as_deref().map(mask_rg);
+    let plain_rg = row.document_rg;
 
     let has_pwd =
         row.password_hash.is_some() && !row.password_hash.as_deref().unwrap_or("").is_empty();
@@ -243,13 +210,13 @@ pub(crate) fn map_patient(row: DbPatientRow) -> Patient {
             let real_val = crate::security::crypto::decrypt_deterministic(cpf).unwrap_or_else(|_| cpf.clone());
             if !real_val.is_empty() {
                 raw_guardian_cpfs.push(real_val.clone());
-                g.document_cpf = Some(mask_cpf(&real_val));
+                g.document_cpf = Some(real_val);
             }
         }
         if let Some(ref rg) = g.document_rg {
             let real_val = crate::security::crypto::decrypt_deterministic(rg).unwrap_or_else(|_| rg.clone());
             if !real_val.is_empty() {
-                g.document_rg = Some(mask_rg(&real_val));
+                g.document_rg = Some(real_val);
             }
         }
     }
@@ -258,42 +225,19 @@ pub(crate) fn map_patient(row: DbPatientRow) -> Patient {
         crate::security::crypto::decrypt_deterministic(&s).ok().or(Some(s))
     });
 
-    let masked_guardian_cpf = decrypted_guardian_cpf.as_deref().map(mask_cpf);
-
-    // Se o paciente for menor de idade ou seu CPF não estiver disponível/estiver mascarado sem dígitos,
-    // utiliza o CPF do responsável legal para garantir a visualização dos 3 penúltimos dígitos.
-    let guardian_cpf_candidate = decrypted_guardian_cpf
-        .as_deref()
-        .or_else(|| raw_guardian_cpfs.first().map(|s| s.as_str()));
-
-    let final_masked_cpf = if let Some(ref m) = masked_cpf {
-        if m != "***.***.***-**" {
-            Some(m.clone())
-        } else if let Some(g_cpf) = guardian_cpf_candidate {
-            let masked_g = mask_cpf(g_cpf);
-            if masked_g != "***.***.***-**" {
-                Some(masked_g)
-            } else {
-                Some(m.clone())
-            }
-        } else {
-            Some(m.clone())
-        }
-    } else if let Some(g_cpf) = guardian_cpf_candidate {
-        Some(mask_cpf(g_cpf))
-    } else {
-        None
-    };
+    let final_cpf = plain_cpf.or_else(|| {
+        decrypted_guardian_cpf.clone().or_else(|| raw_guardian_cpfs.first().cloned())
+    });
 
     Patient {
         id: row.id.to_sql(),
         clinic_id: row.clinic_id.to_sql(),
         full_name: row.full_name,
-        document_cpf: final_masked_cpf,
-        document_rg: masked_rg,
+        document_cpf: final_cpf,
+        document_rg: plain_rg,
         legal_guardians: guardians,
         legal_guardian_name: row.legal_guardian_name,
-        legal_guardian_cpf: masked_guardian_cpf,
+        legal_guardian_cpf: decrypted_guardian_cpf,
         phone: row.phone,
         email: row.email,
         birth_date: row.birth_date,
