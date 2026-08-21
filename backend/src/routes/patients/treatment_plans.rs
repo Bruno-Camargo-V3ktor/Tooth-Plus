@@ -765,11 +765,17 @@ pub async fn pay_treatment_plan(
         .query(
             "UPDATE type::record($pid) SET
             paid_amount_cents = $paid,
+            financial_status = $fin_status,
             status = IF status == 'draft' THEN 'approved' ELSE status END,
-            updated_at = time::now();",
+            updated_at = time::now();
+            UPDATE patient_treatment SET
+            financial_status = $fin_status,
+            updated_at = time::now()
+            WHERE treatment_plan_id = type::record($pid);",
         )
         .bind(("pid", plan_rec.clone()))
         .bind(("paid", new_paid))
+        .bind(("fin_status", fin_status.to_string()))
         .await;
 
     // Sincroniza procedimentos no prontuário caso o plano tenha virado aprovado

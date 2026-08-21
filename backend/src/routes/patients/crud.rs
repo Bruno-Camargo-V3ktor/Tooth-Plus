@@ -550,7 +550,10 @@ pub async fn get_patient_details(
                 treatment_plans.iter()
                     .find(|p| p.id == p_id_str || p.id.ends_with(&p_id_str) || p_id_str.ends_with(&p.id))
                     .and_then(|p| p.financial_status.clone())
+                    .or_else(|| t.financial_status.clone())
                     .or(Some("unpaid".into()))
+            } else if let Some(ref fs) = t.financial_status {
+                Some(fs.clone())
             } else if t.cost_cents.unwrap_or(0) == 0 {
                 Some("paid".into())
             } else {

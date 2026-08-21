@@ -308,19 +308,36 @@ pub async fn register_transaction_payment(
     .await
     .map_err(|e| ApiError::Database(format!("Erro ao atualizar pagamento: {}", e)))?;
 
-    // Se a transação tem um plano de tratamento vinculado, sincroniza o plano
+    // Se a transação tem um plano de tratamento ou procedimento vinculado, sincroniza
     if let Some(ref plan_rec) = tx.treatment_plan_id {
         let _ = db
             .query(
                 "UPDATE type::record($pid) SET
                 paid_amount_cents = $paid,
+                financial_status = $fin_status,
                 status = IF status == 'draft' THEN 'approved' ELSE status END,
-                updated_at = time::now();",
+                updated_at = time::now();
+                UPDATE patient_treatment SET
+                financial_status = $fin_status,
+                updated_at = time::now()
+                WHERE treatment_plan_id = type::record($pid);",
             )
             .bind(("pid", plan_rec.clone()))
             .bind(("paid", new_paid))
+            .bind(("fin_status", fin_status.to_string()))
             .await;
     }
+
+    let _ = db
+        .query(
+            "UPDATE patient_treatment SET
+            financial_status = $fin_status,
+            updated_at = time::now()
+            WHERE transaction_id = type::record($tid);",
+        )
+        .bind(("tid", parse_record_id("transaction", &raw_id)))
+        .bind(("fin_status", fin_status.to_string()))
+        .await;
 
     let mut updated_res = db
         .query("SELECT * FROM type::record($id)")
@@ -463,6 +480,16 @@ pub async fn update_transaction_status(
 
     q.await
         .map_err(|e| ApiError::Database(format!("Falha ao atualizar transação: {}", e)))?;
+
+    // Sincroniza planos e procedimentos vinculados à transação
+    let _ = db
+        .query(
+            "UPDATE patient_treatment_plan SET financial_status = $status, updated_at = time::now() WHERE transaction_id = type::record($tid);
+             UPDATE patient_treatment SET financial_status = $status, updated_at = time::now() WHERE transaction_id = type::record($tid);",
+        )
+        .bind(("tid", tx_id.clone()))
+        .bind(("status", status_str.to_string()))
+        .await;
 
     let mut updated_res = db
         .query("SELECT * FROM type::record($id)")

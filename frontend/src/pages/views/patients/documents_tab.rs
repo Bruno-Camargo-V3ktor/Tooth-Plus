@@ -136,7 +136,7 @@ pub fn PatientDocumentsTab(
                                     let pdf_url_to_preview = resolve_file_url(&raw_pdf_url);
                                     let pdf_title = doc.title.clone();
 
-                                    let is_anamnesis = doc.document_type == "anamnesis" || doc.title.to_lowercase().contains("anamnese");
+                                    let is_anamnesis = doc.document_type == "anamnesis" || doc.document_type == "anamnese" || doc.title.to_lowercase().contains("anamnes");
                                     let patient_completed = !doc.requires_patient_signature || doc.patient_signed_at.is_some();
                                     let doctor_completed = !doc.requires_doctor_signature || doc.doctor_signed_at.is_some();
                                     let has_any_sign = doc.patient_signed_at.is_some() || doc.doctor_signed_at.is_some();

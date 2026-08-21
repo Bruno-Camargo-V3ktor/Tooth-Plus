@@ -107,6 +107,7 @@ pub async fn create_treatment(
         .bind(("eid", exam_rec))
         .bind(("plan_id", plan_rec))
         .bind(("tx_id", tx_rec))
+        .bind(("fin_status", data.financial_status.clone()))
         .bind(("pcat", data.procedure_category.clone()))
         .bind(("pname", data.procedure_name.trim().to_string()))
         .bind(("tooth", data.tooth_number.map(|s| s.trim().to_string())))
@@ -138,7 +139,7 @@ pub async fn create_treatment(
         treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
         treatment_plan_item_id: t.treatment_plan_item_id,
         transaction_id: t.transaction_id.map(|x| x.to_sql()),
-        financial_status: None,
+        financial_status: t.financial_status,
         procedure_category: t.procedure_category,
         procedure_name: t.procedure_name,
         tooth_number: t.tooth_number,
@@ -258,6 +259,7 @@ pub async fn update_treatment(
         .bind(("uid", dentist_rec))
         .bind(("plan_id", plan_rec))
         .bind(("tx_id", tx_rec))
+        .bind(("fin_status", data.financial_status.clone()))
         .await
         .map_err(|e| ApiError::Database(format!("Erro ao atualizar tratamento: {}", e)))?;
 
@@ -306,7 +308,7 @@ pub async fn update_treatment(
         treatment_plan_id: t.treatment_plan_id.map(|p| p.to_sql()),
         treatment_plan_item_id: t.treatment_plan_item_id,
         transaction_id: t.transaction_id.map(|x| x.to_sql()),
-        financial_status: None,
+        financial_status: t.financial_status,
         procedure_category: t.procedure_category,
         procedure_name: t.procedure_name,
         tooth_number: t.tooth_number,

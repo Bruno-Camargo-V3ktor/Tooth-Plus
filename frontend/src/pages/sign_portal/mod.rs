@@ -44,8 +44,10 @@ pub fn SignPortal(token: String) -> Element {
                     Some(Ok(doc)) => rsx! {
                         div { class: "portal-header",
                             div { class: "portal-brand",
-                                div { class: "portal-clinic-icon-box bg-primary",
-                                    IconTooth { size: 24, color: "#ffffff".to_string() }
+                                div {
+                                    class: "portal-clinic-icon-box",
+                                    style: "width: 48px; height: 48px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); flex-shrink: 0;",
+                                    IconTooth { size: 28, color: "#0052cc".to_string() }
                                 }
                                 div { class: "portal-clinic-info",
                                     h1 { class: "portal-clinic-name", "{doc.clinic_name}" }

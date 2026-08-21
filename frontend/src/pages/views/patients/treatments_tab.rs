@@ -383,6 +383,7 @@ pub fn PatientTreatmentsTab(
                     treatment_plan_id: edit.treatment_plan_id.clone(),
                     treatment_plan_item_id: edit.treatment_plan_item_id.clone(),
                     transaction_id: edit.transaction_id.clone(),
+                    financial_status: edit.financial_status.clone(),
                     procedure_category: Some(category),
                     procedure_name: name,
                     tooth_number: tooth_opt,
@@ -405,6 +406,7 @@ pub fn PatientTreatmentsTab(
                     treatment_plan_id: None,
                     treatment_plan_item_id: None,
                     transaction_id: None,
+                    financial_status: if cost_cents == 0 { Some("paid".into()) } else { Some("unpaid".into()) },
                     procedure_category: Some(category),
                     procedure_name: name,
                     tooth_number: tooth_opt,
@@ -596,11 +598,38 @@ pub fn PatientTreatmentsTab(
         let t = tok_charge.clone();
         let on_r = on_reload_charge.clone();
 
+        let pid_val = pid_charge.clone();
+        let cid_val = cid_charge.clone();
+        let proc_target = proc.clone();
+
         is_charging.set(true);
         spawn(async move {
             match create_transaction(&t, req).await {
-                Ok(_) => {
-                    toast_msg.set(Some("Cobrança financeira lançada com sucesso no módulo Financeiro!".into()));
+                Ok(created_tx) => {
+                    let update_req = UpdatePatientTreatmentRequest {
+                        clinic_id: cid_val,
+                        dentist_user_id: proc_target.dentist_user_id.clone(),
+                        appointment_id: proc_target.appointment_id.clone(),
+                        document_id: proc_target.document_id.clone(),
+                        exam_id: proc_target.exam_id.clone(),
+                        treatment_plan_id: proc_target.treatment_plan_id.clone(),
+                        treatment_plan_item_id: proc_target.treatment_plan_item_id.clone(),
+                        transaction_id: proc_target.transaction_id.clone(),
+                        financial_status: if is_paid { Some("paid".to_string()) } else { Some("pending".to_string()) },
+                        procedure_category: proc_target.procedure_category.clone(),
+                        procedure_name: proc_target.procedure_name.clone(),
+                        tooth_number: proc_target.tooth_number.clone(),
+                        surfaces: proc_target.surfaces.clone(),
+                        materials_used: proc_target.materials_used.clone(),
+                        status: proc_target.status.clone(),
+                        cost_cents: proc_target.cost_cents,
+                        post_care_instructions: proc_target.post_care_instructions.clone(),
+                        clinical_notes: proc_target.clinical_notes.clone(),
+                        performed_at: proc_target.appointment_date.clone(),
+                    };
+                    let _ = update_patient_treatment(&t, &pid_val, &proc_target.id, update_req).await;
+
+                    toast_msg.set(Some("Cobrança financeira registrada com sucesso no Financeiro!".into()));
                     is_charge_modal_open.set(false);
                     charge_target_proc.set(None);
                     on_r.call(());
@@ -845,6 +874,7 @@ pub fn PatientTreatmentsTab(
                                                                 treatment_plan_id: curr.treatment_plan_id,
                                                                 treatment_plan_item_id: curr.treatment_plan_item_id,
                                                                 transaction_id: curr.transaction_id,
+                                                                financial_status: curr.financial_status,
                                                                 procedure_category: curr.procedure_category,
                                                                 procedure_name: curr.procedure_name,
                                                                 tooth_number: curr.tooth_number,
@@ -1138,6 +1168,11 @@ pub fn PatientTreatmentsTab(
                                                     key: "{reg}",
                                                     r#type: "button",
                                                     class: if is_sel { "region-chip active" } else { "region-chip" },
+                                                    style: if is_sel {
+                                                        "height: 34px; padding: 0 16px; border-radius: 9999px; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all 0.15s ease; border: 1.5px solid #0284c7; background: #e0f2fe; color: #0369a1; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.15);"
+                                                    } else {
+                                                        "height: 34px; padding: 0 16px; border-radius: 9999px; font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);"
+                                                    },
                                                     onclick: move |_| {
                                                         let mut list = selected_regions();
                                                         if list.contains(&r) {
@@ -1147,6 +1182,9 @@ pub fn PatientTreatmentsTab(
                                                         }
                                                         selected_regions.set(list);
                                                     },
+                                                    if is_sel {
+                                                        span { style: "color: #0284c7; font-weight: 800; font-size: 13px;", "✓" }
+                                                    }
                                                     span { "{reg}" }
                                                 }
                                             }

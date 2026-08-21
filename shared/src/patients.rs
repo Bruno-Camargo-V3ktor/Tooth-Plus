@@ -269,6 +269,8 @@ pub struct CreatePatientTreatmentRequest {
     #[serde(default)]
     pub treatment_plan_item_id: Option<String>,
     pub transaction_id: Option<String>,
+    #[serde(default)]
+    pub financial_status: Option<String>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,
@@ -293,6 +295,8 @@ pub struct UpdatePatientTreatmentRequest {
     #[serde(default)]
     pub treatment_plan_item_id: Option<String>,
     pub transaction_id: Option<String>,
+    #[serde(default)]
+    pub financial_status: Option<String>,
     pub procedure_category: Option<String>,
     pub procedure_name: String,
     pub tooth_number: Option<String>,

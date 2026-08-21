@@ -80,7 +80,7 @@ pub fn DocumentViewerCard(doc: PublicSigningDocumentResponse) -> Element {
                     }
 
                     // Lista de Perguntas e Respostas
-                    div { style: "max-height: 420px; overflow-y: auto; padding: 14px 18px;",
+                    div { style: "max-height: 520px; overflow-y: auto; padding: 14px 18px;",
                         div { style: "display: flex; flex-direction: column; gap: 10px;",
                             for (idx, item) in anam.custom_responses.iter().enumerate() {
                                 {

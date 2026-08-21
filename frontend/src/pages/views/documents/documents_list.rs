@@ -253,6 +253,9 @@ pub fn DocumentsListSection(
                                     };
                                     let pdf_url_to_preview = resolve_file_url(&raw_url);
                                     let pdf_title = doc.title.clone();
+                                    let is_anamnesis = doc.document_type == "anamnesis"
+                                        || doc.document_type == "anamnese"
+                                        || doc.title.to_lowercase().contains("anamnes");
 
                                     rsx! {
                                         tr { key: "{doc.id}",
@@ -309,16 +312,18 @@ pub fn DocumentsListSection(
                                                         },
                                                         IconQrCode { size: 16, color: "#0052cc".to_string() }
                                                     }
-                                                    button {
-                                                        class: "btn-action-icon",
-                                                        title: "Visualizar Documento / PDF",
-                                                        onclick: {
-                                                            let u = pdf_url_to_preview.clone();
-                                                            let tit = pdf_title.clone();
-                                                            let mut preview_sig = pdf_preview_target;
-                                                            move |_| preview_sig.set(Some((u.clone(), tit.clone())))
-                                                        },
-                                                        IconEye { size: 16, color: "#475569".to_string() }
+                                                    if !is_anamnesis && !pdf_url_to_preview.is_empty() {
+                                                        button {
+                                                            class: "btn-action-icon",
+                                                            title: "Visualizar Documento / PDF",
+                                                            onclick: {
+                                                                let u = pdf_url_to_preview.clone();
+                                                                let tit = pdf_title.clone();
+                                                                let mut preview_sig = pdf_preview_target;
+                                                                move |_| preview_sig.set(Some((u.clone(), tit.clone())))
+                                                            },
+                                                            IconEye { size: 16, color: "#475569".to_string() }
+                                                        }
                                                     }
                                                     button {
                                                         class: "btn-action-icon text-success",
