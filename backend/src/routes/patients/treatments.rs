@@ -6,8 +6,10 @@ use super::{clinic_record_id, parse_record_id, DbTreatmentRow};
 use crate::db::Db;
 use crate::error::ApiError;
 use crate::security::auth_guard::{check_permission, AuthenticatedUser};
-use actix_web::{delete, post, web, HttpResponse};
-use shared::patients::{CreatePatientTreatmentRequest, PatientTreatment};
+use actix_web::{delete, post, put, web, HttpResponse};
+use shared::patients::{
+    CreatePatientTreatmentRequest, PatientTreatment, UpdatePatientTreatmentRequest,
+};
 use surrealdb::types::ToSql;
 
 /// Query para exclusão de procedimento
@@ -164,4 +166,95 @@ pub async fn delete_treatment(
         "message": "Procedimento removido com sucesso."
     })))
 }
+
+/// Atualiza um procedimento odontológico / evolução clínica.
+#[put("/patients/{id}/treatments/{treatment_id}")]
+pub async fn update_treatment(
+    auth: AuthenticatedUser,
+    path: web::Path<(String, String)>,
+    req: web::Json<UpdatePatientTreatmentRequest>,
+    db: web::Data<Db>,
+) -> Result<HttpResponse, ApiError> {
+    let (_pat_id, treat_id) = path.into_inner();
+    let data = req.into_inner();
+    let clinic_str = clinic_record_id(&data.clinic_id);
+
+    if !check_permission(&db, &auth.id, &clinic_str, "treatments:write")
+        .await
+        .unwrap_or(false)
+    {
+        return Err(ApiError::Forbidden(
+            "Sem permissão para editar procedimentos/tratamentos.".into(),
+        ));
+    }
+
+    let treat_rec = parse_record_id("patient_treatment", &treat_id);
+
+    let dentist_rec = if let Some(ref d_id) = data.dentist_user_id {
+        Some(parse_record_id("user", d_id))
+    } else {
+        None
+    };
+
+    let surfaces_list = data.surfaces.unwrap_or_default();
+    let materials_list = data.materials_used.unwrap_or_default();
+
+    let mut res = db
+        .query(
+            "UPDATE type::record($tid) SET
+            procedure_category = $pcat,
+            procedure_name = $pname,
+            tooth_number = $tooth,
+            surfaces = $surfaces,
+            materials_used = $materials,
+            status = $status,
+            cost_cents = $cost,
+            post_care_instructions = $post_care,
+            clinical_notes = $notes,
+            dentist_user_id = IF $uid != NONE THEN $uid ELSE dentist_user_id END,
+            updated_at = time::now();",
+        )
+        .bind(("tid", treat_rec))
+        .bind(("pcat", data.procedure_category.clone()))
+        .bind(("pname", data.procedure_name.trim().to_string()))
+        .bind(("tooth", data.tooth_number.map(|s| s.trim().to_string())))
+        .bind(("surfaces", surfaces_list.clone()))
+        .bind(("materials", materials_list.clone()))
+        .bind(("status", data.status.clone()))
+        .bind(("cost", data.cost_cents))
+        .bind(("post_care", data.post_care_instructions.map(|s| s.trim().to_string())))
+        .bind(("notes", data.clinical_notes.map(|s| s.trim().to_string())))
+        .bind(("uid", dentist_rec))
+        .await
+        .map_err(|e| ApiError::Database(format!("Erro ao atualizar tratamento: {}", e)))?;
+
+    let updated: Option<DbTreatmentRow> =
+        res.take(0).map_err(|e| ApiError::Database(e.to_string()))?;
+    let Some(t) = updated else {
+        return Err(ApiError::NotFound("Procedimento não encontrado para atualização.".into()));
+    };
+
+    Ok(HttpResponse::Ok().json(PatientTreatment {
+        id: t.id.to_sql(),
+        patient_id: t.patient_id.to_sql(),
+        clinic_id: t.clinic_id.to_sql(),
+        dentist_user_id: t.dentist_user_id.map(|u| u.to_sql()),
+        dentist_user_name: None,
+        appointment_id: t.appointment_id.map(|a| a.to_sql()),
+        document_id: t.document_id.map(|d| d.to_sql()),
+        exam_id: t.exam_id.map(|e| e.to_sql()),
+        procedure_category: t.procedure_category,
+        procedure_name: t.procedure_name,
+        tooth_number: t.tooth_number,
+        surfaces: t.surfaces.or(Some(surfaces_list)),
+        materials_used: t.materials_used.or(Some(materials_list)),
+        status: t.status.unwrap_or(data.status),
+        cost_cents: t.cost_cents.unwrap_or(data.cost_cents),
+        post_care_instructions: t.post_care_instructions,
+        clinical_notes: t.clinical_notes,
+        performed_at: t.performed_at.map(|d| d.to_rfc3339()),
+        created_at: t.created_at.to_rfc3339(),
+    }))
+}
+
 

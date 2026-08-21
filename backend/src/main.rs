@@ -185,9 +185,10 @@ async fn main() -> std::io::Result<()> {
                     .service(routes::patients::save_anamnesis_template)
                     .service(routes::patients::sync_patient_anamnesis)
                     .service(routes::patients::create_exam)
+                    .service(routes::patients::update_exam)
                     .service(routes::patients::delete_exam)
                     .service(routes::patients::create_treatment)
-
+                    .service(routes::patients::update_treatment)
                     .service(routes::patients::delete_treatment)
                     .service(routes::documents::list_documents)
                     .service(routes::documents::create_patient_document)

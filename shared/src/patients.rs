@@ -204,6 +204,19 @@ pub struct CreatePatientExamRequest {
     pub clinical_interpretation: Option<String>,
 }
 
+/// Requisição para atualizar um exame existente no prontuário.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct UpdatePatientExamRequest {
+    pub clinic_id: String,
+    pub title: String,
+    pub exam_type: String,
+    pub status: Option<String>,
+    pub requested_date: Option<String>,
+    pub result_date: Option<String>,
+    pub file_urls: Vec<String>,
+    pub clinical_interpretation: Option<String>,
+}
+
 /// Procedimento ou evolução odontológica registrada no prontuário.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PatientTreatment {
@@ -247,6 +260,27 @@ pub struct CreatePatientTreatmentRequest {
     pub clinical_notes: Option<String>,
     pub performed_at: Option<String>,
 }
+
+/// Requisição para atualizar um procedimento odontológico / evolução existente.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct UpdatePatientTreatmentRequest {
+    pub clinic_id: String,
+    pub dentist_user_id: Option<String>,
+    pub appointment_id: Option<String>,
+    pub document_id: Option<String>,
+    pub exam_id: Option<String>,
+    pub procedure_category: Option<String>,
+    pub procedure_name: String,
+    pub tooth_number: Option<String>,
+    pub surfaces: Option<Vec<String>>,
+    pub materials_used: Option<Vec<String>>,
+    pub status: String,
+    pub cost_cents: i64,
+    pub post_care_instructions: Option<String>,
+    pub clinical_notes: Option<String>,
+    pub performed_at: Option<String>,
+}
+
 
 /// Indicadores quantitativos (KPIs) exibidos no topo da listagem de pacientes.
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]

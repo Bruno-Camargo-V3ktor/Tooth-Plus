@@ -3,7 +3,8 @@ use reqwest::Client;
 use shared::patients::{
     CreatePatientExamRequest, CreatePatientRequest, CreatePatientTreatmentRequest, Patient,
     PatientAnamnesis, PatientDetailsResponse, PatientExam, PatientListResponse, PatientTreatment,
-    SaveAnamnesisRequest, UpdatePatientRequest,
+    SaveAnamnesisRequest, UpdatePatientExamRequest, UpdatePatientRequest,
+    UpdatePatientTreatmentRequest,
 };
 
 fn get_client() -> Client {
@@ -357,6 +358,38 @@ pub async fn sync_patient_anamnesis(
     }
 }
 
+pub async fn update_patient_treatment(
+    token: &str,
+    patient_id: &str,
+    treatment_id: &str,
+    req: UpdatePatientTreatmentRequest,
+) -> Result<PatientTreatment, String> {
+    let clean_p_id = patient_id.strip_prefix("patient:").unwrap_or(patient_id);
+    let clean_t_id = treatment_id.strip_prefix("patient_treatment:").unwrap_or(treatment_id);
+    let url = format!("{}/patients/{}/treatments/{}", API_BASE, clean_p_id, clean_t_id);
+
+    let res = get_client()
+        .put(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao atualizar procedimento.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<PatientTreatment>()
+            .await
+            .map_err(|_| "Erro ao processar dados do procedimento atualizado.".into())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao atualizar procedimento.".into()
+        } else {
+            err
+        })
+    }
+}
+
 pub async fn delete_patient_treatment(
     token: &str,
     patient_id: &str,
@@ -380,6 +413,38 @@ pub async fn delete_patient_treatment(
         let err = res.text().await.unwrap_or_default();
         Err(if err.is_empty() {
             "Erro ao remover procedimento.".into()
+        } else {
+            err
+        })
+    }
+}
+
+pub async fn update_patient_exam(
+    token: &str,
+    patient_id: &str,
+    exam_id: &str,
+    req: UpdatePatientExamRequest,
+) -> Result<PatientExam, String> {
+    let clean_p_id = patient_id.strip_prefix("patient:").unwrap_or(patient_id);
+    let clean_e_id = exam_id.strip_prefix("patient_exam:").unwrap_or(exam_id);
+    let url = format!("{}/patients/{}/exams/{}", API_BASE, clean_p_id, clean_e_id);
+
+    let res = get_client()
+        .put(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|_| "Falha de conexão ao atualizar exame.".to_string())?;
+
+    if res.status().is_success() {
+        res.json::<PatientExam>()
+            .await
+            .map_err(|_| "Erro ao processar dados do exame atualizado.".into())
+    } else {
+        let err = res.text().await.unwrap_or_default();
+        Err(if err.is_empty() {
+            "Erro ao atualizar exame.".into()
         } else {
             err
         })
@@ -414,6 +479,7 @@ pub async fn delete_patient_exam(
         })
     }
 }
+
 
 /// Estrutura de resposta da consulta de CEP via ViaCEP / BrasilAPI.
 #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default)]
