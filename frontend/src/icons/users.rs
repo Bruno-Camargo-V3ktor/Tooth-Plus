@@ -1,0 +1,20 @@
+use dioxus::prelude::*;
+
+#[component]
+pub fn IconUsers(#[props(default = 20)] size: i32, #[props(default = "currentColor".to_string())] color: String) -> Element {
+    rsx! {
+        svg {
+            style: "width: {size}px; height: {size}px; flex-shrink: 0;",
+            view_box: "0 0 24 24",
+            fill: "none",
+            stroke: "{color}",
+            stroke_width: "1.8",
+            stroke_linecap: "round",
+            stroke_linejoin: "round",
+            path { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" }
+            circle { cx: "9", cy: "7", r: "4" }
+            path { d: "M22 21v-2a4 4 0 0 0-3-3.87" }
+            path { d: "M16 3.13a4 4 0 0 1 0 7.75" }
+        }
+    }
+}

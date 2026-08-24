@@ -1,3 +1,12 @@
-//! # Tooth Plus - Shared Domain Library
-//!
-//! Contém modelos de dados, DTOs, enums e estruturas compartilhadas entre backend e frontend.
+pub mod anamnesis;
+pub mod appointments;
+pub mod auth;
+pub mod clinics;
+pub mod documents;
+pub mod files;
+pub mod finance;
+pub mod models;
+pub mod patients;
+pub mod stock;
+pub mod treatments;
+pub mod users;
