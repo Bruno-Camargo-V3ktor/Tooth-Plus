@@ -17,10 +17,5 @@ target
 .env
 database.db
 uploads
-
-# Hidden Agent & Architecture Knowledge Base
-.refactor_memory.md
-.agents_memory.md
-.context/
-history.txt
-*.log
+.memory.md
+.local
