@@ -1,0 +1,433 @@
+/* ==========================================================================
+   TOOTH PLUS V2 — ESTILOS DA TELA DE LOGIN & SELETOR DE CONTEXTO
+   ========================================================================== */
+
+/* ==========================================================================
+   1. TELA DE LOGIN (100% RESPONSIVA MOBILE & DESKTOP)
+   ========================================================================== */
+.login-split-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    width: 100vw;
+    background-color: #ffffff;
+    overflow-x: hidden;
+}
+
+@media (min-width: 992px) {
+    .login-split-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100vh;
+        overflow: hidden;
+    }
+}
+
+/* Lado Esquerdo: Formulário */
+.login-form-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    padding: 32px 24px;
+    background-color: #ffffff;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+@media (min-width: 992px) {
+    .login-form-side {
+        min-height: 100%;
+        padding: 48px;
+    }
+}
+
+.login-box {
+    width: 100%;
+    max-width: 380px;
+    display: flex;
+    flex-direction: column;
+    margin: 0 auto;
+}
+
+.login-brand-logo-wrap {
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+}
+
+.login-brand-logo {
+    height: 38px;
+    width: auto;
+    max-width: 180px;
+    display: block;
+}
+
+.login-title-welcome {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-main, #0f172a);
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+}
+
+@media (max-width: 480px) {
+    .login-title-welcome {
+        font-size: 24px;
+    }
+}
+
+.login-subtitle {
+    font-size: 14px;
+    color: var(--text-muted, #64748b);
+    margin-bottom: 28px;
+    line-height: 1.45;
+}
+
+.login-error-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    padding: 12px 14px;
+    border-radius: var(--radius-md, 8px);
+    font-size: 13px;
+    margin-bottom: 20px;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+}
+
+.login-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 48px;
+    background-color: #ffffff;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: var(--radius-md, 8px);
+    padding: 0 14px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    box-sizing: border-box;
+}
+
+.login-input-wrapper:focus-within {
+    border-color: var(--border-focus, #00a0e4);
+    box-shadow: 0 0 0 3px rgba(0, 160, 228, 0.15);
+}
+
+.login-input-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-light, #94a3b8);
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.login-input-wrapper:focus-within .login-input-icon {
+    color: var(--primary, #00a0e4);
+}
+
+.login-input-field {
+    flex: 1;
+    height: 100%;
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 14px;
+    color: var(--text-main, #0f172a);
+    margin-left: 10px;
+}
+
+.login-input-field::placeholder {
+    color: var(--text-light, #94a3b8);
+    font-weight: 400;
+}
+
+.forgot-password-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -2px;
+    margin-bottom: 10px;
+}
+
+.forgot-password-link {
+    font-size: 13px;
+    color: var(--primary, #00a0e4);
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.forgot-password-link:hover {
+    color: var(--primary-hover, #0284c7);
+    text-decoration: underline;
+}
+
+.btn-login-submit {
+    height: 48px;
+    width: 100%;
+    background-color: var(--primary, #00a0e4);
+    color: #ffffff;
+    border: none;
+    border-radius: var(--radius-md, 8px);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    box-shadow: var(--shadow-btn, 0 4px 12px rgba(0, 160, 228, 0.25));
+    box-sizing: border-box;
+}
+
+.btn-login-submit:hover {
+    background-color: var(--primary-hover, #0284c7);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(0, 160, 228, 0.35);
+}
+
+.btn-login-submit:active {
+    transform: translateY(0);
+}
+
+.btn-login-submit:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Lado Direito: Banner Visual Escuro (Visível apenas em Desktop >= 992px) */
+.login-visual-side {
+    display: none;
+}
+
+@media (min-width: 992px) {
+    .login-visual-side {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: radial-gradient(circle at 80% 20%, rgba(0, 160, 228, 0.18) 0%, transparent 55%), #0a1124;
+        padding: 48px;
+        position: relative;
+        overflow: hidden;
+        height: 100%;
+        box-sizing: border-box;
+    }
+}
+
+.login-visual-container {
+    max-width: 440px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 2;
+}
+
+.login-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 4px 14px;
+    border-radius: var(--radius-full, 9999px);
+    font-size: 12px;
+    font-weight: 600;
+    color: #cbd5e1;
+    margin-bottom: 24px;
+}
+
+.login-visual-title {
+    font-size: 34px;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+    margin-bottom: 16px;
+}
+
+.login-visual-desc {
+    font-size: 14.5px;
+    color: #94a3b8;
+    line-height: 1.6;
+    margin-bottom: 36px;
+}
+
+.login-visual-skeleton-card {
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: var(--radius-lg, 12px);
+    padding: 22px 24px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-sizing: border-box;
+}
+
+.skeleton-bar {
+    height: 6px;
+    border-radius: 3px;
+}
+
+.skeleton-bar.bar-gray {
+    background-color: rgba(255, 255, 255, 0.12);
+    width: 65%;
+}
+
+.skeleton-bar.bar-blue {
+    background-color: #00a0e4;
+    width: 42%;
+}
+
+.skeleton-dots {
+    color: rgba(255, 255, 255, 0.25);
+    font-size: 20px;
+    letter-spacing: 2px;
+    line-height: 1;
+    margin-top: 4px;
+}
+
+/* ==========================================================================
+   2. SELETOR DE UNIDADE / CLÍNICA (CONTEXT SELECTOR)
+   ========================================================================== */
+.context-wrapper {
+    min-height: 100vh;
+    width: 100vw;
+    background: linear-gradient(135deg, #0f172a 0%, #0284c7 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+}
+
+.context-container {
+    width: 100%;
+    max-width: 520px;
+    background: #ffffff;
+    border-radius: var(--radius-lg, 12px);
+    box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.08));
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    box-sizing: border-box;
+}
+
+.context-header-zone {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.user-avatar-badge {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background-color: var(--primary-light, #e0f2fe);
+    color: var(--primary-dark, #0369a1);
+    font-size: 20px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+
+.context-welcome-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-main, #0f172a);
+}
+
+.context-subtitle {
+    font-size: 13.5px;
+    color: var(--text-muted, #64748b);
+    margin-top: 4px;
+}
+
+.card-grid-clinics {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.clinic-selection-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    background: #ffffff;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: var(--radius-md, 8px);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.clinic-selection-card:hover {
+    border-color: var(--primary, #00a0e4);
+    background-color: #f8fafc;
+    box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.07));
+    transform: translateY(-1px);
+}
+
+.clinic-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md, 8px);
+    background-color: var(--primary-light, #e0f2fe);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.clinic-card-info {
+    flex: 1;
+}
+
+.clinic-card-info h3 {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--text-main, #0f172a);
+    margin-bottom: 2px;
+}
+
+.clinic-role-badge {
+    font-size: 12px;
+    color: var(--text-muted, #64748b);
+}
+
+.context-footer-zone {
+    text-align: center;
+}
+
+.context-logout-link {
+    color: var(--text-muted, #64748b);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.context-logout-link:hover {
+    color: #dc2626;
+}

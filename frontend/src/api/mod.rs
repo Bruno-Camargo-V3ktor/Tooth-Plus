@@ -1,18 +1,36 @@
-//! # Camada de Integração de API (Tooth Plus V2)
+//! # Camada de Integração de API e Serviços (Tooth Plus V2)
 //!
-//! Centraliza a configuração de URL base, autenticação, armazenamento local
-//! de sessão e os módulos de endpoint do sistema.
+//! Centraliza o gerenciamento de sessão, autenticação, armazenamento local
+//! e exporta todos os serviços de entidades com interface fortemente tipada.
 
+pub mod appointments;
 pub mod auth;
-pub mod mock;
+pub mod clinics;
+pub mod finance;
+pub mod mock_db;
+pub mod patients;
+pub mod stock;
+pub mod treatments;
+pub mod users;
 
-pub use mock::{ActiveClinicState, SessionState};
+pub use appointments::AppointmentsApi;
+pub use auth::{AuthApi, SessionState};
+pub use clinics::ClinicsApi;
+pub use finance::FinanceApi;
+pub use patients::PatientsApi;
+pub use stock::StockApi;
+pub use treatments::TreatmentsApi;
+pub use users::UsersApi;
 
-/// URL base da API backend. Obtida em tempo de compilação ou com fallback padrão para desenvolvimento.
-pub const API_BASE_URL: &str = match option_env!("API_BASE_URL") {
-    Some(val) => val,
-    None => "http://localhost:4000",
-};
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ActiveClinicState {
+    pub clinic_id: String,
+    pub trading_name: String,
+    pub theme_color: String,
+    pub logo_url: Option<String>,
+    pub role: String,
+    pub permissions: Vec<String>,
+}
 
 const SESSION_STORAGE_KEY: &str = "toothplus_v2_session";
 const ACTIVE_CLINIC_STORAGE_KEY: &str = "toothplus_v2_active_clinic";

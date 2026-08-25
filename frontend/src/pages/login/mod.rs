@@ -1,10 +1,11 @@
 //! # Módulo de Autenticação e Seleção de Unidade (Tooth Plus V2)
 
-use crate::api::auth::login_user;
-use crate::api::{save_active_clinic, save_session, ActiveClinicState, SessionState};
-use crate::icons::{IconAlertTriangle, IconChevronRight, IconLock, IconUsers};
+use crate::api::{save_active_clinic, save_session, ActiveClinicState, AuthApi, SessionState};
+use crate::icons::{IconAlertTriangle, IconChevronRight, IconLock, IconUser};
 use crate::router::Route;
 use dioxus::prelude::*;
+
+const STYLE: Asset = asset!("/src/pages/login/style.css");
 
 #[component]
 pub fn LoginScreen() -> Element {
@@ -18,12 +19,14 @@ pub fn LoginScreen() -> Element {
     let is_loading = use_signal(|| false);
 
     let handle_login = move |e: Event<FormData>| {
+        e.prevent_default();
         e.stop_propagation();
+
         let u = username().trim().to_string();
         let p = password().trim().to_string();
 
         if u.is_empty() || p.is_empty() {
-            error_msg.set(Some("Por favor, preencha o usuário e a senha.".to_string()));
+            error_msg.set(Some("Informe o nome de usuário e a senha.".to_string()));
             return;
         }
 
@@ -37,7 +40,7 @@ pub fn LoginScreen() -> Element {
         err_sig.set(None);
 
         spawn(async move {
-            match login_user(u, p).await {
+            match AuthApi::login(u, p).await {
                 Ok(sess) => {
                     save_session(&sess);
                     let clinics = sess.clinics.clone();
@@ -45,7 +48,6 @@ pub fn LoginScreen() -> Element {
                     loading_sig.set(false);
 
                     if clinics.len() == 1 {
-                        // Se possui apenas 1 clínica, seleciona automaticamente
                         let cl = &clinics[0];
                         let active = ActiveClinicState {
                             clinic_id: cl.clinic_id.clone(),
@@ -59,7 +61,6 @@ pub fn LoginScreen() -> Element {
                         act_sig.set(Some(active));
                         nav.replace(Route::AgendaView {});
                     } else {
-                        // Se possui múltiplas ou nenhuma pré-selecionada, abre seletor
                         nav.replace(Route::ContextSelector {});
                     }
                 }
@@ -72,103 +73,92 @@ pub fn LoginScreen() -> Element {
     };
 
     rsx! {
-        div { class: "login-wrapper",
-            // Lado Esquerdo: Formulário de Login
+        document::Link { rel: "stylesheet", href: STYLE }
+
+        div { class: "login-split-layout",
+            // Lado Esquerdo: Formulário Minimalista de Login
             div { class: "login-form-side",
                 div { class: "login-box",
-                    // Logo SVG Tooth Plus
-                    div { class: "login-logo-container",
+                    div { class: "login-brand-logo-wrap",
                         img {
-                            src: "/assets/icon.svg",
-                            class: "brand-logo-svg",
-                            alt: "Tooth Plus Logo",
+                            src: "/assets/logo.svg",
+                            class: "login-brand-logo",
+                            alt: "ToothPlus",
                         }
                     }
 
-                    h2 { class: "login-title-welcome", "Bem-vindo de volta" }
-                    p { class: "login-subtitle", "Insira suas credenciais para acessar a plataforma odontológica" }
+                    h1 { class: "login-title-welcome", "Bem-vindo de volta" }
+                    p { class: "login-subtitle", "Insira suas credenciais para gerenciar a clínica" }
 
                     if let Some(ref err) = error_msg() {
-                        div { class: "modern-error-box",
-                            IconAlertTriangle { size: 20, color: "#dc2626".to_string() }
-                            div { class: "error-box-content",
-                                strong { "Falha na Autenticação" }
-                                span { "{err}" }
-                            }
+                        div { class: "login-error-alert",
+                            IconAlertTriangle { size: 18, color: "#ef4444".to_string() }
+                            span { "{err}" }
                         }
                     }
 
-                    form { class: "login-form", onsubmit: handle_login,
-                        div { class: "login-input-group",
-                            label { "Usuário ou E-mail" }
-                            div { class: "login-input-wrapper",
-                                span { class: "login-input-icon",
-                                    IconUsers { size: 18, color: "#94a3b8".to_string() }
-                                }
-                                input {
-                                    r#type: "text",
-                                    class: "login-input-field",
-                                    placeholder: "Ex: admin ou dr.lucas",
-                                    value: "{username}",
-                                    oninput: move |e| username.set(e.value()),
-                                    autofocus: true,
-                                }
+                    form {
+                        class: "login-form",
+                        onsubmit: handle_login,
+
+                        div { class: "login-input-wrapper",
+                            span { class: "login-input-icon",
+                                IconUser { size: 18, color: "#94a3b8".to_string() }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "login-input-field",
+                                placeholder: "Nome de usuário",
+                                value: "{username}",
+                                oninput: move |e| username.set(e.value()),
+                                autofocus: true,
                             }
                         }
 
-                        div { class: "login-input-group",
-                            label { "Senha de Acesso" }
-                            div { class: "login-input-wrapper",
-                                span { class: "login-input-icon",
-                                    IconLock { size: 18, color: "#94a3b8".to_string() }
-                                }
-                                input {
-                                    r#type: "password",
-                                    class: "login-input-field",
-                                    placeholder: "Sua senha segura",
-                                    value: "{password}",
-                                    oninput: move |e| password.set(e.value()),
-                                }
+                        div { class: "login-input-wrapper",
+                            span { class: "login-input-icon",
+                                IconLock { size: 18, color: "#94a3b8".to_string() }
+                            }
+                            input {
+                                r#type: "password",
+                                class: "login-input-field",
+                                placeholder: "Senha de acesso",
+                                value: "{password}",
+                                oninput: move |e| password.set(e.value()),
                             }
                         }
 
-                        div { class: "forgot-password-link", "Esqueceu sua senha?" }
+                        div { class: "forgot-password-row",
+                            span { class: "forgot-password-link", "Esqueceu sua senha?" }
+                        }
 
                         button {
                             r#type: "submit",
-                            class: "btn-modern-submit",
+                            class: "btn-login-submit",
                             disabled: is_loading(),
                             if is_loading() {
                                 "Entrando..."
                             } else {
-                                "Acessar Sistema"
+                                "Entrar no sistema"
                             }
                         }
-                    }
-
-                    div { class: "login-demo-credentials",
-                        p { "💡 Dica de Acesso Rápido (Mock):" }
-                        span { "Usuário: " strong { "admin" } " | Senha: " strong { "qualquer senha" } }
                     }
                 }
             }
 
-            // Lado Direito: Banner Visual Moderno
+            // Lado Direito: Banner Escuro Minimalista (Visual Simples Dental V2)
             div { class: "login-visual-side",
-                div { class: "visual-overlay-mesh" }
-                div { class: "login-visual-content",
-                    div { class: "floating-badge", "Tooth Plus V2" }
-                    h2 { "A evolução da gestão odontológica inteligente." }
-                    p { "Prontuários eletrônicos completos, controle financeiro em tempo real e agendamento ágil integrados em uma experiência fluida inspirada nas melhores práticas clínicas." }
+                div { class: "login-visual-container",
+                    span { class: "login-badge-pill", "Versão 2026.1" }
+                    h2 { class: "login-visual-title", "A evolução da gestão odontológica." }
+                    p { class: "login-visual-desc",
+                        "Prontuários eletrônicos, fluxos financeiros automatizados e agendamento inteligente em uma experiência fluida e sem fricção."
+                    }
 
-                    div { class: "mock-ui-card",
-                        div { class: "mock-line long" }
-                        div { class: "mock-line medium" }
-                        div { class: "mock-dots",
-                            div { class: "dot" }
-                            div { class: "dot" }
-                            div { class: "dot" }
-                        }
+                    div { class: "login-visual-skeleton-card",
+                        div { class: "skeleton-bar bar-gray" }
+                        div { class: "skeleton-bar bar-blue" }
+                        div { class: "skeleton-dots", "..." }
                     }
                 }
             }
@@ -193,9 +183,9 @@ pub fn ContextSelector() -> Element {
         .unwrap_or_else(|| "Usuário".to_string());
 
     rsx! {
-        div { class: "context-wrapper",
-            div { class: "visual-overlay-mesh" }
+        document::Link { rel: "stylesheet", href: STYLE }
 
+        div { class: "context-wrapper",
             div { class: "context-container",
                 div { class: "context-header-zone",
                     div { class: "user-avatar-badge",

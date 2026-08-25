@@ -31,6 +31,7 @@ pub mod settings;
 pub mod tooth;
 pub mod trash;
 pub mod trending_up;
+pub mod user;
 pub mod users;
 
 pub use activity::IconActivity;
@@ -61,4 +62,5 @@ pub use settings::IconSettings;
 pub use tooth::IconTooth;
 pub use trash::IconTrash;
 pub use trending_up::IconTrendingUp;
+pub use user::IconUser;
 pub use users::IconUsers;

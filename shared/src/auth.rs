@@ -1,4 +1,4 @@
-use crate::models::ClinicAccess;
+pub use crate::models::ClinicAccess;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

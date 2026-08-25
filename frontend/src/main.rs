@@ -13,6 +13,8 @@ use api::{load_active_clinic, load_session};
 use dioxus::prelude::*;
 use router::Route;
 
+const MAIN_STYLE: Asset = asset!("/assets/main.css");
+
 fn main() {
     dioxus::launch(App);
 }
@@ -26,6 +28,7 @@ fn App() -> Element {
     let _active_clinic = use_context_provider(|| Signal::new(load_active_clinic()));
 
     rsx! {
+        document::Link { rel: "stylesheet", href: MAIN_STYLE }
         Router::<Route> {}
     }
 }

@@ -1,66 +1,31 @@
 /* ==========================================================================
-   TOOTH PLUS V2 — FOLHA DE ESTILOS PRINCIPAL
+   TOOTH PLUS V2 — FOLHA DE ESTILOS GLOBAL (RESET & TOKENS)
    ========================================================================== */
 
 /* ==========================================================================
-   1. RESET GLOBAL DE ESTILOS DO NAVEGADOR (CSS RESET & NORMALIZE)
+   1. RESET GLOBAL & BASE
    ========================================================================== */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    border: 0;
-    font-size: 100%;
-    font: inherit;
-    vertical-align: baseline;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
 }
 
-html, body {
+html,
+body {
     height: 100%;
     width: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
     line-height: 1.5;
-    font-family: -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #f8fafc;
     color: #0f172a;
+    background-color: #f8fafc;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     overflow-x: hidden;
-}
-
-article, aside, details, figcaption, figure, footer, header, hgroup, menu, nav, section, main {
-    display: block;
-}
-
-ol, ul {
-    list-style: none;
-}
-
-blockquote, q {
-    quotes: none;
-}
-
-blockquote::before, blockquote::after, q::before, q::after {
-    content: '';
-    content: none;
-}
-
-table {
-    border-collapse: collapse;
-    border-spacing: 0;
-}
-
-button, input, select, textarea {
-    font-family: inherit;
-    font-size: inherit;
-    line-height: inherit;
-    color: inherit;
-    background: transparent;
-    border: none;
-    outline: none;
-}
-
-button {
-    cursor: pointer;
 }
 
 a {
@@ -68,102 +33,181 @@ a {
     text-decoration: none;
 }
 
-img, svg {
+button {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    cursor: pointer;
+    border: none;
+    background: none;
+    outline: none;
+}
+
+input,
+select,
+textarea {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    border: none;
+    background: none;
+    outline: none;
+}
+
+img,
+svg {
     display: block;
     max-width: 100%;
 }
 
 /* ==========================================================================
-   2. VARIÁVEIS DE DESIGN & TOKENS
+   2. VARIÁVEIS & DESIGN TOKENS GLOBAIS
    ========================================================================== */
 :root {
     --primary: #00a0e4;
     --primary-hover: #0284c7;
+    --primary-dark: #0369a1;
     --primary-light: #e0f2fe;
-    --primary-dark-header: #0284c7;
+    --primary-subtle: #f0f9ff;
+
+    --bg-page: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-surface-hover: #f1f5f9;
+
     --text-main: #0f172a;
     --text-muted: #64748b;
     --text-light: #94a3b8;
-    --bg-page: #f8fafc;
-    --bg-card: #ffffff;
+
     --border-color: #e2e8f0;
     --border-subtle: #f1f5f9;
+    --border-focus: #00a0e4;
+
     --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 16px;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 12px 24px -4px rgba(15, 23, 42, 0.12);
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-full: 9999px;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+    --shadow-btn: 0 4px 12px rgba(0, 160, 228, 0.25);
 }
 
 /* ==========================================================================
-   3. LAYOUT GERAL DA APLICAÇÃO (APP SHELL, TOPBAR & SIDEBAR)
+   3. ESTILOS COMUNS DO SISTEMA (BOTÕES, CARDS)
+   ========================================================================== */
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background-color: var(--primary);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: var(--radius-md);
+    transition: all 0.15s ease;
+    box-shadow: var(--shadow-btn);
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+    transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background-color: #ffffff;
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 18px;
+    border-radius: var(--radius-md);
+    transition: all 0.15s ease;
+}
+
+.btn-secondary:hover {
+    background-color: var(--bg-surface-hover);
+    border-color: #cbd5e1;
+}
+
+/* ==========================================================================
+   4. SHELL DO SISTEMA (TOPBAR & SIDEBAR ESSENCIAIS)
    ========================================================================== */
 .app-shell {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    width: 100vw;
     overflow: hidden;
+    background-color: var(--bg-page);
 }
 
-/* Topbar Superior (Estilo Simples Dental) */
 .topbar-simples {
     height: 52px;
-    background: linear-gradient(90deg, #0284c7 0%, #0077b6 100%);
+    background-color: #0284c7;
     color: #ffffff;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    z-index: 50;
     flex-shrink: 0;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-    z-index: 100;
 }
 
 .topbar-left-zone {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
 }
 
 .topbar-menu-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
+    color: #ffffff;
+    padding: 6px;
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
-    border-radius: var(--radius-sm);
-    color: #ffffff;
-    transition: background 0.15s ease;
 }
 
 .topbar-menu-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 .topbar-brand-breadcrumb {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
+    gap: 10px;
 }
 
 .topbar-logo-box {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-weight: 800;
-    color: #ffffff;
-    letter-spacing: -0.3px;
+    font-weight: 700;
+    font-size: 15px;
 }
 
 .topbar-logo-box img {
-    height: 22px;
-    width: 22px;
+    height: 20px;
+    width: auto;
+}
+
+.topbar-brand-name {
+    font-weight: 800;
+    letter-spacing: -0.02em;
 }
 
 .topbar-breadcrumb-separator {
@@ -173,7 +217,8 @@ img, svg {
 
 .topbar-breadcrumb-active {
     font-weight: 600;
-    color: #ffffff;
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.95);
 }
 
 .topbar-right-zone {
@@ -184,60 +229,51 @@ img, svg {
 
 .topbar-action-icon-btn {
     position: relative;
-    background: transparent;
-    border: none;
     color: #ffffff;
-    width: 36px;
-    height: 36px;
+    padding: 6px;
     border-radius: var(--radius-sm);
-    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s ease;
 }
 
 .topbar-action-icon-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 .topbar-badge-notification {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    background: #dc2626;
+    top: 2px;
+    right: 2px;
+    background-color: #ef4444;
     color: #ffffff;
     font-size: 10px;
-    font-weight: 800;
-    padding: 1px 5px;
+    font-weight: 700;
     border-radius: 9999px;
-    border: 2px solid #0284c7;
+    padding: 1px 5px;
 }
 
 .topbar-clinic-pill {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.18);
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    background-color: rgba(255, 255, 255, 0.15);
     padding: 5px 12px;
     border-radius: 9999px;
-    font-size: 12.5px;
-    font-weight: 700;
-    color: #ffffff;
     cursor: pointer;
-    transition: background 0.15s ease;
+    font-size: 12.5px;
+    font-weight: 600;
 }
 
 .topbar-clinic-pill:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background-color: rgba(255, 255, 255, 0.25);
 }
 
 .clinic-pill-indicator {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #10b981;
+    background-color: #4ade80;
 }
 
 .topbar-user-avatar-wrap {
@@ -245,43 +281,44 @@ img, svg {
 }
 
 .topbar-avatar-btn {
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
-    background: #ffffff;
-    color: #0284c7;
-    border: 2px solid rgba(255, 255, 255, 0.8);
-    font-weight: 800;
+    background-color: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    font-weight: 700;
     font-size: 13px;
-    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
+.topbar-avatar-btn:hover {
+    background-color: rgba(255, 255, 255, 0.35);
+}
+
 .topbar-user-dropdown-menu {
     position: absolute;
-    top: 44px;
+    top: 42px;
     right: 0;
     width: 220px;
     background: #ffffff;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
-    padding: 8px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    z-index: 200;
-    animation: fadeIn 0.15s ease;
+    z-index: 100;
 }
 
 .dropdown-header-user {
-    padding: 8px 10px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
 }
 
 .dropdown-header-user strong {
-    display: block;
     font-size: 13px;
     color: var(--text-main);
 }
@@ -293,7 +330,7 @@ img, svg {
 
 .dropdown-divider {
     height: 1px;
-    background: var(--border-color);
+    background-color: var(--border-color);
     margin: 4px 0;
 }
 
@@ -301,21 +338,15 @@ img, svg {
     display: flex;
     align-items: center;
     gap: 10px;
-    width: 100%;
-    padding: 8px 10px;
-    border: none;
+    padding: 8px 12px;
     border-radius: var(--radius-sm);
-    background: transparent;
-    font-size: 13px;
-    font-weight: 600;
     color: var(--text-main);
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.15s ease;
+    font-size: 12.5px;
+    font-weight: 500;
 }
 
 .dropdown-item-btn:hover {
-    background: #f1f5f9;
+    background-color: var(--bg-surface-hover);
 }
 
 .dropdown-item-btn.item-logout {
@@ -323,10 +354,9 @@ img, svg {
 }
 
 .dropdown-item-btn.item-logout:hover {
-    background: #fef2f2;
+    background-color: #fee2e2;
 }
 
-/* Corpo Principal e Sidebar Lateral */
 .app-body-layout {
     display: flex;
     flex: 1;
@@ -340,13 +370,12 @@ img, svg {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    flex-shrink: 0;
     transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    overflow-y: auto;
+    flex-shrink: 0;
 }
 
 .sidebar-simples.sidebar-collapsed {
-    width: 64px;
+    width: 60px;
 }
 
 .sidebar-nav-menu {
@@ -363,19 +392,18 @@ img, svg {
     padding: 9px 12px;
     border-radius: var(--radius-sm);
     color: #475569;
-    text-decoration: none;
     font-size: 13.5px;
     font-weight: 500;
     transition: all 0.15s ease;
 }
 
 .sidebar-nav-link:hover {
-    background: #f1f5f9;
+    background-color: #f1f5f9;
     color: var(--text-main);
 }
 
 .sidebar-nav-link.nav-item-active {
-    background: var(--primary-light);
+    background-color: var(--primary-light);
     color: #0284c7;
     font-weight: 700;
 }
@@ -413,461 +441,27 @@ img, svg {
 
 .btn-support-pill {
     width: 100%;
-    background: #0284c7;
+    background-color: #0284c7;
     color: #ffffff;
-    border: none;
     border-radius: 9999px;
     padding: 8px 12px;
     font-size: 12px;
     font-weight: 700;
-    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    transition: background 0.15s ease;
 }
 
 .btn-support-pill:hover {
-    background: #0369a1;
+    background-color: #0369a1;
 }
 
-/* Área de Visualização das Páginas */
 .app-main-viewport {
     flex: 1;
     overflow-y: auto;
-    background: var(--bg-page);
+    background-color: var(--bg-page);
     display: flex;
     flex-direction: column;
     padding: 24px 32px;
-}
-
-/* ==========================================================================
-   4. TELA DE LOGIN (ESTILO PADRÃO DA BRANCH MAIN COM ICON.SVG)
-   ========================================================================== */
-.login-wrapper {
-    display: grid;
-    grid-template-columns: 1fr;
-    min-height: 100vh;
-    background-color: #ffffff;
-}
-
-@media (min-width: 992px) {
-    .login-wrapper {
-        grid-template-columns: 1.1fr 0.9fr;
-    }
-}
-
-.login-form-side {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding: 60px 40px;
-    background-color: #ffffff;
-}
-
-.login-box {
-    width: 100%;
-    max-width: 400px;
-}
-
-.login-logo-container {
-    margin-bottom: 32px;
-    display: flex;
-    align-items: center;
-}
-
-.brand-logo-svg {
-    height: 48px;
-    width: auto;
-}
-
-.login-title-welcome {
-    font-size: 32px;
-    font-weight: 700;
-    color: #0f172a;
-    margin: 0 0 8px 0;
-    letter-spacing: -0.03em;
-}
-
-.login-subtitle {
-    font-size: 15px;
-    color: #64748b;
-    margin: 0 0 32px 0;
-    line-height: 1.5;
-}
-
-.login-form {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.login-input-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.login-input-group label {
-    font-size: 13px;
-    font-weight: 600;
-    color: #334155;
-}
-
-.login-input-wrapper {
-    position: relative;
-    display: flex;
-    align-items: center;
-    width: 100%;
-}
-
-.login-input-icon {
-    position: absolute;
-    left: 16px;
-    color: #94a3b8;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    transition: color 0.2s ease;
-    width: 20px;
-    height: 20px;
-}
-
-.login-input-field {
-    width: 100%;
-    padding: 14px 16px 14px 48px;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    font-size: 15px;
-    color: #0f172a;
-    background-color: #f8fafc;
-    outline: none;
-    box-sizing: border-box;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.login-input-field:focus {
-    border-color: #00a0e4;
-    background-color: #ffffff;
-    box-shadow: 0 0 0 4px rgba(0, 160, 228, 0.12);
-}
-
-.login-input-wrapper:focus-within .login-input-icon {
-    color: #00a0e4;
-}
-
-.forgot-password-link {
-    font-size: 14px;
-    color: #00a0e4;
-    font-weight: 500;
-    cursor: pointer;
-    text-align: right;
-    margin-top: -4px;
-}
-
-.forgot-password-link:hover {
-    text-decoration: underline;
-}
-
-.btn-modern-submit {
-    width: 100%;
-    padding: 16px;
-    background: #00a0e4;
-    color: #ffffff;
-    border: none;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 12px rgba(0, 160, 228, 0.2);
-}
-
-.btn-modern-submit:hover {
-    background: #0284c7;
-    transform: translateY(-1px);
-}
-
-.btn-modern-submit:disabled {
-    background: #cbd5e1;
-    color: #94a3b8;
-    cursor: not-allowed;
-    box-shadow: none;
-    transform: none;
-}
-
-.modern-error-box {
-    background: linear-gradient(135deg, #fff5f5 0%, #fef2f2 100%);
-    border: 1px solid #fecaca;
-    border-left: 4px solid #ef4444;
-    padding: 14px 16px;
-    border-radius: 12px;
-    margin-bottom: 20px;
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.08);
-}
-
-.error-box-content {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    text-align: left;
-    color: #dc2626;
-}
-
-.error-box-content strong {
-    font-size: 13.5px;
-    font-weight: 700;
-}
-
-.error-box-content span {
-    font-size: 12.5px;
-}
-
-.login-demo-credentials {
-    margin-top: 24px;
-    padding: 12px;
-    background: #f8fafc;
-    border: 1px dashed var(--border-color);
-    border-radius: var(--radius-md);
-    font-size: 12px;
-    color: var(--text-muted);
-}
-
-/* Painel Visual Direito */
-.login-visual-side {
-    display: none;
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    position: relative;
-    overflow: hidden;
-    padding: 60px;
-    box-sizing: border-box;
-}
-
-@media (min-width: 992px) {
-    .login-visual-side {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: flex-start;
-    }
-}
-
-.visual-overlay-mesh {
-    position: absolute;
-    top: -20%;
-    right: -20%;
-    width: 80%;
-    height: 80%;
-    background: radial-gradient(circle, rgba(0, 160, 228, 0.15) 0%, transparent 70%);
-    filter: blur(60px);
-    pointer-events: none;
-}
-
-.login-visual-content {
-    max-width: 480px;
-    position: relative;
-    z-index: 2;
-}
-
-.floating-badge {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    padding: 6px 14px;
-    border-radius: 30px;
-    font-size: 12px;
-    color: #cbd5e1;
-    font-weight: 600;
-    display: inline-block;
-    margin-bottom: 24px;
-}
-
-.login-visual-content h2 {
-    font-size: 38px;
-    font-weight: 700;
-    color: #ffffff;
-    margin: 0 0 20px 0;
-    letter-spacing: -0.04em;
-    line-height: 1.2;
-}
-
-.login-visual-content p {
-    font-size: 16px;
-    color: #94a3b8;
-    line-height: 1.6;
-    margin: 0 0 40px 0;
-}
-
-.mock-ui-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    padding: 24px;
-    width: 100%;
-    backdrop-filter: blur(12px);
-}
-
-.mock-line {
-    height: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    margin-bottom: 12px;
-}
-
-.mock-line.long {
-    width: 70%;
-}
-
-.mock-line.medium {
-    width: 45%;
-    background: rgba(0, 160, 228, 0.3);
-}
-
-.mock-dots {
-    display: flex;
-    gap: 6px;
-    margin-top: 20px;
-}
-
-.mock-dots .dot {
-    width: 6px;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-}
-
-/* ==========================================================================
-   5. SELETOR DE UNIDADE / CLÍNICA (CONTEXT SELECTOR)
-   ========================================================================== */
-.context-wrapper {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #0f172a 0%, #0284c7 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    position: relative;
-}
-
-.context-container {
-    position: relative;
-    width: 100%;
-    max-width: 620px;
-    background: #ffffff;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    padding: 36px;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-}
-
-.context-header-zone {
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.user-avatar-badge {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: var(--primary-light);
-    color: var(--primary);
-    font-size: 22px;
-    font-weight: 800;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 12px;
-}
-
-.context-welcome-title {
-    font-size: 22px;
-    font-weight: 800;
-}
-
-.context-subtitle {
-    font-size: 13.5px;
-    color: var(--text-muted);
-}
-
-.card-grid-clinics {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.clinic-selection-card {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 16px 20px;
-    background: #ffffff;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.clinic-selection-card:hover {
-    border-color: var(--primary);
-    background: #f8fafc;
-    box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
-}
-
-.clinic-card-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: var(--radius-md);
-    background: var(--primary-light);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.clinic-card-info {
-    flex: 1;
-}
-
-.clinic-card-info h3 {
-    font-size: 15px;
-    font-weight: 700;
-    margin-bottom: 2px;
-}
-
-.clinic-role-badge {
-    font-size: 12px;
-    color: var(--text-muted);
-}
-
-.context-footer-zone {
-    text-align: center;
-}
-
-.context-logout-link {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: underline;
-}
-
-.context-logout-link:hover {
-    color: #dc2626;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
 }
