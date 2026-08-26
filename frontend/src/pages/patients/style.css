@@ -121,7 +121,7 @@
     background: #121a2c;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--radius-md, 8px);
-    overflow: hidden;
+    overflow-y: auto;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
@@ -408,7 +408,7 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--radius-md, 8px);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-    overflow: hidden;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
 }

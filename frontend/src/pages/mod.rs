@@ -9,3 +9,5 @@ pub mod patients;
 pub mod settings;
 pub mod stock;
 pub mod treatments;
+
+pub mod sign_portal;

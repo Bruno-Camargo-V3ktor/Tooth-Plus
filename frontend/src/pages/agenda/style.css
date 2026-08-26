@@ -645,3 +645,20 @@
     font-weight: 600;
     margin-top: 2px;
 }
+
+/* Estilo para colunas do modo Dia */
+.agenda-grid-day {
+    grid-template-columns: 56px repeat(3, 1fr) !important;
+}
+
+/* Faixas hachuradas para horários bloqueados ou fora de expediente */
+.agenda-cell-blocked {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(0, 0, 0, 0.25),
+        rgba(0, 0, 0, 0.25) 10px,
+        rgba(255, 255, 255, 0.02) 10px,
+        rgba(255, 255, 255, 0.02) 20px
+    ) !important;
+    background-color: #0b1120 !important;
+}

@@ -1,4 +1,5 @@
 use crate::components::modal::Modal;
+use crate::icons::IconExternalLink;
 use dioxus::prelude::*;
 
 #[component]
@@ -19,115 +20,256 @@ pub fn ModalAppointment(
         return rsx! {};
     }
 
+    let is_comp = *is_compromisso.read();
+    let current_notes = notes.read().clone();
+    let current_patient = patient_query.read().clone();
+
     rsx! {
         Modal {
-            title: if *is_compromisso.read() { "Novo Compromisso".to_string() } else { "Nova Consulta".to_string() },
+            title: "".to_string(),
             is_open,
             on_close: move |_| on_close.call(()),
             footer: rsx! {
-                button {
-                    r#type: "button",
-                    class: "btn-modal-ghost",
-                    onclick: move |_| on_close.call(()),
-                    "Cancelar"
-                }
-                button {
-                    r#type: "button",
-                    class: "btn-modal-primary",
-                    onclick: move |_| on_submit.call(()),
-                    "Confirmar Agendamento"
+                div { style: "display: flex; align-items: center; justify-content: space-between; width: 100%;",
+                    if !is_comp {
+                        select {
+                            class: "form-select",
+                            style: "max-width: 180px; height: 36px; font-size: 12.5px; background: rgba(255,255,255,0.05);",
+                            option { value: "", "Selecione um rótulo" }
+                            option { value: "urgencia", "🚨 Urgência" }
+                            option { value: "primeira", "⭐ Primeira Consulta" }
+                            option { value: "retorno", "🔄 Retorno" }
+                            option { value: "cirurgia", "💉 Cirurgia" }
+                        }
+                    } else {
+                        div {}
+                    }
+
+                    div { style: "display: flex; align-items: center; gap: 10px;",
+                        button {
+                            r#type: "button",
+                            class: "btn-modal-ghost",
+                            style: "font-weight: 700; font-size: 12.5px; text-transform: uppercase;",
+                            onclick: move |_| on_close.call(()),
+                            "FECHAR"
+                        }
+                        button {
+                            r#type: "button",
+                            class: "btn-new-patient-green",
+                            style: "font-weight: 700; font-size: 13px; text-transform: uppercase; padding: 0 20px; height: 38px;",
+                            onclick: move |_| on_submit.call(()),
+                            "MARCAR"
+                        }
+                    }
                 }
             },
 
-            div { class: "form-row-2 form-row",
-                div { class: "form-field",
-                    label { class: "form-label", "Data *" }
-                    input {
-                        class: "form-input",
-                        r#type: "date",
-                        value: "{appt_date}",
-                        oninput: move |e| appt_date.set(e.value()),
+            div { style: "display: flex; flex-direction: column; gap: 14px;",
+                // Top Tab Bar
+                div { style: "display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px; margin-bottom: 4px;",
+                    div { style: "display: flex; gap: 8px;",
+                        button {
+                            r#type: "button",
+                            class: if !is_comp { "btn-filter-pill active" } else { "btn-filter-pill" },
+                            style: "padding: 6px 18px; font-size: 13px; font-weight: 700;",
+                            onclick: move |_| is_compromisso.set(false),
+                            "Consulta"
+                        }
+                        button {
+                            r#type: "button",
+                            class: if is_comp { "btn-filter-pill active" } else { "btn-filter-pill" },
+                            style: "padding: 6px 18px; font-size: 13px; font-weight: 700;",
+                            onclick: move |_| is_compromisso.set(true),
+                            "Compromisso"
+                        }
                     }
-                }
-                div { class: "form-field",
-                    label { class: "form-label", "Horário *" }
-                    input {
-                        class: "form-input",
-                        r#type: "time",
-                        value: "{appt_time}",
-                        oninput: move |e| appt_time.set(e.value()),
-                    }
-                }
-            }
 
-            div { class: "form-row-2 form-row",
-                div { class: "form-field",
-                    label { class: "form-label", "Duração (minutos) *" }
-                    select {
-                        class: "form-select",
-                        value: "{duration}",
-                        onchange: move |e| {
-                            if let Ok(v) = e.value().parse::<u32>() { duration.set(v); }
-                        },
-                        option { value: "15", "15 minutos" }
-                        option { value: "30", "30 minutos (Padrão)" }
-                        option { value: "45", "45 minutos" }
-                        option { value: "60", "1 hora" }
+                    a {
+                        href: "#",
+                        style: "display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: #94a3b8; text-decoration: none;",
+                        span { "Quer migrar seus dados? " strong { style: "color: #38bdf8; text-decoration: underline;", "Saiba mais" } }
+                        IconExternalLink { size: 13, color: "#38bdf8".to_string() }
                     }
                 }
-                div { class: "form-field",
-                    label { class: "form-label", "Dentista Responsável" }
-                    select {
-                        class: "form-select",
-                        value: "{assigned_user_id}",
-                        onchange: move |e| assigned_user_id.set(e.value()),
-                        option { value: "usr-1", "Dr. Roberto Alencar" }
-                        option { value: "usr-2", "Dr. Lucas Mendes" }
-                    }
-                }
-            }
 
-            if !*is_compromisso.read() {
-                div { class: "form-field",
-                    label { class: "form-label", "Paciente *" }
-                    input {
-                        class: "form-input",
-                        r#type: "text",
-                        placeholder: "Nome do paciente...",
-                        value: "{patient_query}",
-                        oninput: move |e| patient_query.set(e.value()),
+                if !is_comp {
+                    // MODO CONSULTA
+                    div { class: "form-field",
+                        div { style: "display: flex; justify-content: space-between; align-items: center;",
+                            label { class: "form-label", style: "color: #ef4444;", "Paciente *" }
+                            a { href: "/patients", style: "font-size: 12px; color: #00a0e4; text-decoration: none; font-weight: 600;", "Cadastrar novo paciente" }
+                        }
+                        input {
+                            class: "form-input",
+                            style: "border-color: rgba(255,255,255,0.15);",
+                            r#type: "text",
+                            placeholder: "Buscar paciente...",
+                            value: "{patient_query}",
+                            oninput: move |e| patient_query.set(e.value()),
+                        }
                     }
-                }
-                div { class: "form-field",
-                    label { class: "form-label", "Procedimento Previsto" }
-                    input {
-                        class: "form-input",
-                        r#type: "text",
-                        placeholder: "Ex: Avaliação Inicial, Restauração...",
-                        value: "{procedure_name}",
-                        oninput: move |e| procedure_name.set(e.value()),
-                    }
-                }
-            } else {
-                div { class: "form-field",
-                    label { class: "form-label", "Título do Compromisso *" }
-                    input {
-                        class: "form-input",
-                        r#type: "text",
-                        placeholder: "Ex: Reunião de equipe, Manutenção...",
-                        value: "{patient_query}",
-                        oninput: move |e| patient_query.set(e.value()),
-                    }
-                }
-            }
 
-            div { class: "form-field",
-                label { class: "form-label", "Observações" }
-                textarea {
-                    class: "form-textarea",
-                    placeholder: "Anotações adicionais...",
-                    value: "{notes}",
-                    oninput: move |e| notes.set(e.value()),
+                    div { class: "form-field",
+                        label { class: "form-label", "Profissional *" }
+                        select {
+                            class: "form-select",
+                            value: "{assigned_user_id}",
+                            onchange: move |e| assigned_user_id.set(e.value()),
+                            option { value: "usr:dr_lucas", "Dr(a). Lucas Mendes - CRO 12345" }
+                            option { value: "usr:dra_fernanda", "Dra. Fernanda Ramos - CRO 54321" }
+                            option { value: "usr:dra_luria", "Dra. Luria Silva - CRO 98765" }
+                        }
+                    }
+
+                    div { style: "display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 10px;",
+                        div { class: "form-field",
+                            label { class: "form-label", "Data da consulta *" }
+                            input {
+                                class: "form-input",
+                                r#type: "date",
+                                value: "{appt_date}",
+                                oninput: move |e| appt_date.set(e.value()),
+                            }
+                            a { href: "#", style: "font-size: 11.5px; color: #00a0e4; text-decoration: none; margin-top: 4px; display: inline-block;", "Encontrar horário livre" }
+                        }
+
+                        div { class: "form-field",
+                            label { class: "form-label", "Hora de início *" }
+                            input {
+                                class: "form-input",
+                                r#type: "time",
+                                value: "{appt_time}",
+                                oninput: move |e| appt_time.set(e.value()),
+                            }
+                        }
+
+                        div { class: "form-field",
+                            label { class: "form-label", "Duração (min) *" }
+                            select {
+                                class: "form-select",
+                                value: "{duration}",
+                                onchange: move |e| {
+                                    if let Ok(v) = e.value().parse::<u32>() { duration.set(v); }
+                                },
+                                option { value: "15", "15" }
+                                option { value: "30", "30" }
+                                option { value: "45", "45" }
+                                option { value: "60", "60" }
+                                option { value: "90", "90" }
+                            }
+                        }
+                    }
+
+                    div { class: "form-field",
+                        div { style: "display: flex; justify-content: space-between;",
+                            label { class: "form-label", "Observação" }
+                            span { style: "font-size: 11px; color: #64748b;", "{current_notes.len()} / 500" }
+                        }
+                        textarea {
+                            class: "form-textarea",
+                            style: "height: 64px;",
+                            maxlength: "500",
+                            placeholder: "Observações clínicas, recomendações ou queixas principais...",
+                            value: "{notes}",
+                            oninput: move |e| notes.set(e.value()),
+                        }
+                    }
+
+                    div { class: "form-field",
+                        label { class: "form-label", "Retornar em" }
+                        select {
+                            class: "form-select",
+                            option { value: "none", "Sem retorno" }
+                            option { value: "7d", "7 dias" }
+                            option { value: "15d", "15 dias" }
+                            option { value: "30d", "30 dias" }
+                            option { value: "6m", "6 meses" }
+                        }
+                    }
+
+                    div { style: "display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; padding: 4px 0;",
+                        input { r#type: "checkbox", id: "send-reminder", checked: true }
+                        label { r#for: "send-reminder", style: "cursor: pointer;", "Enviar confirmação e lembrete de consulta automático" }
+                    }
+                } else {
+                    // MODO COMPROMISSO
+                    div { class: "form-field",
+                        div { style: "display: flex; justify-content: space-between;",
+                            label { class: "form-label", style: "color: #ef4444;", "Título do compromisso *" }
+                            span { style: "font-size: 11px; color: #64748b;", "{current_patient.len()} / 255" }
+                        }
+                        input {
+                            class: "form-input",
+                            r#type: "text",
+                            maxlength: "255",
+                            placeholder: "Ex: Reunião clínica, Manutenção do compressor...",
+                            value: "{patient_query}",
+                            oninput: move |e| patient_query.set(e.value()),
+                        }
+                    }
+
+                    div { class: "form-field",
+                        div { style: "display: flex; justify-content: space-between;",
+                            label { class: "form-label", "Descrição" }
+                            span { style: "font-size: 11px; color: #64748b;", "{current_notes.len()} / 500" }
+                        }
+                        textarea {
+                            class: "form-textarea",
+                            style: "height: 60px;",
+                            maxlength: "500",
+                            placeholder: "Detalhes do compromisso...",
+                            value: "{notes}",
+                            oninput: move |e| notes.set(e.value()),
+                        }
+                    }
+
+                    div { class: "form-field",
+                        label { class: "form-label", "Agenda de *" }
+                        select {
+                            class: "form-select",
+                            value: "{assigned_user_id}",
+                            onchange: move |e| assigned_user_id.set(e.value()),
+                            option { value: "usr:dr_lucas", "Dr(a). Lucas Mendes" }
+                            option { value: "usr:dra_fernanda", "Dra. Fernanda Ramos" }
+                            option { value: "usr:dra_luria", "Dra. Luria Silva" }
+                        }
+                    }
+
+                    div { style: "border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px;",
+                        h4 { style: "font-size: 13.5px; font-weight: 700; color: #38bdf8; margin: 0 0 10px 0;", "Data e hora" }
+
+                        div { style: "display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; margin-bottom: 10px;",
+                            input { r#type: "checkbox", id: "allday" }
+                            label { r#for: "allday", style: "cursor: pointer;", "Dia inteiro" }
+                        }
+
+                        div { class: "form-row-2 form-row",
+                            div { class: "form-field",
+                                label { class: "form-label", "Começa em *" }
+                                input { class: "form-input", r#type: "date", value: "{appt_date}" }
+                            }
+                            div { class: "form-field",
+                                label { class: "form-label", "Horário início *" }
+                                input { class: "form-input", r#type: "time", value: "{appt_time}" }
+                            }
+                        }
+
+                        div { class: "form-row-2 form-row",
+                            div { class: "form-field",
+                                label { class: "form-label", "Termina em *" }
+                                input { class: "form-input", r#type: "date", value: "{appt_date}" }
+                            }
+                            div { class: "form-field",
+                                label { class: "form-label", "Horário fim *" }
+                                input { class: "form-input", r#type: "time", value: "11:15" }
+                            }
+                        }
+                    }
+
+                    div { style: "background: #0b1120; border: 1px solid rgba(255,255,255,0.06); padding: 10px 12px; border-radius: 6px; font-size: 12.5px; color: #94a3b8; display: flex; align-items: center; justify-content: space-between;",
+                        span { "Configurações extras • Ocupado para consultas • Sem alerta" }
+                        span { "▾" }
+                    }
                 }
             }
         }

@@ -11,6 +11,7 @@ use crate::pages::finance::FinanceView;
 use crate::pages::stock::StockView;
 use crate::pages::documents::DocumentsView;
 use crate::pages::settings::SettingsView;
+use crate::pages::sign_portal::SignPortal;
 use crate::components::layout::AppLayout;
 
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -20,6 +21,9 @@ pub enum Route {
 
     #[route("/select-clinic")]
     ContextSelector {},
+
+    #[route("/sign/:token")]
+    SignPortal { token: String },
 
     #[layout(AppLayout)]
         #[route("/")]
