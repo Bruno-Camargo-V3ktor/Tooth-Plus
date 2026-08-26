@@ -1,10 +1,10 @@
-//! # Menu Lateral de Navegação (Estilo Simples Dental)
+//! # Menu Lateral de Navegação (Dark Dental Theme)
 //!
-//! Exibe os itens do menu em fundo branco limpo, com ícones SVG lineares,
-//! indicação de item ativo por pílula azul suave e botões de suporte/configuração no rodapé.
+//! Exibe os itens do menu em tema escuro moderno, com ícones SVG lineares,
+//! indicação de item ativo por pílula azul e seção de Ajustes no rodapé.
 
 use crate::icons::{
-    IconActivity, IconBox, IconCalendar, IconDollar, IconFileText, IconHelp, IconPhone,
+    IconActivity, IconBox, IconCalendar, IconDollar, IconFileText,
     IconSettings, IconUsers,
 };
 use crate::router::Route;
@@ -49,7 +49,7 @@ pub fn Sidebar(is_collapsed: bool) -> Element {
                 }
             }
 
-            // Seção Inferior: Ajustes, Ajuda e Suporte
+            // Seção Inferior: Ajustes
             div { class: "sidebar-footer-section",
                 Link {
                     to: Route::SettingsView {},
@@ -58,26 +58,6 @@ pub fn Sidebar(is_collapsed: bool) -> Element {
                     div { class: "nav-icon-wrapper", IconSettings { size: 19, color: "currentColor".to_string() } }
                     if !is_collapsed {
                         span { class: "nav-link-label", "Ajustes" }
-                    }
-                }
-
-                div {
-                    class: "sidebar-nav-link link-help",
-                    title: if is_collapsed { "Como funciona" } else { "" },
-                    div { class: "nav-icon-wrapper", IconHelp { size: 19, color: "currentColor".to_string() } }
-                    if !is_collapsed {
-                        span { class: "nav-link-label", "Como funciona" }
-                    }
-                }
-
-                if !is_collapsed {
-                    div { class: "sidebar-support-button-wrap",
-                        button {
-                            r#type: "button",
-                            class: "btn-support-pill",
-                            IconPhone { size: 15, color: "#ffffff".to_string() }
-                            span { "Chamar suporte" }
-                        }
                     }
                 }
             }

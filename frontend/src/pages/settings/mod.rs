@@ -87,15 +87,15 @@ pub fn SettingsView() -> Element {
             div { class: "settings-container",
 
                 // Header
-                div { style: "display: flex; flex-direction: column; gap: 4px;",
-                    h1 { style: "font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;", "Ajustes da Clínica" }
-                    p { style: "font-size: 13.5px; color: #64748b; margin: 0;",
+                div { class: "settings-header",
+                    h1 { class: "settings-header-title", "Ajustes da Clínica" }
+                    p { class: "settings-header-subtitle",
                         "Gerencie os dados da unidade, horário de funcionamento da agenda e membros da equipe."
                     }
                 }
 
                 // Abas
-                div { class: "tab-underline-bar", style: "background: #ffffff; padding: 0 16px; border-radius: 8px; border: 1px solid #e2e8f0;",
+                div { class: "tab-underline-bar settings-tabs-bar",
                     button {
                         class: if *current_tab.read() == SettingsTab::Hours { "tab-underline-btn tab-active" } else { "tab-underline-btn" },
                         onclick: move |_| current_tab.set(SettingsTab::Hours),
@@ -113,7 +113,7 @@ pub fn SettingsView() -> Element {
                     }
                 }
 
-                // Conteúdo
+                // Conteúdo da Aba Ativa
                 match *current_tab.read() {
                     SettingsTab::Hours => rsx! {
                         div { class: "settings-card",
@@ -121,7 +121,7 @@ pub fn SettingsView() -> Element {
                                 h3 { class: "settings-card-title", "Horário de Atendimento e Grade da Agenda" }
                             }
                             div { class: "settings-card-body",
-                                p { style: "font-size: 13.5px; color: #64748b; margin: 0;",
+                                p { style: "font-size: 13px; color: #94a3b8; margin: 0 0 8px 0;",
                                     "Defina os horários em que a clínica realiza consultas. A grade da página Agenda será ajustada automaticamente para iniciar e terminar nestes horários."
                                 }
 
@@ -234,8 +234,8 @@ pub fn SettingsView() -> Element {
                                     div { class: "team-member-info",
                                         div { class: "team-avatar", "RA" }
                                         div {
-                                            div { style: "font-weight: 700; color: #0f172a;", "Dr. Roberto Alencar" }
-                                            div { style: "font-size: 12px; color: #64748b;", "admin • CRO-SP 84920" }
+                                            div { style: "font-weight: 700; color: #f8fafc;", "Dr. Roberto Alencar" }
+                                            div { style: "font-size: 12px; color: #94a3b8;", "admin • CRO-SP 84920" }
                                         }
                                     }
                                     span { class: "badge badge-blue", "Administrador Geral" }
@@ -244,8 +244,8 @@ pub fn SettingsView() -> Element {
                                     div { class: "team-member-info",
                                         div { class: "team-avatar", "LM" }
                                         div {
-                                            div { style: "font-weight: 700; color: #0f172a;", "Dr. Lucas Mendes" }
-                                            div { style: "font-size: 12px; color: #64748b;", "dr.lucas • CRO-SP 99120" }
+                                            div { style: "font-weight: 700; color: #f8fafc;", "Dr. Lucas Mendes" }
+                                            div { style: "font-size: 12px; color: #94a3b8;", "dr.lucas • CRO-SP 99120" }
                                         }
                                     }
                                     span { class: "badge badge-green", "Cirurgião-Dentista" }
@@ -254,8 +254,8 @@ pub fn SettingsView() -> Element {
                                     div { class: "team-member-info",
                                         div { class: "team-avatar", "FO" }
                                         div {
-                                            div { style: "font-weight: 700; color: #0f172a;", "Fernanda Oliveira" }
-                                            div { style: "font-size: 12px; color: #64748b;", "recepcao • Atendimento" }
+                                            div { style: "font-weight: 700; color: #f8fafc;", "Fernanda Oliveira" }
+                                            div { style: "font-size: 12px; color: #94a3b8;", "recepcao • Atendimento" }
                                         }
                                     }
                                     span { class: "badge badge-gray", "Recepção / Secretária" }

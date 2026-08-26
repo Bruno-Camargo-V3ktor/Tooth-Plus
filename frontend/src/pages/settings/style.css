@@ -23,6 +23,33 @@
     gap: 20px;
 }
 
+.settings-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.settings-header-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #f8fafc;
+    margin: 0;
+    letter-spacing: -0.02em;
+}
+
+.settings-header-subtitle {
+    font-size: 13.5px;
+    color: #94a3b8;
+    margin: 0;
+}
+
+.settings-tabs-bar {
+    background: #1a2035;
+    padding: 0 12px;
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .settings-card {
     background: #1a2035;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -52,6 +79,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    background: #1a2035;
 }
 
 .settings-card-footer {
