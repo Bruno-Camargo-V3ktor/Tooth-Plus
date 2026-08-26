@@ -2,6 +2,7 @@
 
 pub mod agenda;
 pub mod dashboard;
+pub mod documents;
 pub mod finance;
 pub mod login;
 pub mod patients;

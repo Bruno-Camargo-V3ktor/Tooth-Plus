@@ -228,8 +228,20 @@ pub fn AgendaView() -> Element {
         .cloned()
         .collect();
 
-    // Horas exibidas (08h - 20h)
-    let hours: Vec<u32> = (8..=20).collect();
+    // Horas de funcionamento da clínica (do mock/contexto)
+    let (open_hour, close_hour) = {
+        let clinic_id_for_hours = clinic_id.clone();
+        if let Ok(db) = crate::api::mock_db::DB.lock() {
+            if let Some(clinic) = db.clinics.iter().find(|c| c.id == clinic_id_for_hours) {
+                (clinic.opening_hour, clinic.closing_hour)
+            } else {
+                (8, 19)
+            }
+        } else {
+            (8, 19)
+        }
+    };
+    let hours: Vec<u32> = (open_hour..=close_hour).collect();
 
     rsx! {
         document::Link { rel: "stylesheet", href: STYLE }

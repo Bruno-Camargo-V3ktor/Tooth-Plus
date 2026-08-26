@@ -4,8 +4,8 @@
 //! indicação de item ativo por pílula azul suave e botões de suporte/configuração no rodapé.
 
 use crate::icons::{
-    IconActivity, IconBox, IconCalendar, IconDollar, IconHelp, IconMessageSquare, IconPhone,
-    IconSettings, IconTooth, IconTrendingUp, IconUsers,
+    IconActivity, IconBox, IconCalendar, IconDollar, IconFileText, IconHelp, IconPhone,
+    IconSettings, IconUsers,
 };
 use crate::router::Route;
 use dioxus::prelude::*;
@@ -18,11 +18,9 @@ pub fn Sidebar(is_collapsed: bool) -> Element {
         ("Inteligência", Route::DashboardView {}, rsx! { IconActivity { size: 19, color: "currentColor".to_string() } }),
         ("Pacientes", Route::PatientsView {}, rsx! { IconUsers { size: 19, color: "currentColor".to_string() } }),
         ("Agenda", Route::AgendaView {}, rsx! { IconCalendar { size: 19, color: "currentColor".to_string() } }),
-        ("Vendas", Route::BudgetsView {}, rsx! { IconTrendingUp { size: 19, color: "currentColor".to_string() } }),
         ("Financeiro", Route::FinanceView {}, rsx! { IconDollar { size: 19, color: "currentColor".to_string() } }),
-        ("Controle de Prótese", Route::TreatmentsView {}, rsx! { IconTooth { size: 19, color: "currentColor".to_string() } }),
-        ("Marketing", Route::MarketingView {}, rsx! { IconMessageSquare { size: 19, color: "currentColor".to_string() } }),
-        ("Estoque", Route::StockView {}, rsx! { IconBox { size: 19, color: "currentColor".to_string() } }),
+        ("Inventário", Route::StockView {}, rsx! { IconBox { size: 19, color: "currentColor".to_string() } }),
+        ("Documentos", Route::DocumentsView {}, rsx! { IconFileText { size: 19, color: "currentColor".to_string() } }),
     ];
 
     let collapsed_class = if is_collapsed { "sidebar-collapsed" } else { "" };

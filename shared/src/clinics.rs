@@ -17,7 +17,16 @@ pub struct ClinicResponse {
     pub smtp_user: Option<String>,
     pub smtp_from: Option<String>,
     pub smtp_tls: Option<bool>,
+    /// Hora de abertura da clínica (0-23), padrão 8
+    #[serde(default = "default_opening_hour")]
+    pub opening_hour: u32,
+    /// Hora de fechamento da clínica (0-23), padrão 19
+    #[serde(default = "default_closing_hour")]
+    pub closing_hour: u32,
 }
+
+fn default_opening_hour() -> u32 { 8 }
+fn default_closing_hour() -> u32 { 19 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ClinicAddress {

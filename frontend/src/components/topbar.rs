@@ -8,6 +8,8 @@ use crate::icons::{IconBell, IconChevronDown, IconLogOut, IconMenu, IconUsers};
 use crate::router::Route;
 use dioxus::prelude::*;
 
+const TOPBAR_ICON: Asset = asset!("/assets/icon.svg");
+
 #[component]
 pub fn Topbar(on_toggle_sidebar: EventHandler<()>) -> Element {
     let session = consume_context::<Signal<Option<SessionState>>>();
@@ -28,14 +30,12 @@ pub fn Topbar(on_toggle_sidebar: EventHandler<()>) -> Element {
         .unwrap_or_else(|| "Clínica Principal".to_string());
 
     let page_title = match current_route {
-        Route::DashboardView {} => "Inteligência & Dashboard",
+        Route::DashboardView {} => "Inteligência",
         Route::AgendaView {} => "Agenda",
         Route::PatientsView {} => "Pacientes",
-        Route::BudgetsView {} => "Vendas & Orçamentos",
         Route::FinanceView {} => "Financeiro",
-        Route::TreatmentsView {} => "Tratamentos & Prótese",
-        Route::MarketingView {} => "Marketing & Mensagens",
-        Route::StockView {} => "Estoque & Materiais",
+        Route::StockView {} => "Inventário",
+        Route::DocumentsView {} => "Documentos",
         Route::SettingsView {} => "Ajustes & Configurações",
         _ => "Tooth Plus",
     };
@@ -55,7 +55,7 @@ pub fn Topbar(on_toggle_sidebar: EventHandler<()>) -> Element {
                 div { class: "topbar-brand-breadcrumb",
                     div { class: "topbar-logo-box",
                         img {
-                            src: "/assets/icon.svg",
+                            src: TOPBAR_ICON,
                             alt: "Tooth Plus",
                         }
                         span { class: "topbar-brand-name", "Tooth Plus" }

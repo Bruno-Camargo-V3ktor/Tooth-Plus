@@ -1,0 +1,165 @@
+/* ==========================================================================
+   TOOTH PLUS V2 — ESTILOS DO MÓDULO DE DOCUMENTOS & CONTRATOS
+   ========================================================================== */
+
+.documents-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: #f8fafc;
+    overflow-y: auto;
+    padding: 24px;
+    gap: 20px;
+    box-sizing: border-box;
+}
+
+/* CARDS GRID DE TEMPLATES */
+.doc-templates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.doc-template-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-md, 8px);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.doc-template-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary, #00a0e4);
+}
+
+.doc-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.doc-icon-badge {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: #e0f2fe;
+    color: #0284c7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.doc-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+.doc-card-desc {
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
+    margin: 0;
+    flex: 1;
+}
+
+.doc-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 12px;
+    border-top: 1px solid #f1f5f9;
+}
+
+.btn-emit-doc {
+    background-color: var(--primary, #00a0e4);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s ease;
+}
+
+.btn-emit-doc:hover { background-color: var(--primary-hover, #0284c7); }
+
+/* FOLHA DE DOCUMENTO IMPRIMÍVEL (A4 PREVIEW) */
+.doc-paper-preview {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 48px;
+    color: #0f172a;
+    font-family: 'Times New Roman', Times, serif, system-ui;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    box-sizing: border-box;
+}
+
+.doc-paper-header {
+    text-align: center;
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 16px;
+}
+
+.doc-paper-clinic-name {
+    font-size: 20px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.doc-paper-clinic-meta {
+    font-size: 12px;
+    color: #475569;
+    font-family: system-ui, -apple-system, sans-serif;
+    margin-top: 4px;
+}
+
+.doc-paper-title {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin: 12px 0 0;
+}
+
+.doc-paper-body {
+    font-size: 14.5px;
+    line-height: 1.8;
+    text-align: justify;
+}
+
+.doc-paper-signatures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-top: 40px;
+    padding-top: 20px;
+}
+
+.doc-sign-line {
+    border-top: 1px solid #0f172a;
+    padding-top: 6px;
+    text-align: center;
+    font-size: 12.5px;
+    font-family: system-ui, -apple-system, sans-serif;
+}

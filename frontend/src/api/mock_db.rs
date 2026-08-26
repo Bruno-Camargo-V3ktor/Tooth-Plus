@@ -511,6 +511,8 @@ fn init_mock_database() -> MockDatabase {
             smtp_user: None,
             smtp_from: None,
             smtp_tls: None,
+            opening_hour: 8,
+            closing_hour: 19,
         },
         ClinicResponse {
             id: "clinic:luria_dent".to_string(),
@@ -536,6 +538,8 @@ fn init_mock_database() -> MockDatabase {
             smtp_user: None,
             smtp_from: None,
             smtp_tls: None,
+            opening_hour: 9,
+            closing_hour: 18,
         }
     ];
 

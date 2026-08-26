@@ -6,6 +6,8 @@ use crate::router::Route;
 use dioxus::prelude::*;
 
 const STYLE: Asset = asset!("/src/pages/login/style.css");
+const LOGO: Asset = asset!("/assets/logo.svg");
+const CLINIC_ICON: Asset = asset!("/assets/icon.svg");
 
 #[component]
 pub fn LoginScreen() -> Element {
@@ -81,7 +83,7 @@ pub fn LoginScreen() -> Element {
                 div { class: "login-box",
                     div { class: "login-brand-logo-wrap",
                         img {
-                            src: "/assets/logo.svg",
+                            src: LOGO,
                             class: "login-brand-logo",
                             alt: "ToothPlus",
                         }
@@ -218,7 +220,7 @@ pub fn ContextSelector() -> Element {
                                     },
                                     div { class: "clinic-card-icon",
                                         img {
-                                            src: "/assets/icon.svg",
+                                            src: CLINIC_ICON,
                                             style: "width: 24px; height: 24px;",
                                             alt: "Ícone da Unidade",
                                         }

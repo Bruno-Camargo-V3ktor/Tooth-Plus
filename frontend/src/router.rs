@@ -8,7 +8,7 @@ use crate::pages::agenda::AgendaView;
 use crate::pages::patients::PatientsView;
 use crate::pages::finance::FinanceView;
 use crate::pages::stock::StockView;
-use crate::pages::treatments::TreatmentsView;
+use crate::pages::documents::DocumentsView;
 use crate::pages::settings::SettingsView;
 use crate::components::layout::AppLayout;
 
@@ -32,20 +32,14 @@ pub enum Route {
         #[route("/patients")]
         PatientsView {},
 
-        #[route("/budgets")]
-        BudgetsView {},
-
         #[route("/finance")]
         FinanceView {},
 
-        #[route("/treatments")]
-        TreatmentsView {},
-
-        #[route("/marketing")]
-        MarketingView {},
-
         #[route("/stock")]
         StockView {},
+
+        #[route("/documents")]
+        DocumentsView {},
 
         #[route("/settings")]
         SettingsView {},
@@ -56,26 +50,17 @@ pub enum Route {
 }
 
 #[component]
-pub fn BudgetsView() -> Element {
-    rsx! {}
-}
-
-#[component]
-pub fn MarketingView() -> Element {
-    rsx! {}
-}
-
-#[component]
 pub fn PageNotFound(route: Vec<String>) -> Element {
+    let path_str = route.join("/");
     rsx! {
         div { class: "view-container empty-state-card", style: "margin: 60px auto; max-width: 500px;",
             h2 { "Página Não Encontrada (404)" }
-            p { "O endereço acessado não existe ou foi movido: /{route.join(\"/\")}" }
+            p { "O endereço acessado não existe ou foi movido: /{path_str}" }
             Link {
                 to: Route::DashboardView {},
                 class: "btn-primary",
                 style: "margin-top: 16px; display: inline-block;",
-                "Voltar ao Dashboard"
+                "Voltar ao Início"
             }
         }
     }
