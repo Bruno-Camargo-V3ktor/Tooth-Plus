@@ -1,8 +1,3 @@
-//! # Biblioteca de Ícones SVG (Tooth Plus V2)
-//!
-//! Cada ícone é um componente SVG isolado em seu respectivo arquivo,
-//! permitindo máxima modularização, manutenibilidade e reutilização sem caracteres Unicode.
-
 pub mod activity;
 pub mod alert_triangle;
 pub mod bell;
@@ -24,8 +19,10 @@ pub mod lock;
 pub mod logout;
 pub mod menu;
 pub mod message_square;
+pub mod minus;
 pub mod phone;
 pub mod plus;
+pub mod printer;
 pub mod search;
 pub mod settings;
 pub mod tooth;
@@ -55,8 +52,10 @@ pub use lock::IconLock;
 pub use logout::IconLogOut;
 pub use menu::IconMenu;
 pub use message_square::IconMessageSquare;
+pub use minus::IconMinus;
 pub use phone::IconPhone;
 pub use plus::IconPlus;
+pub use printer::IconPrinter;
 pub use search::IconSearch;
 pub use settings::IconSettings;
 pub use tooth::IconTooth;

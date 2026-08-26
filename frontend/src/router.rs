@@ -1,4 +1,4 @@
-//! # Roteamento Principal (Tooth Plus V2)
+//! # Roteamento Principal
 
 use dioxus::prelude::*;
 use crate::pages::login::LoginScreen;

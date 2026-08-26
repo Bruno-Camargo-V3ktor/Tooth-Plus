@@ -1,4 +1,4 @@
-//! # Módulo de Componentes Reutilizáveis (Tooth Plus V2)
+//! # Módulo de Componentes Reutilizáveis
 
 pub mod layout;
 pub mod modal;

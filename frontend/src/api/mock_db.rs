@@ -1,4 +1,4 @@
-//! # Banco de Dados em Memória para Desenvolvimento Mock-First (Tooth Plus V2)
+//! # Banco de Dados em Memória para Desenvolvimento Mock-First
 //!
 //! Fornece armazenamento persistente em runtime WebAssembly para testes de UI
 //! sem necessidade imediata do backend ativo.

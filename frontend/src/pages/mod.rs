@@ -1,4 +1,4 @@
-//! # Módulo Central de Páginas (Tooth Plus V2)
+//! # Módulo Central de Páginas
 
 pub mod agenda;
 pub mod dashboard;

@@ -1,4 +1,4 @@
-//! # Camada de Integração de API e Serviços (Tooth Plus V2)
+//! # Camada de Integração de API e Serviços
 //!
 //! Centraliza o gerenciamento de sessão, autenticação, armazenamento local
 //! e exporta todos os serviços de entidades com interface fortemente tipada.

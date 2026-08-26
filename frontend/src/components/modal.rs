@@ -1,4 +1,4 @@
-//! # Componente Base de Modal (Tooth Plus V2)
+//! # Componente Base de Modal
 //!
 //! Fornece a estrutura de backdrop com blur, container flutuante, cabeçalho padronizado,
 //! corpo com scroll interno e rodapé de ações.

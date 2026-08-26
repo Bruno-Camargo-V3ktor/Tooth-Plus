@@ -1,4 +1,4 @@
-//! # Módulo de Inteligência Artificial Clínica (Tooth Plus V2)
+//! # Módulo de Inteligência Artificial Clínica
 //!
 //! Tela limpa e minimalista de "Em desenvolvimento".
 

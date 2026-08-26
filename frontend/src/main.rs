@@ -1,4 +1,4 @@
-//! # Ponto de Entrada do Frontend (Tooth Plus V2)
+//! # Ponto de Entrada do Frontend
 //!
 //! Inicializa o aplicativo Dioxus 0.7, provê os contextos globais de sessão, clínica ativa e toast,
 //! e renderiza o roteamento declarativo.

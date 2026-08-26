@@ -1,4 +1,4 @@
-//! # Layout Geral da Aplicação (Tooth Plus V2)
+//! # Layout Geral da Aplicação
 //!
 //! Envolve todas as páginas autenticadas com a Topbar azul e a Sidebar branca no estilo Simples Dental.
 

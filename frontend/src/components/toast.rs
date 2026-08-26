@@ -1,4 +1,4 @@
-//! # Sistema de Toast / Notificações Pop-up (Tooth Plus V2)
+//! # Sistema de Toast / Notificações Pop-up
 //!
 //! Fornece um contexto global para exibir notificações em tela:
 //! - `ToastVariant::Error` → fundo vermelho (erros de sistema)
