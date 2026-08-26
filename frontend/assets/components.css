@@ -32,7 +32,7 @@
 }
 
 /* ==========================================================================
-   2. TOPBAR (ESTILO DARK SLATE COM BREADCRUMB E ATALHOS)
+   2. TOPBAR (DARK SLATE THEME)
    ========================================================================== */
 .topbar-simples {
     height: 50px;
@@ -66,6 +66,8 @@
     justify-content: center;
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
+    background: transparent;
+    border: none;
 }
 
 .topbar-menu-btn:hover {
@@ -131,6 +133,7 @@
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
     background: transparent;
+    border: none;
 }
 
 .topbar-action-icon-btn:hover {
@@ -257,6 +260,7 @@
     background: transparent;
     width: 100%;
     text-align: left;
+    border: none;
 }
 
 .dropdown-item-btn:hover {
@@ -274,7 +278,7 @@
 }
 
 /* ==========================================================================
-   3. SIDEBAR (TEMA ESCURO MODERNO)
+   3. SIDEBAR (DARK THEME)
    ========================================================================== */
 .sidebar-simples {
     width: 210px;
@@ -390,12 +394,12 @@
 }
 
 /* ==========================================================================
-   4. MODAL
+   4. MODAIS (DARK THEME)
    ========================================================================== */
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background-color: rgba(0, 0, 0, 0.65);
+    background-color: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -410,7 +414,8 @@
     to { opacity: 1; }
 }
 
-.modal-box {
+.modal-box,
+.modal-card {
     background: #1a2035;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-lg, 12px);
@@ -425,9 +430,9 @@
     color: #f1f5f9;
 }
 
-.modal-box.modal-sm { max-width: 440px; }
-.modal-box.modal-lg { max-width: 840px; }
-.modal-box.modal-xl { max-width: 980px; }
+.modal-box.modal-sm, .modal-card.modal-sm { max-width: 440px; }
+.modal-box.modal-lg, .modal-card.modal-lg { max-width: 840px; }
+.modal-box.modal-xl, .modal-card.modal-xl { max-width: 980px; }
 
 @keyframes modalSlideIn {
     from { transform: translateY(-12px) scale(0.98); opacity: 0; }
@@ -441,12 +446,44 @@
     padding: 18px 24px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
+    background: #0f1623;
+}
+
+.modal-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.modal-header-icon-box {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md, 8px);
+    background: rgba(0, 160, 228, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #38bdf8;
+    flex-shrink: 0;
+}
+
+.modal-header-text-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .modal-title {
     font-size: 16px;
     font-weight: 700;
     color: #f1f5f9;
+    margin: 0;
+}
+
+.modal-subtitle {
+    font-size: 12.5px;
+    color: #94a3b8;
+    margin: 0;
 }
 
 .modal-close-btn {
@@ -475,6 +512,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    background: #1a2035;
 }
 
 .modal-footer {
@@ -484,12 +522,12 @@
     gap: 10px;
     padding: 14px 24px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.25);
     flex-shrink: 0;
 }
 
 /* ==========================================================================
-   5. TOAST
+   5. TOAST (NOTIFICAÇÕES FLUTUANTES)
    ========================================================================== */
 .toast-container {
     position: fixed;
@@ -610,6 +648,17 @@
     outline: none;
 }
 
+.form-input.input-error {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
+.form-error-msg {
+    font-size: 11.5px;
+    color: #f87171;
+    font-weight: 600;
+}
+
 .form-select {
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
@@ -627,10 +676,16 @@
 .form-row { display: grid; gap: 12px; }
 .form-row-2 { grid-template-columns: 1fr 1fr; }
 .form-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+.form-row-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+@media (max-width: 768px) {
+    .form-row-4 { grid-template-columns: 1fr 1fr; }
+}
 
 @media (max-width: 540px) {
     .form-row-2,
-    .form-row-3 { grid-template-columns: 1fr; }
+    .form-row-3,
+    .form-row-4 { grid-template-columns: 1fr; }
 }
 
 .form-checkbox-wrap {
@@ -652,7 +707,7 @@
 }
 
 /* ==========================================================================
-   8. TABS & BUTTONS
+   8. TABS & BOTÕES DE MODAL
    ========================================================================== */
 .tab-underline-bar {
     display: flex;
@@ -707,18 +762,22 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, transform 0.1s ease;
     white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 160, 228, 0.3);
 }
 
-.btn-modal-primary:hover { background: #0284c7; }
+.btn-modal-primary:hover {
+    background: #0284c7;
+    transform: translateY(-1px);
+}
 
 .btn-modal-ghost {
     height: 38px;
     padding: 0 16px;
     background: transparent;
     color: #94a3b8;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: var(--radius-md, 8px);
     font-size: 13.5px;
     font-weight: 600;
@@ -730,6 +789,7 @@
 }
 
 .btn-modal-ghost:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.08);
     color: #f1f5f9;
+    border-color: rgba(255, 255, 255, 0.2);
 }
