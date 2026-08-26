@@ -765,3 +765,355 @@
     color: #f1f5f9;
     border-color: rgba(255, 255, 255, 0.2);
 }
+
+/* ==========================================================================
+   BOTÕES E AÇÕES GLOBAIS
+   ========================================================================== */
+.btn-new-patient-green {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background-color: #16a34a !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    padding: 0 16px !important;
+    height: 38px !important;
+    border-radius: 6px !important;
+    border: none !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    transition: all 0.15s ease !important;
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3) !important;
+}
+
+.btn-new-patient-green:hover {
+    background-color: #15803d !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.45) !important;
+}
+
+.btn-filter-pill {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #94a3b8;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.btn-filter-pill:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #f1f5f9;
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.btn-filter-pill.active {
+    background: #00a0e4;
+    color: #ffffff;
+    border-color: #00a0e4;
+    box-shadow: 0 2px 8px rgba(0, 160, 228, 0.35);
+}
+
+.action-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #94a3b8;
+    transition: all 0.12s ease;
+}
+
+.action-btn-icon:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #f1f5f9;
+}
+
+/* ==========================================================================
+   TABELAS PADRÃO (DARK DENTAL)
+   ========================================================================== */
+.patients-table-card {
+    background: #121a2c;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md, 8px);
+    overflow-x: auto;
+}
+
+.patients-list-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.patients-list-table thead tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: #0e1526;
+}
+
+.patients-list-table th {
+    padding: 12px 16px;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+}
+
+.patients-list-table td {
+    padding: 14px 16px;
+    font-size: 13.5px;
+    color: #cbd5e1;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.patient-table-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.patient-name-link {
+    font-weight: 700;
+    color: #f1f5f9;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.patient-name-link:hover {
+    color: #38bdf8;
+}
+
+/* ==========================================================================
+   CARDS E GRIDS REUTILIZÁVEIS (TRATAMENTOS, ESTOQUE, MODELOS)
+   ========================================================================== */
+.treatments-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.treatment-card {
+    background: #121a2c;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md, 8px);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.15s ease;
+}
+
+.treatment-card:hover {
+    border-color: rgba(0, 160, 228, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.treatment-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.treatment-card-cat {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #00a0e4;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.treatment-card-name {
+    font-size: 15px;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+}
+
+.treatment-card-desc {
+    font-size: 12.5px;
+    color: #94a3b8;
+    line-height: 1.45;
+    margin: 0;
+    flex: 1;
+}
+
+.treatment-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.treatment-price-val {
+    font-size: 16px;
+    font-weight: 800;
+    color: #22c55e;
+}
+
+/* ==========================================================================
+   EMPTY STATES GLOBAIS
+   ========================================================================== */
+.empty-debits-box {
+    background: #121a2c;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 48px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.empty-debits-icon {
+    margin-bottom: 8px;
+    opacity: 0.8;
+}
+
+.empty-debits-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+
+.empty-debits-desc {
+    font-size: 13px;
+    color: #94a3b8;
+    margin: 0;
+    max-width: 400px;
+}
+
+/* ==========================================================================
+   ABAS COM UNDERLINE (TABS)
+   ========================================================================== */
+.tab-underline-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 12px;
+}
+
+.tab-underline-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 13.5px;
+    font-weight: 700;
+    padding: 8px 4px;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.15s ease;
+}
+
+.tab-underline-btn:hover {
+    color: #ffffff;
+}
+
+.tab-underline-btn.tab-active {
+    color: #00a0e4;
+}
+
+.tab-underline-btn.tab-active::after {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #00a0e4;
+    border-radius: 2px;
+}
+
+/* ==========================================================================
+   ODONTOGRAMA ANATÔMICO INTERATIVO
+   ========================================================================== */
+.odontogram-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.odontogram-nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.odontogram-teeth-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    background: #080d1a;
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    overflow-x: auto;
+}
+
+.teeth-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.teeth-divider-vertical {
+    width: 2px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 0 6px;
+}
+
+.tooth-item-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    user-select: none;
+}
+
+.tooth-item-box:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.tooth-item-box.tooth-selected {
+    background: rgba(0, 160, 228, 0.2);
+    outline: 1px solid #00a0e4;
+}
+
+.tooth-num-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+}
+
+.tooth-item-box.tooth-selected .tooth-num-label {
+    color: #38bdf8;
+}
+
+.tooth-anatomical-svg {
+    width: 20px;
+    height: 30px;
+}
