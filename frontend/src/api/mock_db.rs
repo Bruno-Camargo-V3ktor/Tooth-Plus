@@ -37,6 +37,8 @@ pub struct MockDatabase {
     pub treatment_plans: Vec<PatientTreatmentPlan>,
     pub users: Vec<UserResponse>,
     pub clinics: Vec<ClinicResponse>,
+    /// Mapa username -> senha em texto plano (apenas para mock de desenvolvimento)
+    pub password_map: std::collections::HashMap<String, String>,
 }
 
 pub static DB: LazyLock<Mutex<MockDatabase>> = LazyLock::new(|| Mutex::new(init_mock_database()));
@@ -457,7 +459,32 @@ fn init_mock_database() -> MockDatabase {
             ],
             clinic_ids: vec!["clinic:smile_plus".to_string()],
         },
+        UserResponse {
+            id: "user:recepcao".to_string(),
+            username: "recepcao".to_string(),
+            full_name: "Fernanda Oliveira".to_string(),
+            email: Some("fernanda.oliveira@smileplus.com".to_string()),
+            phone: Some("(11) 96666-0003".to_string()),
+            document_cpf: "333.444.555-66".to_string(),
+            professional_registry: None,
+            is_active: true,
+            role: "receptionist".to_string(),
+            permissions: vec![
+                "patients:read".into(),
+                "patients:write".into(),
+                "agenda:read".into(),
+                "agenda:write".into(),
+            ],
+            clinic_ids: vec!["clinic:smile_plus".to_string()],
+        },
     ];
+
+    // Mapa de senhas mock (username -> senha em texto plano)
+    // Credenciais: admin/Admin@123, dr.lucas/Lucas@456, recepcao/Recepcao@789
+    let mut password_map = std::collections::HashMap::new();
+    password_map.insert("admin".to_string(), "Admin@123".to_string());
+    password_map.insert("dr.lucas".to_string(), "Lucas@456".to_string());
+    password_map.insert("recepcao".to_string(), "Recepcao@789".to_string());
 
     let clinics = vec![
         ClinicResponse {
@@ -525,5 +552,6 @@ fn init_mock_database() -> MockDatabase {
         treatment_plans: vec![],
         users,
         clinics,
+        password_map,
     }
 }

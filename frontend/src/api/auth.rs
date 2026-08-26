@@ -25,24 +25,29 @@ impl AuthApi {
             return Err("Informe o usuário e a senha.".to_string());
         }
 
-        if u == "erro" {
-            return Err("Credenciais inválidas. Verifique seu usuário e senha.".to_string());
-        }
-
         let db = DB.lock().map_err(|e| e.to_string())?;
 
-        let (user_id, full_name, role, permissions) = if let Some(found) = db.users.iter().find(|user| user.username.to_lowercase() == u) {
-            (found.id.clone(), found.full_name.clone(), found.role.clone(), found.permissions.clone())
-        } else {
-            ("user:admin_principal".to_string(), "Dr. Roberto Alencar".to_string(), "admin".to_string(), vec![
-                "patients:read".into(), "patients:write".into(),
-                "agenda:read".into(), "agenda:write".into(),
-                "finance:read".into(), "finance:write".into(),
-                "stock:read".into(), "stock:write".into(),
-                "treatments:read".into(), "treatments:write".into(),
-                "settings:read".into(), "settings:write".into(),
-            ])
+        // Busca o usuário pelo username
+        let found_user = db.users.iter().find(|user| user.username.to_lowercase() == u);
+
+        let found_user = match found_user {
+            Some(u) => u,
+            None => return Err("Credenciais inválidas. Verifique seu usuário e senha.".to_string()),
         };
+
+        // Valida a senha contra o mapa mock
+        let expected_password = db.password_map.get(&found_user.username.to_lowercase());
+        match expected_password {
+            Some(expected) if expected == p => {}, // senha correta
+            _ => return Err("Credenciais inválidas. Verifique seu usuário e senha.".to_string()),
+        }
+
+        let (user_id, full_name, role, permissions) = (
+            found_user.id.clone(),
+            found_user.full_name.clone(),
+            found_user.role.clone(),
+            found_user.permissions.clone(),
+        );
 
         let clinics = db.clinics.iter().map(|c| {
             ClinicAccess {
