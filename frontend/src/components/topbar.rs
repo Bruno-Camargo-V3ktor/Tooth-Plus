@@ -56,7 +56,10 @@ pub fn Topbar(on_toggle_sidebar: EventHandler<()>) -> Element {
                     div { class: "topbar-logo-box",
                         img {
                             src: TOPBAR_ICON,
+                            style: "width: 24px; height: 24px; max-width: 24px; max-height: 24px; object-fit: contain; flex-shrink: 0;",
                             alt: "Tooth Plus",
+                            width: "24",
+                            height: "24",
                         }
                         span { class: "topbar-brand-name", "Tooth Plus" }
                     }

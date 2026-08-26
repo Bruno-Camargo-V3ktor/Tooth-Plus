@@ -1,5 +1,5 @@
 /* ==========================================================================
-   TOOTH PLUS V2 — FOLHA DE ESTILOS GLOBAL (RESET & TOKENS)
+   TOOTH PLUS V2 — FOLHA DE ESTILOS GLOBAL (RESET & DARK TOKENS)
    ========================================================================== */
 
 /* ==========================================================================
@@ -20,12 +20,12 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
-    color: #0f172a;
-    background-color: #f8fafc;
+    color: #f1f5f9;
+    background-color: #0b1329;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    overflow-x: hidden;
+    overflow: hidden;
 }
 
 a {
@@ -61,25 +61,25 @@ svg {
 }
 
 /* ==========================================================================
-   2. VARIÁVEIS & DESIGN TOKENS GLOBAIS
+   2. VARIÁVEIS & DESIGN TOKENS GLOBAIS (TEMA ESCURO PREMIUM DENTAL)
    ========================================================================== */
 :root {
     --primary: #00a0e4;
     --primary-hover: #0284c7;
     --primary-dark: #0369a1;
-    --primary-light: #e0f2fe;
-    --primary-subtle: #f0f9ff;
+    --primary-light: rgba(0, 160, 228, 0.15);
+    --primary-subtle: rgba(0, 160, 228, 0.1);
 
-    --bg-page: #f8fafc;
-    --bg-surface: #ffffff;
-    --bg-surface-hover: #f1f5f9;
+    --bg-page: #111827;
+    --bg-surface: #1e2433;
+    --bg-surface-hover: rgba(255, 255, 255, 0.06);
 
-    --text-main: #0f172a;
-    --text-muted: #64748b;
-    --text-light: #94a3b8;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --text-light: #64748b;
 
-    --border-color: #e2e8f0;
-    --border-subtle: #f1f5f9;
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-subtle: rgba(255, 255, 255, 0.05);
     --border-focus: #00a0e4;
 
     --radius-sm: 6px;
@@ -87,10 +87,10 @@ svg {
     --radius-lg: 12px;
     --radius-full: 9999px;
 
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
-    --shadow-btn: 0 4px 12px rgba(0, 160, 228, 0.25);
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.5);
+    --shadow-btn: 0 4px 12px rgba(0, 160, 228, 0.35);
 }
 
 /* ==========================================================================
@@ -128,7 +128,7 @@ svg {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background-color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.06);
     color: var(--text-main);
     border: 1px solid var(--border-color);
     font-size: 14px;
@@ -139,6 +139,6 @@ svg {
 }
 
 .btn-secondary:hover {
-    background-color: var(--bg-surface-hover);
-    border-color: #cbd5e1;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.18);
 }
