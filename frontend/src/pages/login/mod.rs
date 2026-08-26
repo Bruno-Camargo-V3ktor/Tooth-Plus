@@ -81,11 +81,16 @@ pub fn LoginScreen() -> Element {
             // Lado Esquerdo: Formulário Minimalista de Login
             div { class: "login-form-side",
                 div { class: "login-box",
-                    div { class: "login-brand-logo-wrap",
+                    div {
+                        class: "login-brand-logo-wrap",
+                        style: "margin-bottom: 24px; display: flex; align-items: center; height: 42px;",
                         img {
                             src: LOGO,
                             class: "login-brand-logo",
+                            style: "width: 160px; height: 40px; max-width: 160px; max-height: 40px; object-fit: contain; display: block;",
                             alt: "ToothPlus",
+                            width: "160",
+                            height: "40",
                         }
                     }
 

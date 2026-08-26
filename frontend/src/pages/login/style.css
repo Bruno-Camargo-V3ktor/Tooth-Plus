@@ -52,16 +52,21 @@
 }
 
 .login-brand-logo-wrap {
-    margin-bottom: 28px;
+    margin-bottom: 24px;
     display: flex;
     align-items: center;
+    height: 42px;
+    max-height: 48px;
 }
 
 .login-brand-logo {
-    height: 38px;
-    width: auto;
-    max-width: 180px;
+    width: 160px !important;
+    height: 40px !important;
+    max-width: 160px !important;
+    max-height: 40px !important;
+    object-fit: contain;
     display: block;
+    flex-shrink: 0;
 }
 
 .login-title-welcome {
