@@ -73,3 +73,6 @@ pub use trending_up::IconTrendingUp;
 pub use user::IconUser;
 pub use users::IconUsers;
 pub use whatsapp::IconWhatsapp;
+
+pub mod arrow_up_down;
+pub use arrow_up_down::IconArrowUpDown;

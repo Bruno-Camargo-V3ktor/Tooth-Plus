@@ -139,3 +139,31 @@ impl StockApi {
         Ok(movement)
     }
 }
+
+impl StockApi {
+    pub async fn update_item(id: &str, req: shared::stock::UpdateInventoryItemRequest) -> Result<InventoryItem, String> {
+        gloo_timers::future::TimeoutFuture::new(150).await;
+        let mut db = DB.lock().map_err(|e| e.to_string())?;
+        let item = db.inventory_items.iter_mut().find(|i| i.id == id).ok_or_else(|| "Item não encontrado.".to_string())?;
+
+        item.item_type = req.item_type;
+        item.name = req.name;
+        item.unit_type = req.unit_type;
+        item.current_stock = req.current_stock;
+        item.min_stock = req.min_stock;
+        item.cost_price_cents = req.cost_price_cents;
+        item.manufacturer = req.manufacturer;
+        item.expiration_date = req.expiration_date;
+        item.batch_number = req.batch_number;
+        item.updated_at = Some(chrono::Utc::now().to_rfc3339());
+
+        Ok(item.clone())
+    }
+
+    pub async fn delete_item(id: &str) -> Result<(), String> {
+        gloo_timers::future::TimeoutFuture::new(100).await;
+        let mut db = DB.lock().map_err(|e| e.to_string())?;
+        db.inventory_items.retain(|i| i.id != id);
+        Ok(())
+    }
+}

@@ -1,11 +1,9 @@
-pub mod kpis;
-pub mod toolbar;
-pub mod table;
 pub mod modal_item;
 pub mod modal_movement;
+pub mod table;
+pub mod toolbar;
 
-pub use kpis::StockKpis;
-pub use toolbar::StockToolbar;
-pub use table::StockTable;
-pub use modal_item::ModalNewItem;
+pub use modal_item::ModalItem;
 pub use modal_movement::ModalMovement;
+pub use table::StockTable;
+pub use toolbar::StockToolbar;

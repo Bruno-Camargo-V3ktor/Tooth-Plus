@@ -8,7 +8,7 @@ pub fn ModalMovement(
     items: Vec<InventoryItem>,
     selected_item_id: Signal<String>,
     movement_type: Signal<String>,
-    quantity_str: Signal<String>,
+    quantity: Signal<String>,
     reason: Signal<String>,
     on_close: EventHandler<()>,
     on_submit: EventHandler<()>,
@@ -37,48 +37,53 @@ pub fn ModalMovement(
                 }
             },
 
-            div { class: "form-field",
-                label { class: "form-label", "Item / Insumo *" }
-                select {
-                    class: "form-select",
-                    value: "{selected_item_id}",
-                    onchange: move |e| selected_item_id.set(e.value()),
-                    for it in items {
-                        option { key: "{it.id}", value: "{it.id}", "{it.name} (Atual: {it.current_stock} {it.unit_type})" }
-                    }
-                }
-            }
-
-            div { class: "form-row-2 form-row",
+            div { style: "display: flex; flex-direction: column; gap: 14px;",
                 div { class: "form-field",
-                    label { class: "form-label", "Tipo de Movimentação *" }
+                    label { class: "form-label", "Item do Estoque *" }
                     select {
                         class: "form-select",
-                        value: "{movement_type}",
-                        onchange: move |e| movement_type.set(e.value()),
-                        option { value: "ENTRY", "⬆️ Entrada (Compra / Reposição)" }
-                        option { value: "EXIT", "⬇️ Saída (Uso Clínico / Descarte)" }
+                        value: "{selected_item_id}",
+                        onchange: move |e| selected_item_id.set(e.value()),
+                        option { value: "", "Selecione o item..." }
+                        for it in items {
+                            option { value: "{it.id}", "{it.name} (Atual: {it.current_stock} {it.unit_type})" }
+                        }
                     }
                 }
+
+                div { class: "form-row-2 form-row",
+                    div { class: "form-field",
+                        label { class: "form-label", "Tipo de Movimento *" }
+                        select {
+                            class: "form-select",
+                            value: "{movement_type}",
+                            onchange: move |e| movement_type.set(e.value()),
+                            option { value: "ENTRY", "📥 Entrada (Compra / Reposição)" }
+                            option { value: "EXIT", "📤 Saída (Uso Clínico / Descarte)" }
+                            option { value: "ADJUSTMENT", "⚖️ Ajuste de Inventário" }
+                        }
+                    }
+                    div { class: "form-field",
+                        label { class: "form-label", "Quantidade *" }
+                        input {
+                            class: "form-input",
+                            r#type: "number",
+                            min: "1",
+                            value: "{quantity}",
+                            oninput: move |e| quantity.set(e.value()),
+                        }
+                    }
+                }
+
                 div { class: "form-field",
-                    label { class: "form-label", "Quantidade *" }
+                    label { class: "form-label", "Motivo / Nota Fiscal (Opcional)" }
                     input {
                         class: "form-input",
-                        r#type: "number",
-                        value: "{quantity_str}",
-                        oninput: move |e| quantity_str.set(e.value()),
+                        r#type: "text",
+                        placeholder: "Ex: NF-e 45892 da Dental Cremer, Quebra de frasco...",
+                        value: "{reason}",
+                        oninput: move |e| reason.set(e.value()),
                     }
-                }
-            }
-
-            div { class: "form-field",
-                label { class: "form-label", "Motivo / Observações" }
-                input {
-                    class: "form-input",
-                    r#type: "text",
-                    placeholder: "Ex: Uso no procedimento do paciente X, reposição NF 482...",
-                    value: "{reason}",
-                    oninput: move |e| reason.set(e.value()),
                 }
             }
         }

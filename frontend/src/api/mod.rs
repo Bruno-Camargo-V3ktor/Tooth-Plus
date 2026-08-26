@@ -108,3 +108,5 @@ pub fn load_active_clinic() -> Option<ActiveClinicState> {
         permissions: serde_json::from_value(val.get("permissions")?.clone()).ok()?,
     })
 }
+
+pub mod documents;

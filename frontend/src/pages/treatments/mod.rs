@@ -1,8 +1,10 @@
 pub mod components;
 
+use crate::api::stock::StockApi;
 use crate::api::treatments::TreatmentsApi;
 use crate::api::ActiveClinicState;
 use crate::components::toast::{ToastState, ToastVariant};
+use shared::stock::InventoryItem;
 use shared::treatments::{CreateTreatmentTemplateRequest, TreatmentTemplate};
 use dioxus::prelude::*;
 
@@ -22,6 +24,7 @@ pub fn TreatmentsView() -> Element {
         .unwrap_or_default();
 
     let mut templates = use_signal(Vec::<TreatmentTemplate>::new);
+    let mut inventory_items = use_signal(Vec::<InventoryItem>::new);
     let mut search_query = use_signal(String::new);
     let mut category_filter = use_signal(|| "ALL".to_string());
     let mut show_modal = use_signal(|| false);
@@ -32,8 +35,8 @@ pub fn TreatmentsView() -> Element {
     let mut description = use_signal(String::new);
     let mut price_str = use_signal(|| "150.00".to_string());
     let mut duration_str = use_signal(|| "30".to_string());
-    let mut materials = use_signal(String::new);
-    let mut equipment = use_signal(String::new);
+    let mut materials_list = use_signal(Vec::<String>::new);
+    let mut equipment_list = use_signal(Vec::<String>::new);
     let mut post_care = use_signal(String::new);
     let mut target_teeth = use_signal(Vec::<String>::new);
 
@@ -44,6 +47,14 @@ pub fn TreatmentsView() -> Element {
         spawn(async move {
             if let Ok(list) = TreatmentsApi::list_templates(&cid).await {
                 templates.set(list);
+            }
+            let q = shared::stock::StockQuery {
+                clinic_id: cid.clone(),
+                item_type: None,
+                search: None,
+            };
+            if let Ok(stock_resp) = StockApi::list_stock(q).await {
+                inventory_items.set(stock_resp.items);
             }
         });
     });
@@ -57,8 +68,8 @@ pub fn TreatmentsView() -> Element {
         let d_s = description.clone();
         let p_s = price_str.clone();
         let dur_s = duration_str.clone();
-        let mat_s = materials.clone();
-        let eq_s = equipment.clone();
+        let mat_s = materials_list.clone();
+        let eq_s = equipment_list.clone();
         let post_s = post_care.clone();
         let teeth_s = target_teeth.clone();
         let mut reload_sig = reload_trigger;
@@ -73,18 +84,6 @@ pub fn TreatmentsView() -> Element {
             let price_num: f64 = p_s.read().replace(',', ".").parse().unwrap_or(0.0);
             let dur_num: i32 = dur_s.read().parse().unwrap_or(30);
 
-            let mat_list: Vec<String> = mat_s.read()
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-
-            let eq_list: Vec<String> = eq_s.read()
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-
             let req = CreateTreatmentTemplateRequest {
                 clinic_id: cid.clone(),
                 name: n,
@@ -94,8 +93,8 @@ pub fn TreatmentsView() -> Element {
                 estimated_duration_minutes: Some(dur_num),
                 dental_regions: vec![],
                 target_teeth: teeth_s.read().clone(),
-                required_materials: mat_list,
-                required_equipment: eq_list,
+                required_materials: mat_s.read().clone(),
+                required_equipment: eq_s.read().clone(),
                 post_care_instructions: if post_s.read().is_empty() { None } else { Some(post_s.read().clone()) },
                 clinical_notes: None,
             };
@@ -133,7 +132,7 @@ pub fn TreatmentsView() -> Element {
                 div {
                     h1 { class: "treatments-title", "Catálogo de Procedimentos & Tratamentos" }
                     p { style: "font-size: 13.5px; color: #94a3b8; margin: 4px 0 0 0;",
-                        "Gerencie a tabela de procedimentos padrão, valores sugeridos e tempos de cadeira da clínica."
+                        "Gerencie a tabela de procedimentos padrão, insumos do inventário e tempos de cadeira da clínica."
                     }
                 }
             }
@@ -145,8 +144,8 @@ pub fn TreatmentsView() -> Element {
                     name.set(String::new());
                     description.set(String::new());
                     price_str.set("150.00".to_string());
-                    materials.set(String::new());
-                    equipment.set(String::new());
+                    materials_list.set(vec![]);
+                    equipment_list.set(vec![]);
                     post_care.set(String::new());
                     target_teeth.set(vec![]);
                     show_modal.set(true);
@@ -172,13 +171,14 @@ pub fn TreatmentsView() -> Element {
 
             TemplateModal {
                 is_open: show_modal(),
+                inventory_items: inventory_items(),
                 name,
                 category,
                 description,
                 price_str,
                 duration_str,
-                materials,
-                equipment,
+                materials_list,
+                equipment_list,
                 post_care,
                 target_teeth,
                 on_close: move |_| show_modal.set(false),

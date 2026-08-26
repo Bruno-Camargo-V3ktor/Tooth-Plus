@@ -9,7 +9,6 @@ pub fn FinanceTable(
     on_open_details_modal: EventHandler<String>,
     on_delete_transaction: EventHandler<String>,
 ) -> Element {
-    let mut open_action_menu_id = use_signal(|| None::<String>);
     let mut open_context_menu_id = use_signal(|| None::<String>);
 
     if transactions.is_empty() {
@@ -42,7 +41,6 @@ pub fn FinanceTable(
                         {
                             let tid = tx.id.clone();
                             let tid_pay = tx.id.clone();
-                            let tid_menu = tx.id.clone();
                             let tid_ctx = tx.id.clone();
                             let tid_del = tx.id.clone();
                             let tid_docs = tx.id.clone();
@@ -56,7 +54,6 @@ pub fn FinanceTable(
                             let val_str = format!("R$ {:.2}", tx.amount_cents as f64 / 100.0);
                             let action_label = if is_income { "RECEBER" } else { "PAGAR" };
 
-                            let is_action_open = open_action_menu_id.read().as_ref() == Some(&tid);
                             let is_ctx_open = open_context_menu_id.read().as_ref() == Some(&tid);
 
                             rsx! {
@@ -116,47 +113,8 @@ pub fn FinanceTable(
                                                     r#type: "button",
                                                     class: "btn-secondary",
                                                     style: "color: #38bdf8; border-color: rgba(56,189,248,0.4); font-size: 11.5px; font-weight: 800; padding: 4px 10px;",
-                                                    onclick: move |_| {
-                                                        if is_action_open {
-                                                            open_action_menu_id.set(None);
-                                                        } else {
-                                                            open_action_menu_id.set(Some(tid_pay.clone()));
-                                                        }
-                                                    },
+                                                    onclick: move |_| on_open_payment_modal.call(tid_pay.clone()),
                                                     "{action_label}"
-                                                }
-
-                                                if is_action_open {
-                                                    div { class: "finance-add-menu", style: "right: 40px; top: 32px;",
-                                                        button {
-                                                            r#type: "button",
-                                                            class: "finance-menu-item",
-                                                            onclick: move |_| {
-                                                                open_action_menu_id.set(None);
-                                                                on_open_payment_modal.call(tid_menu.clone());
-                                                            },
-                                                            span { "💵" }
-                                                            span { "Recebimento manual (Parcial / Total)" }
-                                                        }
-                                                        button {
-                                                            r#type: "button",
-                                                            class: "finance-menu-item",
-                                                            span { "📄" }
-                                                            span { "Boleto" }
-                                                        }
-                                                        button {
-                                                            r#type: "button",
-                                                            class: "finance-menu-item",
-                                                            span { "💳" }
-                                                            span { "Cartão via link" }
-                                                        }
-                                                        button {
-                                                            r#type: "button",
-                                                            class: "finance-menu-item",
-                                                            span { "💠" }
-                                                            span { "Pix" }
-                                                        }
-                                                    }
                                                 }
                                             }
                                         }
