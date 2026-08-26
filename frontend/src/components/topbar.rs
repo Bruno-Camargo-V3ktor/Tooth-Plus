@@ -74,6 +74,7 @@ pub fn Topbar(on_toggle_sidebar: EventHandler<()>) -> Element {
         Route::DashboardView {} => "Inteligência",
         Route::AgendaView {} => "Agenda",
         Route::PatientsView {} => "Pacientes",
+        Route::TreatmentsView {} => "Tratamentos",
         Route::FinanceView {} => "Financeiro",
         Route::StockView {} => "Inventário",
         Route::DocumentsView {} => "Documentos",

@@ -5,7 +5,7 @@
 
 use crate::icons::{
     IconActivity, IconBox, IconCalendar, IconDollar, IconFileText,
-    IconSettings, IconUsers,
+    IconSettings, IconTooth, IconUsers,
 };
 use crate::router::Route;
 use dioxus::prelude::*;
@@ -18,6 +18,7 @@ pub fn Sidebar(is_collapsed: bool) -> Element {
         ("Inteligência", Route::DashboardView {}, rsx! { IconActivity { size: 19, color: "currentColor".to_string() } }),
         ("Pacientes", Route::PatientsView {}, rsx! { IconUsers { size: 19, color: "currentColor".to_string() } }),
         ("Agenda", Route::AgendaView {}, rsx! { IconCalendar { size: 19, color: "currentColor".to_string() } }),
+        ("Tratamentos", Route::TreatmentsView {}, rsx! { IconTooth { size: 19, color: "currentColor".to_string() } }),
         ("Financeiro", Route::FinanceView {}, rsx! { IconDollar { size: 19, color: "currentColor".to_string() } }),
         ("Inventário", Route::StockView {}, rsx! { IconBox { size: 19, color: "currentColor".to_string() } }),
         ("Documentos", Route::DocumentsView {}, rsx! { IconFileText { size: 19, color: "currentColor".to_string() } }),

@@ -6,6 +6,7 @@ use crate::pages::login::ContextSelector;
 use crate::pages::dashboard::DashboardView;
 use crate::pages::agenda::AgendaView;
 use crate::pages::patients::PatientsView;
+use crate::pages::treatments::TreatmentsView;
 use crate::pages::finance::FinanceView;
 use crate::pages::stock::StockView;
 use crate::pages::documents::DocumentsView;
@@ -31,6 +32,9 @@ pub enum Route {
 
         #[route("/patients")]
         PatientsView {},
+
+        #[route("/treatments")]
+        TreatmentsView {},
 
         #[route("/finance")]
         FinanceView {},
