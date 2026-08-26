@@ -93,6 +93,9 @@ impl FinanceApi {
             installment_current: req.installment_current.unwrap_or(1),
             installment_total: req.installment_total.unwrap_or(1),
             is_calculated_pending: false,
+            has_receipt: false,
+            receipt_name: None,
+            receipt_date: None,
         };
 
         db.transactions.insert(0, new_tx.clone());

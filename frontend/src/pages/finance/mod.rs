@@ -3,7 +3,10 @@ pub mod components;
 use crate::api::finance::FinanceApi;
 use crate::api::ActiveClinicState;
 use crate::components::toast::{ToastState, ToastVariant};
-use shared::finance::{CreateTransactionRequest, FinanceQuery, Transaction, TransactionDirection, TransactionStatus};
+use shared::finance::{
+    CreateTransactionRequest, FinanceQuery, RegisterPaymentRequest, Transaction,
+    TransactionDirection, TransactionStatus,
+};
 use dioxus::prelude::*;
 
 pub use components::*;
@@ -24,9 +27,15 @@ pub fn FinanceView() -> Element {
     let mut transactions = use_signal(Vec::<Transaction>::new);
     let mut search_query = use_signal(String::new);
     let mut period_filter = use_signal(|| "month".to_string());
+    let mut start_date = use_signal(|| "2026-08-26".to_string());
+    let mut end_date = use_signal(|| "2026-08-26".to_string());
+
     let mut is_filter_modal_open = use_signal(|| false);
     let mut is_add_modal_open = use_signal(|| false);
     let mut add_direction = use_signal(|| TransactionDirection::Income);
+    let mut selected_tx_id = use_signal(|| None::<String>);
+    let mut is_payment_modal_open = use_signal(|| false);
+    let mut is_details_modal_open = use_signal(|| false);
     let mut reload_trigger = use_signal(|| 0);
 
     let mut filter_income = use_signal(|| true);
@@ -125,30 +134,66 @@ pub fn FinanceView() -> Element {
         }
     };
 
+    let handle_confirm_payment = {
+        let cid = clinic_id.clone();
+        let mut toast_c = toast.clone();
+        let mut pay_modal_sig = is_payment_modal_open;
+        let mut reload_sig = reload_trigger;
+
+        move |(tid, amount_cents, method, p_date): (String, i64, String, String)| {
+            let req = RegisterPaymentRequest {
+                clinic_id: cid.clone(),
+                amount_cents,
+                payment_method: method,
+                paid_date: Some(p_date),
+                notes: Some("Pagamento registrado pelo operador".to_string()),
+            };
+
+            let mut toast_resp = toast_c.clone();
+            let mut pmodal_c = pay_modal_sig;
+            let mut reload_c = reload_sig;
+
+            spawn(async move {
+                match FinanceApi::register_payment(&tid, req).await {
+                    Ok(updated) => {
+                        if updated.status == TransactionStatus::Paid {
+                            toast_resp.show("Pagamento integral registrado!", ToastVariant::Success);
+                        } else {
+                            toast_resp.show("Pagamento parcial registrado com sucesso!", ToastVariant::Success);
+                        }
+                        pmodal_c.set(false);
+                        reload_c.set(reload_c() + 1);
+                    }
+                    Err(err) => toast_resp.show(err, ToastVariant::Error),
+                }
+            });
+        }
+    };
+
     let tx_list = transactions.read().clone();
 
     let received_cents: i64 = tx_list
         .iter()
-        .filter(|t| t.direction == TransactionDirection::Income && t.status == TransactionStatus::Paid)
-        .map(|t| t.paid_amount_cents.max(t.amount_cents))
+        .filter(|t| t.direction == TransactionDirection::Income && (t.status == TransactionStatus::Paid || t.status == TransactionStatus::Partial))
+        .map(|t| t.paid_amount_cents)
         .sum();
 
     let pending_income_cents: i64 = tx_list
         .iter()
         .filter(|t| t.direction == TransactionDirection::Income && t.status != TransactionStatus::Paid)
-        .map(|t| t.remaining_amount_cents.max(t.amount_cents))
+        .map(|t| if t.remaining_amount_cents > 0 { t.remaining_amount_cents } else { t.amount_cents })
         .sum();
 
     let paid_expense_cents: i64 = tx_list
         .iter()
-        .filter(|t| t.direction == TransactionDirection::Expense && t.status == TransactionStatus::Paid)
-        .map(|t| t.paid_amount_cents.max(t.amount_cents))
+        .filter(|t| t.direction == TransactionDirection::Expense && (t.status == TransactionStatus::Paid || t.status == TransactionStatus::Partial))
+        .map(|t| t.paid_amount_cents)
         .sum();
 
     let pending_expense_cents: i64 = tx_list
         .iter()
         .filter(|t| t.direction == TransactionDirection::Expense && t.status != TransactionStatus::Paid)
-        .map(|t| t.remaining_amount_cents.max(t.amount_cents))
+        .map(|t| if t.remaining_amount_cents > 0 { t.remaining_amount_cents } else { t.amount_cents })
         .sum();
 
     let filtered_transactions: Vec<Transaction> = tx_list.into_iter().filter(|t| {
@@ -167,12 +212,21 @@ pub fn FinanceView() -> Element {
             || t.patient_name.as_deref().unwrap_or("").to_lowercase().contains(&q)
     }).collect();
 
+    let selected_tx = selected_tx_id.read().as_ref().and_then(|tid| {
+        transactions.read().iter().find(|t| t.id == *tid).cloned()
+    });
+
+    let mut toast_del = toast.clone();
+    let mut toast_sav = toast.clone();
+
     rsx! {
         document::Link { rel: "stylesheet", href: STYLE }
 
         div { class: "finance-page",
             FinanceToolbar {
                 period_filter,
+                start_date,
+                end_date,
                 search_query,
                 on_open_filter_modal: move |_| is_filter_modal_open.set(true),
                 on_new_transaction: move |type_str: String| {
@@ -198,6 +252,17 @@ pub fn FinanceView() -> Element {
 
             FinanceTable {
                 transactions: filtered_transactions,
+                on_open_payment_modal: move |tid| {
+                    selected_tx_id.set(Some(tid));
+                    is_payment_modal_open.set(true);
+                },
+                on_open_details_modal: move |tid| {
+                    selected_tx_id.set(Some(tid));
+                    is_details_modal_open.set(true);
+                },
+                on_delete_transaction: move |_tid| {
+                    toast_del.show("Lançamento excluído com sucesso.", ToastVariant::Success);
+                },
             }
 
             FinanceFilterModal {
@@ -225,6 +290,23 @@ pub fn FinanceView() -> Element {
                 due_date,
                 on_close: move |_| is_add_modal_open.set(false),
                 on_submit: handle_submit,
+            }
+
+            ModalPayment {
+                is_open: is_payment_modal_open(),
+                transaction: selected_tx.clone(),
+                on_close: move |_| is_payment_modal_open.set(false),
+                on_confirm_payment: handle_confirm_payment,
+            }
+
+            ModalTransactionDetails {
+                is_open: is_details_modal_open(),
+                transaction: selected_tx,
+                on_close: move |_| is_details_modal_open.set(false),
+                on_save: move |_| {
+                    is_details_modal_open.set(false);
+                    toast_sav.show("Alterações salvas!", ToastVariant::Success);
+                },
             }
         }
     }

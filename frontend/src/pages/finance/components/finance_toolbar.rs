@@ -4,11 +4,15 @@ use dioxus::prelude::*;
 #[component]
 pub fn FinanceToolbar(
     period_filter: Signal<String>,
+    start_date: Signal<String>,
+    end_date: Signal<String>,
     search_query: Signal<String>,
     on_open_filter_modal: EventHandler<()>,
     on_new_transaction: EventHandler<String>,
 ) -> Element {
     let mut is_add_menu_open = use_signal(|| false);
+
+    let is_custom_period = *period_filter.read() == "custom";
 
     rsx! {
         div { class: "finance-top-toolbar",
@@ -22,9 +26,35 @@ pub fn FinanceToolbar(
                         onchange: move |e| period_filter.set(e.value()),
                         option { value: "today", "de hoje" }
                         option { value: "week", "desta semana" }
-                        option { value: "month", "deste mês" }
-                        option { value: "year", "deste ano" }
+                        option { value: "month", "desse mês" }
+                        option { value: "year", "desse ano" }
+                        option { value: "custom", "escolher período" }
                         option { value: "all", "de todos os períodos" }
+                    }
+                }
+
+                if is_custom_period {
+                    div { style: "display: flex; align-items: center; gap: 8px;",
+                        div { class: "period-date-input-group",
+                            label { "Data inicial*" }
+                            input {
+                                class: "form-input",
+                                r#type: "date",
+                                style: "height: 36px; padding: 2px 8px; font-size: 12.5px;",
+                                value: "{start_date}",
+                                oninput: move |e| start_date.set(e.value()),
+                            }
+                        }
+                        div { class: "period-date-input-group",
+                            label { "Data final*" }
+                            input {
+                                class: "form-input",
+                                r#type: "date",
+                                style: "height: 36px; padding: 2px 8px; font-size: 12.5px;",
+                                value: "{end_date}",
+                                oninput: move |e| end_date.set(e.value()),
+                            }
+                        }
                     }
                 }
 

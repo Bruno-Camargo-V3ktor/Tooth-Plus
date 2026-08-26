@@ -95,6 +95,12 @@ pub struct Transaction {
     pub installment_total: i32,
     #[serde(default)]
     pub is_calculated_pending: bool,
+    #[serde(default)]
+    pub has_receipt: bool,
+    #[serde(default)]
+    pub receipt_name: Option<String>,
+    #[serde(default)]
+    pub receipt_date: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

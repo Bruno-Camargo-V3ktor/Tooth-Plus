@@ -290,3 +290,15 @@
 .btn-filter-apply:hover {
     background-color: #0284c7;
 }
+
+.period-date-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.period-date-input-group label {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 600;
+}
