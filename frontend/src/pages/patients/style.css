@@ -1,6 +1,4 @@
-/* ==========================================================================
-   PACIENTES & PRONTUÁRIO CLÍNICO (DARK DENTAL THEME)
-   ========================================================================== */
+
 
 .patients-page {
     display: flex;
@@ -14,9 +12,6 @@
     color: #f1f5f9;
 }
 
-/* ==========================================================================
-   1. LISTAGEM DE PACIENTES
-   ========================================================================== */
 .patients-header-row {
     display: flex;
     align-items: center;
@@ -233,9 +228,6 @@
     background: rgba(34, 197, 94, 0.15);
 }
 
-/* ==========================================================================
-   2. FICHA / PRONTUÁRIO DO PACIENTE (PROFILE VIEW)
-   ========================================================================== */
 .patient-profile-top-bar {
     display: flex;
     align-items: center;
@@ -581,9 +573,6 @@ input:checked + .switch-slider:before {
     transform: translateX(18px);
 }
 
-/* ==========================================================================
-   3. ABA DÉBITOS / FINANCEIRO DO PACIENTE
-   ========================================================================== */
 .debits-top-toolbar {
     display: flex;
     align-items: center;
@@ -669,9 +658,6 @@ input:checked + .switch-slider:before {
     margin: 0;
 }
 
-/* ==========================================================================
-   4. ODONTOGRAMA INTERATIVO
-   ========================================================================== */
 .odontogram-wrapper {
     display: flex;
     flex-direction: column;

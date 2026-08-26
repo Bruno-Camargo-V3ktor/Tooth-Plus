@@ -1,16 +1,17 @@
 use crate::components::modal::Modal;
+use shared::finance::TransactionDirection;
 use dioxus::prelude::*;
 
 #[component]
 pub fn ModalTransaction(
     is_open: bool,
-    is_income: bool,
+    direction: TransactionDirection,
     description: Signal<String>,
     amount_str: Signal<String>,
     category: Signal<String>,
     payment_method: Signal<String>,
-    due_date: Signal<String>,
     is_paid: Signal<bool>,
+    due_date: Signal<String>,
     on_close: EventHandler<()>,
     on_submit: EventHandler<()>,
 ) -> Element {
@@ -18,7 +19,11 @@ pub fn ModalTransaction(
         return rsx! {};
     }
 
-    let title = if is_income { "Nova Receita".to_string() } else { "Nova Despesa".to_string() };
+    let title = if direction == TransactionDirection::Income {
+        "Nova Receita / Entrada".to_string()
+    } else {
+        "Nova Despesa / Saída".to_string()
+    };
 
     rsx! {
         Modal {
@@ -36,7 +41,7 @@ pub fn ModalTransaction(
                     r#type: "button",
                     class: "btn-modal-primary",
                     onclick: move |_| on_submit.call(()),
-                    "Confirmar Lançamento"
+                    "Salvar Lançamento"
                 }
             },
 
@@ -45,7 +50,7 @@ pub fn ModalTransaction(
                 input {
                     class: "form-input",
                     r#type: "text",
-                    placeholder: if is_income { "Ex: Consulta Dr. Roberto, Implante..." } else { "Ex: Compra de Luvas, Aluguel..." },
+                    placeholder: "Ex: Pagamento Restauração, Compra de Resina, Aluguel...",
                     value: "{description}",
                     oninput: move |e| description.set(e.value()),
                 }
@@ -64,7 +69,44 @@ pub fn ModalTransaction(
                     }
                 }
                 div { class: "form-field",
-                    label { class: "form-label", "Data de Vencimento *" }
+                    label { class: "form-label", "Categoria" }
+                    select {
+                        class: "form-select",
+                        value: "{category}",
+                        onchange: move |e| category.set(e.value()),
+                        if direction == TransactionDirection::Income {
+                            option { value: "Tratamento Odontológico", "Tratamento Odontológico" }
+                            option { value: "Consulta & Avaliação", "Consulta & Avaliação" }
+                            option { value: "Manutenção Ortodôntica", "Manutenção Ortodôntica" }
+                            option { value: "Outras Entradas", "Outras Entradas" }
+                        } else {
+                            option { value: "Materiais & Insumos", "Materiais & Insumos" }
+                            option { value: "Aluguel & Condomínio", "Aluguel & Condomínio" }
+                            option { value: "Laboratório de Prótese", "Laboratório de Prótese" }
+                            option { value: "Energia, Água & Internet", "Energia, Água & Internet" }
+                            option { value: "Equipe & Honorários", "Equipe & Honorários" }
+                            option { value: "Outras Despesas", "Outras Despesas" }
+                        }
+                    }
+                }
+            }
+
+            div { class: "form-row-2 form-row",
+                div { class: "form-field",
+                    label { class: "form-label", "Forma de Pagamento" }
+                    select {
+                        class: "form-select",
+                        value: "{payment_method}",
+                        onchange: move |e| payment_method.set(e.value()),
+                        option { value: "pix", "PIX" }
+                        option { value: "cartao_credito", "Cartão de Crédito" }
+                        option { value: "cartao_debito", "Cartão de Débito" }
+                        option { value: "dinheiro", "Dinheiro" }
+                        option { value: "boleto", "Boleto" }
+                    }
+                }
+                div { class: "form-field",
+                    label { class: "form-label", "Data de Vencimento" }
                     input {
                         class: "form-input",
                         r#type: "date",
@@ -74,42 +116,20 @@ pub fn ModalTransaction(
                 }
             }
 
-            div { class: "form-row-2 form-row",
-                div { class: "form-field",
-                    label { class: "form-label", "Categoria" }
-                    select {
-                        class: "form-select",
-                        value: "{category}",
-                        onchange: move |e| category.set(e.value()),
-                        option { value: "Tratamentos", "Tratamentos & Procedimentos" }
-                        option { value: "Materiais", "Materiais & Insumos" }
-                        option { value: "Operacional", "Despesas Operacionais" }
-                        option { value: "Outros", "Outros" }
-                    }
-                }
-                div { class: "form-field",
-                    label { class: "form-label", "Forma de Pagamento" }
-                    select {
-                        class: "form-select",
-                        value: "{payment_method}",
-                        onchange: move |e| payment_method.set(e.value()),
-                        option { value: "PIX", "PIX" }
-                        option { value: "Cartão de Crédito", "Cartão de Crédito" }
-                        option { value: "Cartão de Débito", "Cartão de Débito" }
-                        option { value: "Boleto", "Boleto" }
-                        option { value: "Dinheiro", "Dinheiro" }
-                    }
-                }
-            }
-
-            div { class: "form-checkbox-wrap", style: "margin-top: 4px;",
+            div { style: "display: flex; align-items: center; gap: 8px; margin-top: 6px;",
                 input {
                     r#type: "checkbox",
                     id: "chk-is-paid",
                     checked: "{is_paid}",
                     onchange: move |e| is_paid.set(e.checked()),
                 }
-                label { r#for: "chk-is-paid", "Lançamento já quitado / pago agora" }
+                label { r#for: "chk-is-paid", style: "font-size: 13.5px; color: #cbd5e1; cursor: pointer;",
+                    if direction == TransactionDirection::Income {
+                        "Recebido no momento do lançamento"
+                    } else {
+                        "Despesa já paga (débito imediato)"
+                    }
+                }
             }
         }
     }

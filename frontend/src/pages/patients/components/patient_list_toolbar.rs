@@ -5,7 +5,6 @@ use dioxus::prelude::*;
 pub fn PatientListToolbar(
     search_query: Signal<String>,
     on_new_patient: EventHandler<()>,
-    on_export: EventHandler<()>,
 ) -> Element {
     rsx! {
         div { class: "patients-header-row",
@@ -20,13 +19,6 @@ pub fn PatientListToolbar(
                         value: "{search_query}",
                         oninput: move |e| search_query.set(e.value()),
                     }
-                }
-
-                button {
-                    r#type: "button",
-                    class: "btn-export",
-                    onclick: move |_| on_export.call(()),
-                    "⬇ EXPORTAR"
                 }
 
                 button {

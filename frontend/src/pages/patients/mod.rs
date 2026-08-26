@@ -86,7 +86,6 @@ pub fn PatientsView() -> Element {
 
         div { class: "patients-page",
             if let Some(patient) = selected_patient {
-                // Modo Ficha / Prontuário Completo do Paciente (Screenshots 1, 2, 4)
                 PatientProfileHeader {
                     patient: patient.clone(),
                     active_tab,
@@ -165,13 +164,9 @@ pub fn PatientsView() -> Element {
                     },
                 }
             } else {
-                // Modo Listagem Oficial dos Pacientes (Screenshot 3)
                 PatientListToolbar {
                     search_query,
                     on_new_patient: move |_| show_modal.set(true),
-                    on_export: move |_| {
-                        let _ = web_sys::window().map(|w| w.print());
-                    },
                 }
 
                 PatientListTable {

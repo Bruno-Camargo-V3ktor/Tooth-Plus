@@ -1,4 +1,4 @@
-use crate::icons::{IconCopy, IconInfo, IconMessageSquare};
+use crate::icons::IconInfo;
 use crate::router::Route;
 use shared::appointments::AppointmentResponse;
 use shared::patients::Patient;
@@ -19,8 +19,29 @@ pub fn TabAbout(
         _ => "Não informado",
     };
 
+    let marital_display = match patient.marital_status.as_deref() {
+        Some("single") => "Solteiro(a)",
+        Some("married") => "Casado(a)",
+        Some("divorced") => "Divorciado(a)",
+        Some("widowed") => "Viúvo(a)",
+        _ => "Não informado",
+    };
+
     let plan_display = patient.insurance_plan.clone().unwrap_or_else(|| "Particular".to_string());
-    let has_cpf = patient.document_cpf.is_some();
+    let insurance_num = patient.insurance_number.clone().unwrap_or_else(|| "—".to_string());
+
+    let address_str = match (&patient.address_street, &patient.address_number, &patient.address_city) {
+        (Some(street), Some(num), Some(city)) => format!("{}, {} - {}, {}", street, num, patient.address_neighborhood.as_deref().unwrap_or(""), city),
+        (Some(street), Some(num), None) => format!("{}, {}", street, num),
+        _ => "Endereço não cadastrado".to_string(),
+    };
+
+    let emergency_str = match (&patient.emergency_contact_name, &patient.emergency_contact_phone) {
+        (Some(name), Some(ph)) => format!("{} ({})", name, ph),
+        (Some(name), None) => name.clone(),
+        _ => "Não informado".to_string(),
+    };
+
     let patient_appts: Vec<AppointmentResponse> = appointments
         .into_iter()
         .filter(|a| a.patient_id.as_deref() == Some(&patient.id) || a.patient_name.as_deref() == Some(&patient.full_name))
@@ -28,17 +49,15 @@ pub fn TabAbout(
 
     rsx! {
         div { class: "patient-tab-grid-2",
-            // Coluna Esquerda
             div { style: "display: flex; flex-direction: column; gap: 16px;",
-                // Card Dados Pessoais
                 div { class: "patient-card",
                     div { class: "patient-card-header",
-                        h3 { class: "patient-card-title", "Dados pessoais" }
+                        h3 { class: "patient-card-title", "Dados Pessoais" }
                     }
                     div { class: "patient-card-body",
                         div { class: "info-data-row",
-                            span { class: "info-data-label", "Número paciente" }
-                            span { class: "info-data-val", "25" }
+                            span { class: "info-data-label", "Nome completo" }
+                            span { class: "info-data-val", "{patient.full_name}" }
                         }
                         div { class: "info-data-row",
                             span { class: "info-data-label", "Sexo" }
@@ -48,71 +67,80 @@ pub fn TabAbout(
                             span { class: "info-data-label", "Celular" }
                             span { class: "info-data-val", "{patient.phone}" }
                         }
+                        if let Some(email) = patient.email.as_ref() {
+                            div { class: "info-data-row",
+                                span { class: "info-data-label", "E-mail" }
+                                span { class: "info-data-val", "{email}" }
+                            }
+                        }
                         if let Some(cpf) = patient.document_cpf.as_ref() {
                             div { class: "info-data-row",
                                 span { class: "info-data-label", "CPF" }
                                 span { class: "info-data-val", "{cpf}" }
                             }
                         }
+                        if let Some(rg) = patient.document_rg.as_ref() {
+                            div { class: "info-data-row",
+                                span { class: "info-data-label", "RG" }
+                                span { class: "info-data-val", "{rg}" }
+                            }
+                        }
                         if let Some(bd) = patient.birth_date.as_ref() {
                             div { class: "info-data-row",
-                                span { class: "info-data-label", "Data de Nascimento" }
+                                span { class: "info-data-label", "Nascimento" }
                                 span { class: "info-data-val", "{bd}" }
                             }
                         }
+                        div { class: "info-data-row",
+                            span { class: "info-data-label", "Estado civil" }
+                            span { class: "info-data-val", "{marital_display}" }
+                        }
+                        if let Some(prof) = patient.profession.as_ref() {
+                            div { class: "info-data-row",
+                                span { class: "info-data-label", "Profissão" }
+                                span { class: "info-data-val", "{prof}" }
+                            }
+                        }
                     }
                 }
 
-                // Card Dados do Plano
                 div { class: "patient-card",
                     div { class: "patient-card-header",
-                        h3 { class: "patient-card-title", "Dados do plano" }
+                        h3 { class: "patient-card-title", "Endereço & Contato de Emergência" }
                     }
                     div { class: "patient-card-body",
                         div { class: "info-data-row",
-                            span { class: "info-data-label", "Plano" }
-                            span { class: "info-data-val", "{plan_display}" }
+                            span { class: "info-data-label", "Endereço" }
+                            span { class: "info-data-val", "{address_str}" }
+                        }
+                        div { class: "info-data-row",
+                            span { class: "info-data-label", "Emergência" }
+                            span { class: "info-data-val", "{emergency_str}" }
                         }
                     }
                 }
 
-                // Card Aplicativo Meu Doutor
                 div { class: "patient-card",
+                    div { class: "patient-card-header",
+                        h3 { class: "patient-card-title", "Dados do Plano Odontológico" }
+                    }
                     div { class: "patient-card-body",
-                        h3 { style: "font-size: 15px; font-weight: 700; color: #f8fafc; margin: 0 0 6px 0;", "Código para o aplicativo Meu Doutor" }
-                        p { style: "font-size: 13px; color: #94a3b8; line-height: 1.45; margin: 0;",
-                            "Oriente o paciente a baixar o aplicativo "
-                            strong { style: "color: #f1f5f9;", "Meu Doutor" }
-                            " e envie o código abaixo para o seu paciente entrar no aplicativo."
+                        div { class: "info-data-row",
+                            span { class: "info-data-label", "Plano / Convênio" }
+                            span { class: "info-data-val", "{plan_display}" }
                         }
-
-                        div { class: "app-doctor-code-row",
-                            div { class: "app-doctor-code-box", if has_cpf { "DOU-8492" } else { "------" } }
-                            button {
-                                r#type: "button",
-                                class: "btn-invite-pill",
-                                IconCopy { size: 14, color: "currentColor".to_string() }
-                                span { "CONVIDAR" }
-                            }
-                        }
-
-                        if !has_cpf {
-                            div { class: "app-alert-warning-box",
-                                span { "⚠️ Paciente " }
-                                strong { "sem CPF cadastrado" }
-                                span { ". Para gerar o código, é necessário informar o CPF do paciente na ficha." }
-                            }
+                        div { class: "info-data-row",
+                            span { class: "info-data-label", "Carteirinha" }
+                            span { class: "info-data-val", "{insurance_num}" }
                         }
                     }
                 }
             }
 
-            // Coluna Direita
             div { style: "display: flex; flex-direction: column; gap: 16px;",
-                // Card Consultas
                 div { class: "patient-card",
                     div { class: "patient-card-header",
-                        h3 { class: "patient-card-title", "Consultas" }
+                        h3 { class: "patient-card-title", "Consultas & Atendimentos" }
                     }
                     div { class: "patient-card-body",
                         if patient_appts.is_empty() {
@@ -147,28 +175,16 @@ pub fn TabAbout(
                     }
                 }
 
-                // Card Mensagens
                 div { class: "patient-card",
                     div { class: "patient-card-header",
-                        h3 { class: "patient-card-title", "Mensagens" }
-                    }
-                    div { class: "patient-card-body", style: "padding: 32px 18px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px;",
-                        IconMessageSquare { size: 32, color: "#475569".to_string() }
-                        span { style: "font-size: 13px; color: #94a3b8;", "Você ainda não enviou nenhuma mensagem para este paciente" }
-                    }
-                }
-
-                // Card Comunicação
-                div { class: "patient-card",
-                    div { class: "patient-card-header",
-                        h3 { class: "patient-card-title", "Comunicação" }
+                        h3 { class: "patient-card-title", "Preferências de Comunicação" }
                     }
                     div { class: "patient-card-body",
-                        p { style: "font-size: 12.5px; color: #64748b; margin: 0 0 6px 0;", "Permitir o envio de:" }
+                        p { style: "font-size: 12.5px; color: #64748b; margin: 0 0 6px 0;", "Permitir o envio de notificações:" }
 
                         div { class: "switch-toggle-row",
                             div { class: "switch-label-group",
-                                span { "Mensagens relacionadas ao serviço prestado" }
+                                span { "Lembretes de consulta e retorno" }
                                 IconInfo { size: 14, color: "#64748b".to_string() }
                             }
                             label { class: "switch-input-custom",
@@ -183,7 +199,7 @@ pub fn TabAbout(
 
                         div { class: "switch-toggle-row",
                             div { class: "switch-label-group",
-                                span { "Campanha de marketing" }
+                                span { "Campanhas de orientação preventiva" }
                                 IconInfo { size: 14, color: "#64748b".to_string() }
                             }
                             label { class: "switch-input-custom",

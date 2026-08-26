@@ -3,20 +3,17 @@ pub mod components;
 use crate::api::finance::FinanceApi;
 use crate::api::ActiveClinicState;
 use crate::components::toast::{ToastState, ToastVariant};
-use shared::finance::{
-    CreateTransactionRequest, FinanceQuery, FinanceSummary, Transaction,
-    TransactionDirection, TransactionStatus,
-};
+use shared::finance::{CreateTransactionRequest, FinanceQuery, Transaction, TransactionDirection, TransactionStatus};
 use dioxus::prelude::*;
 
-pub use components::{FinanceKpis, FinanceTable, FinanceToolbar, ModalTransaction};
+pub use components::*;
 
 const STYLE: Asset = asset!("/src/pages/finance/style.css");
 
 #[component]
 pub fn FinanceView() -> Element {
     let active_clinic = consume_context::<Signal<Option<ActiveClinicState>>>();
-    let mut toast = consume_context::<ToastState>();
+    let toast = consume_context::<ToastState>();
 
     let clinic_id = active_clinic
         .read()
@@ -25,82 +22,72 @@ pub fn FinanceView() -> Element {
         .unwrap_or_default();
 
     let mut transactions = use_signal(Vec::<Transaction>::new);
-    let mut summary = use_signal(|| FinanceSummary {
-        total_income_cents: 0,
-        total_expense_cents: 0,
-        net_balance_cents: 0,
-        pending_income_cents: 0,
-        pending_expense_cents: 0,
-        total_transactions_count: 0,
-    });
-    let mut type_filter = use_signal(|| "ALL".to_string());
     let mut search_query = use_signal(String::new);
-    let mut show_modal = use_signal(|| false);
-    let mut is_income = use_signal(|| true);
+    let mut period_filter = use_signal(|| "month".to_string());
+    let mut is_filter_modal_open = use_signal(|| false);
+    let mut is_add_modal_open = use_signal(|| false);
+    let mut add_direction = use_signal(|| TransactionDirection::Income);
+    let mut reload_trigger = use_signal(|| 0);
 
-    // Form fields
-    let mut description = use_signal(String::new);
-    let mut amount_str = use_signal(String::new);
-    let mut category = use_signal(|| "Tratamentos".to_string());
-    let mut payment_method = use_signal(|| "PIX".to_string());
-    let mut due_date = use_signal(|| "2026-08-26".to_string());
+    let mut filter_income = use_signal(|| true);
+    let mut filter_unlinked = use_signal(|| true);
+    let mut filter_expense = use_signal(|| true);
+    let mut filter_paid = use_signal(|| true);
+    let mut filter_unpaid = use_signal(|| true);
+    let mut filter_scheduled = use_signal(|| true);
+    let mut account_filter = use_signal(|| "all".to_string());
+    let mut payment_method_filter = use_signal(|| "all".to_string());
+
+    let mut desc = use_signal(String::new);
+    let mut amount_str = use_signal(|| "150.00".to_string());
+    let mut category = use_signal(|| "Tratamento Odontológico".to_string());
+    let mut payment_method = use_signal(|| "pix".to_string());
     let mut is_paid = use_signal(|| true);
+    let mut due_date = use_signal(|| "2026-08-26".to_string());
 
-    let load_finance = {
-        let cid = clinic_id.clone();
-        let mut tx_sig = transactions;
-        let mut sum_sig = summary;
+    let cid_effect = clinic_id.clone();
+    use_effect(move || {
+        let _ = reload_trigger.read();
+        let cid = cid_effect.clone();
+        let query = FinanceQuery {
+            clinic_id: cid,
+            month: None,
+            year: None,
+            start_date: None,
+            end_date: None,
+        };
 
-        move || {
-            let cid = cid.clone();
-            let query = FinanceQuery {
-                clinic_id: cid,
-                month: None,
-                year: None,
-                start_date: None,
-                end_date: None,
-            };
-
-            spawn(async move {
-                if let Ok(resp) = FinanceApi::list_transactions(query).await {
-                    tx_sig.set(resp.transactions);
-                    sum_sig.set(resp.summary);
-                }
-            });
-        }
-    };
-
-    use_effect({
-        let mut loader = load_finance.clone();
-        move || loader()
+        spawn(async move {
+            if let Ok(resp) = FinanceApi::list_transactions(query).await {
+                transactions.set(resp.transactions);
+            }
+        });
     });
 
     let handle_submit = {
         let cid = clinic_id.clone();
         let mut toast_c = toast.clone();
-        let mut loader = load_finance.clone();
-        let mut modal_sig = show_modal;
-        let is_inc = is_income.clone();
-        let desc = description.clone();
-        let amt = amount_str.clone();
-        let cat = category.clone();
-        let pm = payment_method.clone();
-        let dd = due_date.clone();
-        let paid = is_paid.clone();
+        let mut modal_sig = is_add_modal_open;
+        let mut reload_sig = reload_trigger;
+        let dir_sig = add_direction;
+        let d_sig = desc.clone();
+        let a_sig = amount_str.clone();
+        let c_sig = category.clone();
+        let pm_sig = payment_method.clone();
+        let ip_sig = is_paid;
+        let dd_sig = due_date.clone();
 
         move |_| {
-            let desc_val = desc.read().trim().to_string();
-            let amt_val = amt.read().trim().replace(',', ".");
-            let parsed_amt: f64 = amt_val.parse().unwrap_or(0.0);
-
-            if desc_val.is_empty() || parsed_amt <= 0.0 {
-                toast_c.show("Preencha a descrição e um valor válido.", ToastVariant::Error);
+            let description = d_sig.read().trim().to_string();
+            if description.is_empty() {
+                toast_c.show("Informe a descrição do lançamento.", ToastVariant::Error);
                 return;
             }
 
-            let amount_cents = (parsed_amt * 100.0) as i64;
-            let direction = if *is_inc.read() { TransactionDirection::Income } else { TransactionDirection::Expense };
-            let status = if *paid.read() { TransactionStatus::Paid } else { TransactionStatus::Pending };
+            let amount_num: f64 = a_sig.read().replace(',', ".").parse().unwrap_or(0.0);
+            let amount_cents = (amount_num * 100.0) as i64;
+            let dir = dir_sig.read().clone();
+            let paid = *ip_sig.read();
 
             let req = CreateTransactionRequest {
                 clinic_id: cid.clone(),
@@ -109,28 +96,28 @@ pub fn FinanceView() -> Element {
                 patient_name: None,
                 user_id: None,
                 treatment_plan_id: None,
-                direction,
+                direction: dir,
                 amount_cents,
-                description: desc_val,
-                category: cat.read().clone(),
-                due_date: dd.read().clone(),
-                paid_date: if *paid.read() { Some(dd.read().clone()) } else { None },
-                payment_method: Some(pm.read().clone()),
-                status,
-                installment_current: Some(1),
-                installment_total: Some(1),
+                description,
+                category: c_sig.read().clone(),
+                due_date: dd_sig.read().clone(),
+                paid_date: if paid { Some(dd_sig.read().clone()) } else { None },
+                payment_method: Some(pm_sig.read().clone()),
+                status: if paid { TransactionStatus::Paid } else { TransactionStatus::Pending },
+                installment_current: None,
+                installment_total: None,
             };
 
             let mut toast_resp = toast_c.clone();
-            let mut loader_c = loader.clone();
             let mut modal_c = modal_sig;
+            let mut reload_c = reload_sig;
 
             spawn(async move {
                 match FinanceApi::create_transaction(req).await {
                     Ok(_) => {
-                        toast_resp.show("Lançamento registrado com sucesso!", ToastVariant::Success);
+                        toast_resp.show("Lançamento financeiro registrado!", ToastVariant::Success);
                         modal_c.set(false);
-                        loader_c();
+                        reload_c.set(reload_c() + 1);
                     }
                     Err(err) => toast_resp.show(err, ToastVariant::Error),
                 }
@@ -138,51 +125,105 @@ pub fn FinanceView() -> Element {
         }
     };
 
-    let filtered_tx: Vec<Transaction> = transactions.read().iter().filter(|tx| {
-        let tf = type_filter.read().clone();
-        if tf == "INCOME" && tx.direction != TransactionDirection::Income { return false; }
-        if tf == "EXPENSE" && tx.direction != TransactionDirection::Expense { return false; }
+    let tx_list = transactions.read().clone();
+
+    let received_cents: i64 = tx_list
+        .iter()
+        .filter(|t| t.direction == TransactionDirection::Income && t.status == TransactionStatus::Paid)
+        .map(|t| t.paid_amount_cents.max(t.amount_cents))
+        .sum();
+
+    let pending_income_cents: i64 = tx_list
+        .iter()
+        .filter(|t| t.direction == TransactionDirection::Income && t.status != TransactionStatus::Paid)
+        .map(|t| t.remaining_amount_cents.max(t.amount_cents))
+        .sum();
+
+    let paid_expense_cents: i64 = tx_list
+        .iter()
+        .filter(|t| t.direction == TransactionDirection::Expense && t.status == TransactionStatus::Paid)
+        .map(|t| t.paid_amount_cents.max(t.amount_cents))
+        .sum();
+
+    let pending_expense_cents: i64 = tx_list
+        .iter()
+        .filter(|t| t.direction == TransactionDirection::Expense && t.status != TransactionStatus::Paid)
+        .map(|t| t.remaining_amount_cents.max(t.amount_cents))
+        .sum();
+
+    let filtered_transactions: Vec<Transaction> = tx_list.into_iter().filter(|t| {
+        let is_inc = t.direction == TransactionDirection::Income;
+        let is_pd = t.status == TransactionStatus::Paid;
+
+        if is_inc && !*filter_income.read() { return false; }
+        if !is_inc && !*filter_expense.read() { return false; }
+        if is_pd && !*filter_paid.read() { return false; }
+        if !is_pd && !*filter_unpaid.read() { return false; }
 
         let q = search_query.read().trim().to_lowercase();
         if q.is_empty() { return true; }
-        tx.description.to_lowercase().contains(&q) || tx.category.to_lowercase().contains(&q)
-    }).cloned().collect();
+        t.description.to_lowercase().contains(&q)
+            || t.category.to_lowercase().contains(&q)
+            || t.patient_name.as_deref().unwrap_or("").to_lowercase().contains(&q)
+    }).collect();
 
     rsx! {
         document::Link { rel: "stylesheet", href: STYLE }
 
         div { class: "finance-page",
-            FinanceKpis { summary: summary() }
-
             FinanceToolbar {
-                type_filter,
+                period_filter,
                 search_query,
-                on_search: move |_| {
-                    let mut loader = load_finance.clone();
-                    loader();
-                },
-                on_new_income: move |_| {
-                    is_income.set(true);
-                    show_modal.set(true);
-                },
-                on_new_expense: move |_| {
-                    is_income.set(false);
-                    show_modal.set(true);
+                on_open_filter_modal: move |_| is_filter_modal_open.set(true),
+                on_new_transaction: move |type_str: String| {
+                    if type_str == "expense" {
+                        add_direction.set(TransactionDirection::Expense);
+                        category.set("Materiais & Insumos".to_string());
+                    } else {
+                        add_direction.set(TransactionDirection::Income);
+                        category.set("Tratamento Odontológico".to_string());
+                    }
+                    desc.set(String::new());
+                    amount_str.set("150.00".to_string());
+                    is_add_modal_open.set(true);
                 },
             }
 
-            FinanceTable { transactions: filtered_tx }
+            FinanceEquationSummary {
+                received_cents,
+                pending_income_cents,
+                paid_expense_cents,
+                pending_expense_cents,
+            }
+
+            FinanceTable {
+                transactions: filtered_transactions,
+            }
+
+            FinanceFilterModal {
+                is_open: is_filter_modal_open(),
+                filter_income,
+                filter_unlinked,
+                filter_expense,
+                filter_paid,
+                filter_unpaid,
+                filter_scheduled,
+                account_filter,
+                payment_method_filter,
+                on_close: move |_| is_filter_modal_open.set(false),
+                on_apply: move |_| is_filter_modal_open.set(false),
+            }
 
             ModalTransaction {
-                is_open: show_modal(),
-                is_income: is_income(),
-                description,
+                is_open: is_add_modal_open(),
+                direction: add_direction(),
+                description: desc,
                 amount_str,
                 category,
                 payment_method,
-                due_date,
                 is_paid,
-                on_close: move |_| show_modal.set(false),
+                due_date,
+                on_close: move |_| is_add_modal_open.set(false),
                 on_submit: handle_submit,
             }
         }

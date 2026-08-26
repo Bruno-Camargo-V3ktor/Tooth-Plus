@@ -27,12 +27,15 @@ pub fn TreatmentsView() -> Element {
     let mut show_modal = use_signal(|| false);
     let mut reload_trigger = use_signal(|| 0);
 
-    // Form fields
     let mut name = use_signal(String::new);
     let mut category = use_signal(|| "Dentística".to_string());
     let mut description = use_signal(String::new);
     let mut price_str = use_signal(|| "150.00".to_string());
     let mut duration_str = use_signal(|| "30".to_string());
+    let mut materials = use_signal(String::new);
+    let mut equipment = use_signal(String::new);
+    let mut post_care = use_signal(String::new);
+    let mut target_teeth = use_signal(Vec::<String>::new);
 
     let cid_effect = clinic_id.clone();
     use_effect(move || {
@@ -54,6 +57,10 @@ pub fn TreatmentsView() -> Element {
         let d_s = description.clone();
         let p_s = price_str.clone();
         let dur_s = duration_str.clone();
+        let mat_s = materials.clone();
+        let eq_s = equipment.clone();
+        let post_s = post_care.clone();
+        let teeth_s = target_teeth.clone();
         let mut reload_sig = reload_trigger;
 
         move |_| {
@@ -66,6 +73,18 @@ pub fn TreatmentsView() -> Element {
             let price_num: f64 = p_s.read().replace(',', ".").parse().unwrap_or(0.0);
             let dur_num: i32 = dur_s.read().parse().unwrap_or(30);
 
+            let mat_list: Vec<String> = mat_s.read()
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            let eq_list: Vec<String> = eq_s.read()
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
             let req = CreateTreatmentTemplateRequest {
                 clinic_id: cid.clone(),
                 name: n,
@@ -74,10 +93,10 @@ pub fn TreatmentsView() -> Element {
                 default_price_cents: (price_num * 100.0) as i64,
                 estimated_duration_minutes: Some(dur_num),
                 dental_regions: vec![],
-                target_teeth: vec![],
-                required_materials: vec![],
-                required_equipment: vec![],
-                post_care_instructions: None,
+                target_teeth: teeth_s.read().clone(),
+                required_materials: mat_list,
+                required_equipment: eq_list,
+                post_care_instructions: if post_s.read().is_empty() { None } else { Some(post_s.read().clone()) },
                 clinical_notes: None,
             };
 
@@ -126,6 +145,10 @@ pub fn TreatmentsView() -> Element {
                     name.set(String::new());
                     description.set(String::new());
                     price_str.set("150.00".to_string());
+                    materials.set(String::new());
+                    equipment.set(String::new());
+                    post_care.set(String::new());
+                    target_teeth.set(vec![]);
                     show_modal.set(true);
                 },
             }
@@ -154,6 +177,10 @@ pub fn TreatmentsView() -> Element {
                 description,
                 price_str,
                 duration_str,
+                materials,
+                equipment,
+                post_care,
+                target_teeth,
                 on_close: move |_| show_modal.set(false),
                 on_submit: handle_submit,
             }
