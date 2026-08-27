@@ -13,17 +13,10 @@ const STYLE: Asset = asset!("/src/pages/settings/style.css");
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SettingsTab {
     Clinic,
+    Team,
     Plans,
     Anamnesis,
-    Contracts,
-    Categories,
-    FinancialAccounts,
     Chairs,
-    Copilot,
-    Communication,
-    PosRates,
-    MyDoctor,
-    Team,
 }
 
 #[component]
@@ -158,67 +151,43 @@ pub fn SettingsView() -> Element {
         document::Link { rel: "stylesheet", href: STYLE }
 
         div { class: "settings-page",
-            // TOP NAVBAR (TABS CONFORME SCREENSHOTS)
-            div { class: "settings-top-navbar",
-                button {
-                    class: if active_tab_val == SettingsTab::Clinic { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::Clinic),
-                    "CLÍNICA"
+            // TOP HEADER & NAVIGATION TABS
+            div { class: "settings-header-container",
+                div { class: "settings-header-top",
+                    div { class: "settings-header-title-group",
+                        div {
+                            h1 { class: "settings-header-title", "Configurações da Clínica" }
+                            p { class: "settings-header-subtitle", "Gerencie dados institucionais, membros da equipe, planos e consultórios." }
+                        }
+                    }
                 }
-                button {
-                    class: if active_tab_val == SettingsTab::Plans { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::Plans),
-                    "PLANOS"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::Anamnesis { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::Anamnesis),
-                    "ANAMNESE"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::Contracts { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::Contracts),
-                    "CONTRATO"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::Categories { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::Categories),
-                    "CATEGORIAS"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::FinancialAccounts { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::FinancialAccounts),
-                    "CONTAS FINANCEIRAS"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::Chairs { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::Chairs),
-                    "CADEIRAS"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::Copilot { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::Copilot),
-                    "COPILOTO"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::Communication { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::Communication),
-                    "COMUNICAÇÃO"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::PosRates { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::PosRates),
-                    "TAXAS MAQUININHA"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::MyDoctor { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::MyDoctor),
-                    "MEU DOUTOR"
-                }
-                button {
-                    class: if active_tab_val == SettingsTab::Team { "settings-nav-tab active" } else { "settings-nav-tab" },
-                    onclick: move |_| current_tab.set(SettingsTab::Team),
-                    "EQUIPE & ACESSOS"
+
+                div { class: "settings-top-navbar",
+                    button {
+                        class: if active_tab_val == SettingsTab::Clinic { "settings-nav-tab active" } else { "settings-nav-tab" },
+                        onclick: move |_| current_tab.set(SettingsTab::Clinic),
+                        "🏢 Clínica"
+                    }
+                    button {
+                        class: if active_tab_val == SettingsTab::Team { "settings-nav-tab active" } else { "settings-nav-tab" },
+                        onclick: move |_| current_tab.set(SettingsTab::Team),
+                        "👥 Equipe & Acessos"
+                    }
+                    button {
+                        class: if active_tab_val == SettingsTab::Plans { "settings-nav-tab active" } else { "settings-nav-tab" },
+                        onclick: move |_| current_tab.set(SettingsTab::Plans),
+                        "📋 Planos & Convênios"
+                    }
+                    button {
+                        class: if active_tab_val == SettingsTab::Anamnesis { "settings-nav-tab active" } else { "settings-nav-tab" },
+                        onclick: move |_| current_tab.set(SettingsTab::Anamnesis),
+                        "📝 Modelos de Anamnese"
+                    }
+                    button {
+                        class: if active_tab_val == SettingsTab::Chairs { "settings-nav-tab active" } else { "settings-nav-tab" },
+                        onclick: move |_| current_tab.set(SettingsTab::Chairs),
+                        "🪑 Cadeiras & Consultórios"
+                    }
                 }
             }
 
@@ -244,20 +213,17 @@ pub fn SettingsView() -> Element {
                             on_save: handle_save_clinic,
                         }
                     },
+                    SettingsTab::Team => rsx! {
+                        TabTeam { clinic_id: clinic_id.clone() }
+                    },
                     SettingsTab::Plans => rsx! {
                         TabPlans {}
                     },
                     SettingsTab::Anamnesis => rsx! {
                         TabAnamnesis {}
                     },
-                    SettingsTab::Team => rsx! {
-                        TabTeam { clinic_id: clinic_id.clone() }
-                    },
-                    _ => rsx! {
-                        div { style: "padding: 40px 20px; text-align: center; color: #64748b;",
-                            h3 { style: "font-size: 16px; color: #94a3b8; margin-bottom: 8px;", "Configurações em Sincronização" }
-                            p { style: "font-size: 13px;", "Este módulo utiliza os padrões integrados da clínica ativa." }
-                        }
+                    SettingsTab::Chairs => rsx! {
+                        TabChairs {}
                     },
                 }
             }

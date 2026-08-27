@@ -3,53 +3,56 @@ use crate::icons::{IconEdit, IconPlus, IconTrash};
 use dioxus::prelude::*;
 
 #[derive(Clone, PartialEq)]
-pub struct AnamnesisTemplateItem {
+pub struct ChairItem {
     pub id: String,
     pub name: String,
-    pub questions_count: usize,
+    pub room: String,
+    pub is_active: bool,
 }
 
 #[component]
-pub fn TabAnamnesis() -> Element {
-    let mut templates = use_signal(|| vec![
-        AnamnesisTemplateItem { id: "anam:1".to_string(), name: "Anamnese Geral Adulto".to_string(), questions_count: 18 },
-        AnamnesisTemplateItem { id: "anam:2".to_string(), name: "Anamnese Resumida (Triagem)".to_string(), questions_count: 8 },
-        AnamnesisTemplateItem { id: "anam:3".to_string(), name: "Anamnese Harmonização Orofacial (HOF)".to_string(), questions_count: 22 },
-        AnamnesisTemplateItem { id: "anam:4".to_string(), name: "Anamnese Odontopediatria (Infantil)".to_string(), questions_count: 15 },
-        AnamnesisTemplateItem { id: "anam:5".to_string(), name: "Anamnese Ortodôntica".to_string(), questions_count: 14 },
-        AnamnesisTemplateItem { id: "anam:6".to_string(), name: "Anamnese Cirurgia & Implante".to_string(), questions_count: 20 },
+pub fn TabChairs() -> Element {
+    let mut chairs = use_signal(|| vec![
+        ChairItem { id: "chair:1".to_string(), name: "Consultório 1 - Ortodontia".to_string(), room: "Sala 101".to_string(), is_active: true },
+        ChairItem { id: "chair:2".to_string(), name: "Consultório 2 - Cirurgia & Implante".to_string(), room: "Sala 102".to_string(), is_active: true },
+        ChairItem { id: "chair:3".to_string(), name: "Consultório 3 - Clínica Geral".to_string(), room: "Sala 103".to_string(), is_active: true },
     ]);
 
     let mut show_modal = use_signal(|| false);
     let mut editing_id = use_signal(|| None::<String>);
-    let mut model_name = use_signal(String::new);
+    let mut chair_name = use_signal(String::new);
+    let mut chair_room = use_signal(String::new);
 
     let handle_open_new = move |_| {
         editing_id.set(None);
-        model_name.set(String::new());
+        chair_name.set(String::new());
+        chair_room.set(String::new());
         show_modal.set(true);
     };
 
     let handle_save = move |_| {
-        let name = model_name.read().trim().to_string();
+        let name = chair_name.read().trim().to_string();
         if name.is_empty() {
             return;
         }
-        let mut list = templates.read().clone();
+        let room = chair_room.read().trim().to_string();
+        let mut list = chairs.read().clone();
 
         if let Some(ref edit_id) = *editing_id.read() {
-            if let Some(item) = list.iter_mut().find(|a| a.id == *edit_id) {
+            if let Some(item) = list.iter_mut().find(|c| c.id == *edit_id) {
                 item.name = name;
+                item.room = room;
             }
         } else {
-            let new_item = AnamnesisTemplateItem {
-                id: format!("anam:{}", list.len() + 1),
+            let new_item = ChairItem {
+                id: format!("chair:{}", list.len() + 1),
                 name,
-                questions_count: 10,
+                room,
+                is_active: true,
             };
             list.push(new_item);
         }
-        templates.set(list);
+        chairs.set(list);
         show_modal.set(false);
     };
 
@@ -57,8 +60,8 @@ pub fn TabAnamnesis() -> Element {
         div {
             div { class: "settings-card", style: "padding: 16px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;",
                 div {
-                    h3 { style: "font-size: 15px; font-weight: 700; color: var(--text-main, #f8fafc); margin: 0;", "Modelos e Questionários de Anamnese" }
-                    p { style: "font-size: 12.5px; color: var(--text-muted, #94a3b8); margin: 2px 0 0 0;", "Configure as fichas de histórico médico e odontológico aplicadas aos pacientes." }
+                    h3 { style: "font-size: 15px; font-weight: 700; color: var(--text-main, #f8fafc); margin: 0;", "Cadeiras e Salas de Atendimento" }
+                    p { style: "font-size: 12.5px; color: var(--text-muted, #94a3b8); margin: 2px 0 0 0;", "Organize os consultórios e equipamentos disponíveis na clínica." }
                 }
                 button {
                     r#type: "button",
@@ -66,7 +69,7 @@ pub fn TabAnamnesis() -> Element {
                     style: "height: 38px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; padding: 0 18px;",
                     onclick: handle_open_new,
                     IconPlus { size: 16, color: "#ffffff".to_string() }
-                    span { "Novo Modelo" }
+                    span { "Nova Cadeira" }
                 }
             }
 
@@ -74,36 +77,41 @@ pub fn TabAnamnesis() -> Element {
                 table { class: "settings-table",
                     thead {
                         tr {
-                            th { "Modelo de Anamnese" }
-                            th { "Perguntas Padrão" }
+                            th { "Identificação da Cadeira / Sala" }
+                            th { "Localização / Sala" }
+                            th { "Status" }
                             th { style: "text-align: right; width: 100px;", "Ações" }
                         }
                     }
                     tbody {
-                        for tpl in templates() {
+                        for c in chairs() {
                             {
-                                let tid = tpl.id.clone();
-                                let tid_del = tpl.id.clone();
-                                let tname = tpl.name.clone();
-                                let count = tpl.questions_count;
+                                let cid = c.id.clone();
+                                let cid_del = c.id.clone();
+                                let cname = c.name.clone();
+                                let croom = c.room.clone();
 
                                 rsx! {
-                                    tr { key: "{tpl.id}",
+                                    tr { key: "{c.id}",
                                         td {
-                                            strong { style: "font-size: 14px; color: var(--text-main, #f8fafc);", "{tpl.name}" }
+                                            strong { style: "font-size: 14px; color: var(--text-main, #f8fafc);", "{c.name}" }
                                         }
                                         td {
-                                            span { class: "badge badge-blue", style: "font-size: 12px;", "{count} perguntas" }
+                                            span { style: "color: var(--text-muted, #94a3b8); font-size: 13px;", "{c.room}" }
+                                        }
+                                        td {
+                                            span { class: "badge badge-green", style: "font-size: 11px;", "Ativa" }
                                         }
                                         td { style: "text-align: right;",
                                             div { style: "display: inline-flex; align-items: center; gap: 8px;",
                                                 button {
                                                     r#type: "button",
                                                     class: "action-btn-icon",
-                                                    title: "Editar modelo",
+                                                    title: "Editar cadeira",
                                                     onclick: move |_| {
-                                                        editing_id.set(Some(tid.clone()));
-                                                        model_name.set(tname.clone());
+                                                        editing_id.set(Some(cid.clone()));
+                                                        chair_name.set(cname.clone());
+                                                        chair_room.set(croom.clone());
                                                         show_modal.set(true);
                                                     },
                                                     IconEdit { size: 15, color: "var(--text-muted, #94a3b8)".to_string() }
@@ -111,11 +119,11 @@ pub fn TabAnamnesis() -> Element {
                                                 button {
                                                     r#type: "button",
                                                     class: "action-btn-icon",
-                                                    title: "Excluir modelo",
+                                                    title: "Excluir cadeira",
                                                     onclick: move |_| {
-                                                        let mut list = templates.read().clone();
-                                                        list.retain(|item| item.id != tid_del);
-                                                        templates.set(list);
+                                                        let mut list = chairs.read().clone();
+                                                        list.retain(|item| item.id != cid_del);
+                                                        chairs.set(list);
                                                     },
                                                     IconTrash { size: 15, color: "#ef4444".to_string() }
                                                 }
@@ -131,7 +139,7 @@ pub fn TabAnamnesis() -> Element {
 
             if show_modal() {
                 Modal {
-                    title: if editing_id().is_some() { "Editar Modelo de Anamnese".to_string() } else { "Novo Modelo de Anamnese".to_string() },
+                    title: if editing_id().is_some() { "Editar Cadeira Clínica".to_string() } else { "Cadastrar Nova Cadeira Clínica".to_string() },
                     is_open: show_modal(),
                     on_close: move |_| show_modal.set(false),
                     footer: rsx! {
@@ -147,18 +155,27 @@ pub fn TabAnamnesis() -> Element {
                                 class: "btn-primary-blue",
                                 style: "font-weight: 700; padding: 0 24px; height: 38px;",
                                 onclick: handle_save,
-                                "SALVAR MODELO"
+                                "SALVAR CADEIRA"
                             }
                         }
                     },
                     div { style: "display: flex; flex-direction: column; gap: 14px;",
                         div { class: "form-field",
-                            label { class: "form-label", "Nome do Modelo de Anamnese *" }
+                            label { class: "form-label", "Nome / Identificação da Cadeira *" }
                             input {
                                 class: "form-input",
-                                placeholder: "Ex: Anamnese Cirúrgica, Anamnese Endodôntica...",
-                                value: "{model_name}",
-                                oninput: move |e| model_name.set(e.value()),
+                                placeholder: "Ex: Consultório 1 - Ortodontia",
+                                value: "{chair_name}",
+                                oninput: move |e| chair_name.set(e.value()),
+                            }
+                        }
+                        div { class: "form-field",
+                            label { class: "form-label", "Sala / Andar" }
+                            input {
+                                class: "form-input",
+                                placeholder: "Ex: Sala 101, 1º Andar",
+                                value: "{chair_room}",
+                                oninput: move |e| chair_room.set(e.value()),
                             }
                         }
                     }

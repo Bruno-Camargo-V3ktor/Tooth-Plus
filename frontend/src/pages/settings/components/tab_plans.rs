@@ -68,14 +68,18 @@ pub fn TabPlans() -> Element {
 
     rsx! {
         div {
-            div { class: "settings-list-header",
-                h2 { class: "settings-list-title", "Planos" }
+            div { class: "settings-card", style: "padding: 16px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;",
+                div {
+                    h3 { style: "font-size: 15px; font-weight: 700; color: var(--text-main, #f8fafc); margin: 0;", "Tabelas de Preços e Convênios" }
+                    p { style: "font-size: 12.5px; color: var(--text-muted, #94a3b8); margin: 2px 0 0 0;", "Cadastre planos particulares e convênios para aplicar descontos automáticos nos orçamentos." }
+                }
                 button {
                     r#type: "button",
-                    class: "settings-btn-new-green",
+                    class: "btn-primary-blue",
+                    style: "height: 38px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; padding: 0 18px;",
                     onclick: handle_open_new,
                     IconPlus { size: 16, color: "#ffffff".to_string() }
-                    span { "NOVO PLANO" }
+                    span { "Novo Plano" }
                 }
             }
 
@@ -83,11 +87,9 @@ pub fn TabPlans() -> Element {
                 table { class: "settings-table",
                     thead {
                         tr {
-                            th { style: "display: flex; align-items: center; gap: 4px;",
-                                span { "Nome" }
-                                span { style: "font-size: 11px;", "↑" }
-                            }
-                            th { style: "text-align: right; width: 120px;", "Ações" }
+                            th { "Plano / Convênio" }
+                            th { "Desconto Padrão" }
+                            th { style: "text-align: right; width: 100px;", "Ações" }
                         }
                     }
                     tbody {
@@ -102,13 +104,15 @@ pub fn TabPlans() -> Element {
                                     tr { key: "{p.id}",
                                         td {
                                             div { style: "display: flex; align-items: center; gap: 10px;",
-                                                span { style: "font-weight: 700; color: #f1f5f9; font-size: 14px;", "{p.name}" }
-                                                div { style: "color: #38bdf8;",
-                                                    IconTag { size: 14, color: "#38bdf8".to_string() }
-                                                }
-                                                if pdisc > 0.0 {
-                                                    span { class: "badge badge-blue", style: "font-size: 11px;", "{pdisc}% desconto" }
-                                                }
+                                                IconTag { size: 16, color: "var(--primary, #00a0e4)".to_string() }
+                                                span { style: "font-weight: 700; color: var(--text-main, #f8fafc); font-size: 14px;", "{p.name}" }
+                                            }
+                                        }
+                                        td {
+                                            if pdisc > 0.0 {
+                                                span { class: "badge badge-blue", style: "font-size: 12px; font-weight: 700;", "{pdisc}% de desconto" }
+                                            } else {
+                                                span { class: "badge badge-gray", style: "font-size: 12px;", "Tabela Base (0%)" }
                                             }
                                         }
                                         td { style: "text-align: right;",
@@ -123,7 +127,7 @@ pub fn TabPlans() -> Element {
                                                         plan_discount.set(pdisc.to_string());
                                                         show_modal.set(true);
                                                     },
-                                                    IconEdit { size: 14, color: "#94a3b8".to_string() }
+                                                    IconEdit { size: 15, color: "var(--text-muted, #94a3b8)".to_string() }
                                                 }
                                                 if p.id != "plan:particular" {
                                                     button {
@@ -135,7 +139,7 @@ pub fn TabPlans() -> Element {
                                                             list.retain(|item| item.id != pid_del);
                                                             plans.set(list);
                                                         },
-                                                        IconTrash { size: 14, color: "#ef4444".to_string() }
+                                                        IconTrash { size: 15, color: "#ef4444".to_string() }
                                                     }
                                                 }
                                             }
@@ -148,19 +152,13 @@ pub fn TabPlans() -> Element {
                 }
             }
 
-            div { class: "settings-help-footer",
-                span { "🎓" }
-                span { "Dúvidas? Saiba tudo sobre " }
-                a { href: "#", "Planos e Tabelas de valores" }
-            }
-
             if show_modal() {
                 Modal {
-                    title: if editing_id().is_some() { "Editar Plano".to_string() } else { "Novo Plano / Convênio".to_string() },
+                    title: if editing_id().is_some() { "Editar Plano / Convênio".to_string() } else { "Novo Plano / Convênio".to_string() },
                     is_open: show_modal(),
                     on_close: move |_| show_modal.set(false),
                     footer: rsx! {
-                        div { style: "display: flex; justify-content: flex-end; gap: 10px; width: 100%;",
+                        div { style: "display: flex; justify-content: flex-end; gap: 12px; width: 100%;",
                             button {
                                 r#type: "button",
                                 class: "btn-modal-ghost",
@@ -169,7 +167,8 @@ pub fn TabPlans() -> Element {
                             }
                             button {
                                 r#type: "button",
-                                class: "settings-btn-save",
+                                class: "btn-primary-blue",
+                                style: "font-weight: 700; padding: 0 24px; height: 38px;",
                                 onclick: handle_save,
                                 "SALVAR PLANO"
                             }
@@ -177,7 +176,7 @@ pub fn TabPlans() -> Element {
                     },
                     div { style: "display: flex; flex-direction: column; gap: 14px;",
                         div { class: "form-field",
-                            label { class: "form-label", "Nome do plano / convênio *" }
+                            label { class: "form-label", "Nome do Plano / Convênio *" }
                             input {
                                 class: "form-input",
                                 placeholder: "Ex: Bradesco Dental, OdontoPrev, Particular...",
@@ -186,7 +185,7 @@ pub fn TabPlans() -> Element {
                             }
                         }
                         div { class: "form-field",
-                            label { class: "form-label", "Desconto padrão na tabela (%)" }
+                            label { class: "form-label", "Desconto Aplicado na Tabela Base (%)" }
                             input {
                                 class: "form-input",
                                 r#type: "number",

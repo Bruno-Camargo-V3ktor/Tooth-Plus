@@ -1,5 +1,5 @@
 /* ==========================================================================
-   CONFIGURAÇÕES DA CLÍNICA & EQUIPE — DARK THEME
+   CONFIGURAÇÕES DA CLÍNICA & EQUIPE — TOOTH PLUS DESIGN SYSTEM
    ========================================================================== */
 
 .settings-page {
@@ -7,22 +7,50 @@
     flex-direction: column;
     height: 100%;
     overflow-y: auto;
-    background: #0d121f;
-    color: #e2e8f0;
+    background: var(--bg-page, #0c1222);
+    color: var(--text-main, #f8fafc);
 }
 
-/* TOP TABS NAVIGATION BAR */
+/* TOP HEADER & TABS NAVIGATION */
+.settings-header-container {
+    background: var(--bg-surface, #1a2035);
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    padding: 20px 32px 0;
+    flex-shrink: 0;
+}
+
+.settings-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.settings-header-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.settings-header-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-main, #f8fafc);
+    letter-spacing: -0.01em;
+}
+
+.settings-header-subtitle {
+    font-size: 13px;
+    color: var(--text-muted, #94a3b8);
+}
+
 .settings-top-navbar {
     display: flex;
     align-items: center;
-    gap: 24px;
-    padding: 0 24px;
-    background: #0a0e18;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 8px;
     overflow-x: auto;
     white-space: nowrap;
     scrollbar-width: none;
-    flex-shrink: 0;
 }
 
 .settings-top-navbar::-webkit-scrollbar {
@@ -30,189 +58,180 @@
 }
 
 .settings-nav-tab {
-    padding: 14px 4px;
+    padding: 12px 18px;
     background: transparent;
     border: none;
     border-bottom: 3px solid transparent;
-    color: #94a3b8;
-    font-size: 11.5px;
+    color: var(--text-muted, #94a3b8);
+    font-size: 13px;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
     cursor: pointer;
     transition: all 0.15s ease;
     font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 4px 4px 0 0;
 }
 
 .settings-nav-tab:hover {
-    color: #f1f5f9;
+    color: var(--text-main, #f8fafc);
+    background: rgba(255, 255, 255, 0.03);
 }
 
 .settings-nav-tab.active {
-    color: #38bdf8;
-    border-bottom-color: #0284c7;
+    color: var(--primary, #00a0e4);
+    border-bottom-color: var(--primary, #00a0e4);
+    background: rgba(0, 160, 228, 0.05);
 }
 
 /* CONTENT CONTAINER */
 .settings-content-body {
-    padding: 24px 32px 80px;
-    max-width: 1200px;
+    padding: 28px 32px 60px;
+    max-width: 1280px;
     margin: 0 auto;
     width: 100%;
     box-sizing: border-box;
 }
 
-/* FORM SECTION */
-.settings-section {
-    margin-bottom: 28px;
+/* SECTION CARDS */
+.settings-card {
+    background: var(--bg-surface, #1a2035);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-lg, 12px);
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.25));
 }
 
-.settings-section-title {
-    font-size: 14.5px;
+.settings-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+}
+
+.settings-card-title {
+    font-size: 15px;
     font-weight: 700;
-    color: #f1f5f9;
-    margin: 0 0 14px 0;
+    color: var(--text-main, #f8fafc);
     display: flex;
     align-items: center;
     gap: 8px;
+    margin: 0;
+}
+
+.settings-card-desc {
+    font-size: 12.5px;
+    color: var(--text-muted, #94a3b8);
+    margin: 2px 0 0 0;
 }
 
 .settings-field-counter {
-    font-size: 10.5px;
-    color: #64748b;
+    font-size: 11px;
+    color: var(--text-light, #64748b);
     text-align: right;
-    margin-top: 3px;
+    margin-top: 4px;
 }
 
 /* LOGO UPLOAD BOX */
 .settings-logo-box {
-    width: 140px;
-    height: 120px;
-    border: 1px dashed rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
+    width: 160px;
+    height: 140px;
+    border: 2px dashed rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-md, 8px);
     background: rgba(255, 255, 255, 0.02);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 10px;
     cursor: pointer;
-    transition: all 0.15s ease;
-    color: #94a3b8;
-    font-size: 12px;
+    transition: all 0.2s ease;
+    color: var(--text-muted, #94a3b8);
+    font-size: 12.5px;
     font-weight: 600;
     text-align: center;
-    padding: 10px;
+    padding: 12px;
     box-sizing: border-box;
 }
 
 .settings-logo-box:hover {
-    border-color: #38bdf8;
-    background: rgba(56, 189, 248, 0.05);
-    color: #38bdf8;
+    border-color: var(--primary, #00a0e4);
+    background: var(--primary-subtle, rgba(0, 160, 228, 0.1));
+    color: var(--primary, #00a0e4);
 }
 
 /* CHECKBOX ROW */
-.settings-checkboxes-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px 24px;
+.settings-checkboxes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
     margin-top: 14px;
 }
 
 .settings-checkbox-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+    border-radius: var(--radius-sm, 6px);
     font-size: 13px;
-    color: #cbd5e1;
+    color: var(--text-main, #f8fafc);
     cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.settings-checkbox-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.12);
 }
 
 .settings-checkbox-item input[type="checkbox"] {
-    accent-color: #0284c7;
+    accent-color: var(--primary, #00a0e4);
     width: 16px;
     height: 16px;
     cursor: pointer;
 }
 
-/* BOTTOM FIXED FOOTER */
-.settings-bottom-actions {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: #090d16;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 12px 32px;
-    display: flex;
-    justify-content: flex-end;
-    z-index: 100;
-}
-
+/* SAVE BUTTON (CLEAN & INTEGRATED) */
 .settings-btn-save {
     background: #16a34a;
     color: #ffffff;
     border: none;
-    border-radius: 6px;
-    padding: 8px 28px;
-    font-size: 13px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    border-radius: var(--radius-md, 8px);
+    padding: 10px 24px;
+    font-size: 13.5px;
+    font-weight: 700;
     cursor: pointer;
-    transition: background 0.15s ease, transform 0.1s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.15s ease;
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
 }
 
 .settings-btn-save:hover {
     background: #15803d;
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.4);
+    transform: translateY(-1px);
 }
 
 .settings-btn-save:active {
-    transform: scale(0.98);
+    transform: translateY(0);
 }
 
-/* LIST / TABLE PAGES (PLANOS, ANAMNESE, EQUIPE) */
-.settings-list-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 18px;
-}
-
-.settings-list-title {
-    font-size: 18px;
-    font-weight: 800;
-    color: #f1f5f9;
-    margin: 0;
-}
-
-.settings-btn-new-green {
-    background: #16a34a;
-    color: #ffffff;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 18px;
-    font-size: 12.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: background 0.15s ease;
-}
-
-.settings-btn-new-green:hover {
-    background: #15803d;
-}
-
+/* LIST / TABLE PAGES */
 .settings-table-card {
-    background: #131929;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    background: var(--bg-surface, #1a2035);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-lg, 12px);
     overflow: hidden;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.25));
 }
 
 .settings-table {
@@ -222,17 +241,19 @@
 }
 
 .settings-table thead th {
-    background: #0f1523;
-    padding: 12px 18px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 14px 20px;
     text-align: left;
-    color: #94a3b8;
+    color: var(--text-muted, #94a3b8);
     font-weight: 700;
     font-size: 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
 }
 
 .settings-table tbody tr {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
     transition: background 0.15s ease;
 }
 
@@ -241,26 +262,38 @@
 }
 
 .settings-table tbody td {
-    padding: 14px 18px;
-    color: #cbd5e1;
+    padding: 16px 20px;
+    color: var(--text-main, #f8fafc);
 }
 
-.settings-help-footer {
+/* PERMISSION GROUP CARD */
+.permission-group-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.07));
+    border-radius: var(--radius-md, 8px);
+    padding: 16px;
+    margin-bottom: 14px;
+}
+
+.permission-group-header {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
+    margin-bottom: 12px;
+}
+
+.permission-group-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--primary, #00a0e4);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+}
+
+.permission-group-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 8px;
-    margin-top: 36px;
-    font-size: 13px;
-    color: #64748b;
-}
-
-.settings-help-footer a {
-    color: #38bdf8;
-    text-decoration: none;
-    font-weight: 600;
-}
-
-.settings-help-footer a:hover {
-    text-decoration: underline;
 }
