@@ -1,7 +1,11 @@
 use crate::api::users::UsersApi;
 use crate::components::modal::Modal;
 use crate::components::toast::{ToastState, ToastVariant};
-use crate::icons::{IconCheck, IconClose, IconEdit, IconPlus, IconSearch, IconTrash, IconUser, IconUsers};
+use crate::icons::{
+    IconActivity, IconCheck, IconClose, IconEdit, IconFileText, IconPlus, IconSearch,
+    IconShieldCheck, IconTooth, IconTrash, IconUser, IconUsers,
+};
+use crate::permissions::ALL_PERMISSION_GROUPS;
 use shared::users::{CreateUserRequest, UpdateUserRequest, UserResponse};
 use dioxus::prelude::*;
 
@@ -25,11 +29,18 @@ pub fn TabTeam(clinic_id: String) -> Element {
     let mut document_cpf = use_signal(String::new);
     let mut role = use_signal(|| "dentist".to_string());
     let mut professional_registry = use_signal(String::new);
-    let mut is_active_sig = use_signal(|| true);
     let mut permissions = use_signal(|| vec![
-        "agenda".to_string(),
-        "patients".to_string(),
-        "treatments".to_string(),
+        "agenda:read".to_string(),
+        "agenda:write".to_string(),
+        "patients:read".to_string(),
+        "patients:write".to_string(),
+        "anamnese:read".to_string(),
+        "anamnese:write".to_string(),
+        "treatment_plans:read".to_string(),
+        "treatment_plans:write".to_string(),
+        "documents:read".to_string(),
+        "documents:write".to_string(),
+        "documents:sign".to_string(),
     ]);
 
     let cid_eff = clinic_id.clone();
@@ -43,8 +54,6 @@ pub fn TabTeam(clinic_id: String) -> Element {
         });
     });
 
-
-
     let handle_open_new = move |_| {
         editing_user_id.set(None);
         full_name.set(String::new());
@@ -54,12 +63,18 @@ pub fn TabTeam(clinic_id: String) -> Element {
         document_cpf.set(String::new());
         role.set("dentist".to_string());
         professional_registry.set(String::new());
-        is_active_sig.set(true);
         permissions.set(vec![
-            "agenda".to_string(),
-            "patients".to_string(),
-            "treatments".to_string(),
-            "documents".to_string(),
+            "agenda:read".to_string(),
+            "agenda:write".to_string(),
+            "patients:read".to_string(),
+            "patients:write".to_string(),
+            "anamnese:read".to_string(),
+            "anamnese:write".to_string(),
+            "treatment_plans:read".to_string(),
+            "treatment_plans:write".to_string(),
+            "documents:read".to_string(),
+            "documents:write".to_string(),
+            "documents:sign".to_string(),
         ]);
         show_modal.set(true);
     };
@@ -162,7 +177,6 @@ pub fn TabTeam(clinic_id: String) -> Element {
             .collect()
     };
 
-    let perms_cur = permissions.read().clone();
     let current_role = role.read().clone();
 
     rsx! {
@@ -217,7 +231,7 @@ pub fn TabTeam(clinic_id: String) -> Element {
                         tr {
                             th { "Membro / Profissional" }
                             th { "Cargo / Perfil" }
-                            th { "Módulos com Acesso" }
+                            th { "Permissões Ativas" }
                             th { "Contato & Documento" }
                             th { style: "text-align: right; width: 100px;", "Ações" }
                         }
@@ -283,23 +297,10 @@ pub fn TabTeam(clinic_id: String) -> Element {
                                             }
                                         }
                                         td {
-                                            div { style: "display: flex; flex-wrap: wrap; gap: 4px; max-width: 340px;",
-                                                for p in u_perms.iter() {
-                                                    span {
-                                                        class: "badge",
-                                                        style: "background: rgba(255,255,255,0.04); color: var(--text-muted, #94a3b8); font-size: 11px; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border-color, rgba(255,255,255,0.06));",
-                                                        match p.as_str() {
-                                                            "agenda" => "📅 Agenda",
-                                                            "patients" => "👥 Prontuário",
-                                                            "finance" => "💵 Financeiro",
-                                                            "stock" => "📦 Estoque",
-                                                            "treatments" => "🦷 Procedimentos",
-                                                            "documents" => "📄 Assinatura & Docs",
-                                                            "settings" => "⚙️ Ajustes",
-                                                            _ => "Acesso",
-                                                        }
-                                                    }
-                                                }
+                                            span {
+                                                class: "badge badge-blue",
+                                                style: "font-size: 12px; font-weight: 700; padding: 4px 10px;",
+                                                "{u_perms.len()} permissões concedidas"
                                             }
                                         }
                                         td {
@@ -360,7 +361,7 @@ pub fn TabTeam(clinic_id: String) -> Element {
                 }
             }
 
-            // MODAL DE CADASTRO E CONTROLE DE PERMISSÕES
+            // MODAL DE CADASTRO E CONTROLE DE PERMISSÕES GRANULARES
             if show_modal() {
                 Modal {
                     title: if editing_user_id().is_some() { "Editar Membro da Equipe".to_string() } else { "Cadastrar Novo Membro da Equipe".to_string() },
@@ -385,7 +386,7 @@ pub fn TabTeam(clinic_id: String) -> Element {
                     },
 
                     div { style: "display: flex; flex-direction: column; gap: 18px; max-height: 72vh; overflow-y: auto; padding-right: 6px;",
-                        // SELETOR RÁPIDO DE PERFIL (PRESETS)
+                        // SELETOR RÁPIDO DE PERFIL (PRESETS) COM ÍCONES SVG
                         div { style: "background: rgba(255,255,255,0.02); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: var(--radius-md, 8px); padding: 14px;",
                             div { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;",
                                 span { style: "font-size: 12.5px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase; letter-spacing: 0.04em;", "Perfil Pré-definido" }
@@ -398,13 +399,15 @@ pub fn TabTeam(clinic_id: String) -> Element {
                                     onclick: move |_| {
                                         role.set("dentist".to_string());
                                         permissions.set(vec![
-                                            "agenda".to_string(),
-                                            "patients".to_string(),
-                                            "treatments".to_string(),
-                                            "documents".to_string(),
+                                            "agenda:read".to_string(), "agenda:write".to_string(),
+                                            "patients:read".to_string(), "patients:write".to_string(), "patients:evolutions".to_string(),
+                                            "anamnese:read".to_string(), "anamnese:write".to_string(),
+                                            "treatment_plans:read".to_string(), "treatment_plans:write".to_string(),
+                                            "documents:read".to_string(), "documents:write".to_string(), "documents:sign".to_string(),
                                         ]);
                                     },
-                                    "🦷 Dentista Clínico"
+                                    IconTooth { size: 14, color: "currentColor".to_string() }
+                                    span { "Dentista Clínico" }
                                 }
                                 button {
                                     r#type: "button",
@@ -412,29 +415,27 @@ pub fn TabTeam(clinic_id: String) -> Element {
                                     onclick: move |_| {
                                         role.set("receptionist".to_string());
                                         permissions.set(vec![
-                                            "agenda".to_string(),
-                                            "patients".to_string(),
-                                            "finance".to_string(),
+                                            "agenda:read".to_string(), "agenda:write".to_string(), "agenda:delete".to_string(),
+                                            "patients:read".to_string(), "patients:write".to_string(),
+                                            "finance:read_income".to_string(), "finance:write_income".to_string(),
                                         ]);
                                     },
-                                    "📋 Recepcionista / Secretária"
+                                    IconFileText { size: 14, color: "currentColor".to_string() }
+                                    span { "Recepcionista / Secretária" }
                                 }
                                 button {
                                     r#type: "button",
                                     class: if current_role == "admin" { "btn-filter-pill active" } else { "btn-filter-pill" },
                                     onclick: move |_| {
                                         role.set("admin".to_string());
-                                        permissions.set(vec![
-                                            "agenda".to_string(),
-                                            "patients".to_string(),
-                                            "finance".to_string(),
-                                            "stock".to_string(),
-                                            "treatments".to_string(),
-                                            "documents".to_string(),
-                                            "settings".to_string(),
-                                        ]);
+                                        let all_p: Vec<String> = ALL_PERMISSION_GROUPS
+                                            .iter()
+                                            .flat_map(|g| g.items.iter().map(|(k, _)| k.to_string()))
+                                            .collect();
+                                        permissions.set(all_p);
                                     },
-                                    "👑 Administrador / Gestor"
+                                    IconShieldCheck { size: 14, color: "currentColor".to_string() }
+                                    span { "Administrador Geral" }
                                 }
                                 button {
                                     r#type: "button",
@@ -442,12 +443,13 @@ pub fn TabTeam(clinic_id: String) -> Element {
                                     onclick: move |_| {
                                         role.set("assistant".to_string());
                                         permissions.set(vec![
-                                            "agenda".to_string(),
-                                            "patients".to_string(),
-                                            "stock".to_string(),
+                                            "agenda:read".to_string(),
+                                            "patients:read".to_string(),
+                                            "stock:read".to_string(), "stock:movement".to_string(),
                                         ]);
                                     },
-                                    "🩺 Auxiliar (ASB)"
+                                    IconActivity { size: 14, color: "currentColor".to_string() }
+                                    span { "Auxiliar (ASB)" }
                                 }
                             }
                         }
@@ -529,151 +531,78 @@ pub fn TabTeam(clinic_id: String) -> Element {
                             }
                         }
 
-                        // MATRIZ DETALHADA DE PERMISSÕES (PBAC)
-                        div { class: "settings-card", style: "margin: 0; padding: 18px;",
-                            div { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;",
-                                h4 { style: "font-size: 14px; font-weight: 800; color: var(--primary, #00a0e4); margin: 0;", "Permissões de Acesso por Módulo" }
-                                span { style: "font-size: 11.5px; color: var(--text-muted, #94a3b8);", "Controle granular por usuário" }
+                        // MATRIZ COMPLETA DE PERMISSÕES GRANULARES (PBAC)
+                        div { style: "display: flex; flex-direction: column; gap: 12px; margin-top: 6px;",
+                            div { style: "display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));",
+                                h4 { style: "font-size: 14px; font-weight: 800; color: var(--primary, #00a0e4); margin: 0;", "Matriz de Permissões Granulares" }
+                                span { style: "font-size: 12px; color: var(--text-muted, #94a3b8); font-weight: 600;", "{permissions.read().len()} itens ativos" }
                             }
 
-                            div { style: "display: grid; grid-template-columns: 1fr 1fr; gap: 12px;",
-                                label { class: "settings-checkbox-item",
-                                    input {
-                                        r#type: "checkbox",
-                                        checked: perms_cur.contains(&"agenda".to_string()),
-                                        onchange: move |_| {
-                                            let mut perms = permissions.read().clone();
-                                            if perms.contains(&"agenda".to_string()) {
-                                                perms.retain(|x| x != "agenda");
-                                            } else {
-                                                perms.push("agenda".to_string());
-                                            }
-                                            permissions.set(perms);
-                                        },
-                                    }
-                                    div {
-                                        strong { style: "display: block; font-size: 13px;", "📅 Agenda Clínica" }
-                                        span { style: "font-size: 11px; color: var(--text-muted, #94a3b8);", "Ver, agendar e gerenciar consultas" }
-                                    }
-                                }
+                            for grp in ALL_PERMISSION_GROUPS {
+                                {
+                                    let grp_perms: Vec<String> = grp.items.iter().map(|(k, _)| k.to_string()).collect();
+                                    let active_count = grp_perms.iter().filter(|p| permissions.read().contains(p)).count();
+                                    let all_active = active_count == grp_perms.len() && !grp_perms.is_empty();
+                                    let grp_perms_toggle = grp_perms.clone();
 
-                                label { class: "settings-checkbox-item",
-                                    input {
-                                        r#type: "checkbox",
-                                        checked: perms_cur.contains(&"patients".to_string()),
-                                        onchange: move |_| {
-                                            let mut perms = permissions.read().clone();
-                                            if perms.contains(&"patients".to_string()) {
-                                                perms.retain(|x| x != "patients");
-                                            } else {
-                                                perms.push("patients".to_string());
+                                    rsx! {
+                                        div { key: "{grp.key}", class: "permission-group-card",
+                                            div { class: "permission-group-header",
+                                                div {
+                                                    h5 { class: "permission-group-title", "{grp.label}" }
+                                                    p { style: "font-size: 11.5px; color: var(--text-muted, #94a3b8); margin: 2px 0 0 0;", "{grp.description}" }
+                                                }
+                                                button {
+                                                    r#type: "button",
+                                                    class: "btn-text-sm",
+                                                    style: "color: var(--primary, #00a0e4); font-size: 11.5px; font-weight: 700; background: none; border: none; cursor: pointer;",
+                                                    onclick: move |_| {
+                                                        let mut cur = permissions.read().clone();
+                                                        if all_active {
+                                                            cur.retain(|p| !grp_perms_toggle.contains(p));
+                                                        } else {
+                                                            for p in &grp_perms_toggle {
+                                                                if !cur.contains(p) {
+                                                                    cur.push(p.clone());
+                                                                }
+                                                            }
+                                                        }
+                                                        permissions.set(cur);
+                                                    },
+                                                    if all_active { "Desmarcar todas" } else { "Marcar todas" }
+                                                }
                                             }
-                                            permissions.set(perms);
-                                        },
-                                    }
-                                    div {
-                                        strong { style: "display: block; font-size: 13px;", "👥 Prontuário & Pacientes" }
-                                        span { style: "font-size: 11px; color: var(--text-muted, #94a3b8);", "Fichas, anamnese e evoluções clínicas" }
-                                    }
-                                }
 
-                                label { class: "settings-checkbox-item",
-                                    input {
-                                        r#type: "checkbox",
-                                        checked: perms_cur.contains(&"finance".to_string()),
-                                        onchange: move |_| {
-                                            let mut perms = permissions.read().clone();
-                                            if perms.contains(&"finance".to_string()) {
-                                                perms.retain(|x| x != "finance");
-                                            } else {
-                                                perms.push("finance".to_string());
-                                            }
-                                            permissions.set(perms);
-                                        },
-                                    }
-                                    div {
-                                        strong { style: "display: block; font-size: 13px;", "💵 Módulo Financeiro" }
-                                        span { style: "font-size: 11px; color: var(--text-muted, #94a3b8);", "Lançamentos, recebimentos e relatórios" }
-                                    }
-                                }
+                                            div { class: "permission-group-options",
+                                                for &(perm_key, perm_label) in grp.items {
+                                                    {
+                                                        let p_key = perm_key.to_string();
+                                                        let is_chk = permissions.read().contains(&p_key);
 
-                                label { class: "settings-checkbox-item",
-                                    input {
-                                        r#type: "checkbox",
-                                        checked: perms_cur.contains(&"stock".to_string()),
-                                        onchange: move |_| {
-                                            let mut perms = permissions.read().clone();
-                                            if perms.contains(&"stock".to_string()) {
-                                                perms.retain(|x| x != "stock");
-                                            } else {
-                                                perms.push("stock".to_string());
+                                                        rsx! {
+                                                            label { key: "{perm_key}", class: "settings-checkbox-item", style: "padding: 8px 10px; font-size: 12.5px;",
+                                                                input {
+                                                                    r#type: "checkbox",
+                                                                    checked: is_chk,
+                                                                    onchange: move |e: FormEvent| {
+                                                                        let mut cur = permissions.read().clone();
+                                                                        if e.checked() {
+                                                                            if !cur.contains(&p_key) {
+                                                                                cur.push(p_key.clone());
+                                                                            }
+                                                                        } else {
+                                                                            cur.retain(|x| x != &p_key);
+                                                                        }
+                                                                        permissions.set(cur);
+                                                                    },
+                                                                }
+                                                                span { "{perm_label}" }
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
-                                            permissions.set(perms);
-                                        },
-                                    }
-                                    div {
-                                        strong { style: "display: block; font-size: 13px;", "📦 Gestão de Estoque" }
-                                        span { style: "font-size: 11px; color: var(--text-muted, #94a3b8);", "Controle de insumos e movimentações" }
-                                    }
-                                }
-
-                                label { class: "settings-checkbox-item",
-                                    input {
-                                        r#type: "checkbox",
-                                        checked: perms_cur.contains(&"treatments".to_string()),
-                                        onchange: move |_| {
-                                            let mut perms = permissions.read().clone();
-                                            if perms.contains(&"treatments".to_string()) {
-                                                perms.retain(|x| x != "treatments");
-                                            } else {
-                                                perms.push("treatments".to_string());
-                                            }
-                                            permissions.set(perms);
-                                        },
-                                    }
-                                    div {
-                                        strong { style: "display: block; font-size: 13px;", "🦷 Procedimentos & Catálogo" }
-                                        span { style: "font-size: 11px; color: var(--text-muted, #94a3b8);", "Tabelas de procedimentos e orçamentos" }
-                                    }
-                                }
-
-                                label { class: "settings-checkbox-item",
-                                    input {
-                                        r#type: "checkbox",
-                                        checked: perms_cur.contains(&"documents".to_string()),
-                                        onchange: move |_| {
-                                            let mut perms = permissions.read().clone();
-                                            if perms.contains(&"documents".to_string()) {
-                                                perms.retain(|x| x != "documents");
-                                            } else {
-                                                perms.push("documents".to_string());
-                                            }
-                                            permissions.set(perms);
-                                        },
-                                    }
-                                    div {
-                                        strong { style: "display: block; font-size: 13px;", "📄 Assinatura Digital & Docs" }
-                                        span { style: "font-size: 11px; color: var(--text-muted, #94a3b8);", "Contratos, atestados e termos legais" }
-                                    }
-                                }
-
-                                label { class: "settings-checkbox-item",
-                                    input {
-                                        r#type: "checkbox",
-                                        checked: perms_cur.contains(&"settings".to_string()),
-                                        onchange: move |_| {
-                                            let mut perms = permissions.read().clone();
-                                            if perms.contains(&"settings".to_string()) {
-                                                perms.retain(|x| x != "settings");
-                                            } else {
-                                                perms.push("settings".to_string());
-                                            }
-                                            permissions.set(perms);
-                                        },
-                                    }
-                                    div {
-                                        strong { style: "display: block; font-size: 13px;", "⚙️ Configurações da Clínica" }
-                                        span { style: "font-size: 11px; color: var(--text-muted, #94a3b8);", "Gerenciamento institucional e equipe" }
+                                        }
                                     }
                                 }
                             }

@@ -5,7 +5,7 @@
 
 use shared::documents::{ContractTemplate, PatientDocument};
 
-use shared::anamnesis::AnamnesisResponseItem;
+use shared::anamnesis::{AnamnesisQuestion, AnamnesisResponseItem, AnamnesisTemplate};
 use shared::appointments::{
     AgendaResourceOption, AgendaResourcesResponse, AppointmentResponse,
     AppointmentStatus, AppointmentType, AssignedUserDto, ConsumedItemDto,
@@ -38,6 +38,7 @@ pub struct MockDatabase {
     pub treatment_templates: Vec<TreatmentTemplate>,
     pub treatment_plans: Vec<PatientTreatmentPlan>,
     pub contract_templates: Vec<ContractTemplate>,
+    pub anamnesis_templates: Vec<AnamnesisTemplate>,
     pub patient_documents: Vec<PatientDocument>,
     pub users: Vec<UserResponse>,
     pub clinics: Vec<ClinicResponse>,
@@ -48,6 +49,108 @@ pub struct MockDatabase {
 pub static DB: LazyLock<Mutex<MockDatabase>> = LazyLock::new(|| Mutex::new(init_mock_database()));
 
 fn init_mock_database() -> MockDatabase {
+    let default_anamnesis_templates = vec![
+        AnamnesisTemplate {
+            id: "anam:adult_general".to_string(),
+            clinic_id: "clinic:luria_dent".to_string(),
+            template_type: "adult".to_string(),
+            title: "Anamnese Geral Adulto".to_string(),
+            questions: vec![
+                AnamnesisQuestion {
+                    id: "q_1".to_string(),
+                    category: "Alergias".to_string(),
+                    question_text: "Possui alguma alergia a medicamentos (penicilina, anestésicos, dipirona)?".to_string(),
+                    question_type: "yes_no".to_string(),
+                    options: None,
+                    required: true,
+                },
+                AnamnesisQuestion {
+                    id: "q_2".to_string(),
+                    category: "Histórico Médico".to_string(),
+                    question_text: "Faz uso contínuo de algum medicamento?".to_string(),
+                    question_type: "yes_no".to_string(),
+                    options: None,
+                    required: true,
+                },
+                AnamnesisQuestion {
+                    id: "q_3".to_string(),
+                    category: "Condições Sistêmicas".to_string(),
+                    question_text: "Possui histórico de hipertensão, diabetes, cardiopatias ou problemas renais?".to_string(),
+                    question_type: "yes_no".to_string(),
+                    options: None,
+                    required: true,
+                },
+                AnamnesisQuestion {
+                    id: "q_4".to_string(),
+                    category: "Histórico Médico".to_string(),
+                    question_text: "Está grávida ou em período de amamentação?".to_string(),
+                    question_type: "yes_no".to_string(),
+                    options: None,
+                    required: false,
+                },
+                AnamnesisQuestion {
+                    id: "q_5".to_string(),
+                    category: "Saúde Bucal".to_string(),
+                    question_text: "Apresenta sangramento gengival frequente ou sensibilidade nos dentes?".to_string(),
+                    question_type: "yes_no".to_string(),
+                    options: None,
+                    required: true,
+                },
+                AnamnesisQuestion {
+                    id: "q_6".to_string(),
+                    category: "Hábitos".to_string(),
+                    question_text: "Possui hábito de fumar (tabagismo) ou consome bebidas alcoólicas frequentemente?".to_string(),
+                    question_type: "yes_no".to_string(),
+                    options: None,
+                    required: false,
+                },
+                AnamnesisQuestion {
+                    id: "q_7".to_string(),
+                    category: "Histórico Cirúrgico".to_string(),
+                    question_text: "Já teve episódios de hemorragia ou cicatrização lenta após extrações?".to_string(),
+                    question_type: "yes_no".to_string(),
+                    options: None,
+                    required: true,
+                },
+                AnamnesisQuestion {
+                    id: "q_8".to_string(),
+                    category: "Queixa Principal".to_string(),
+                    question_text: "Qual é o motivo principal e expectativas para a consulta de hoje?".to_string(),
+                    question_type: "text".to_string(),
+                    options: None,
+                    required: true,
+                },
+            ],
+            created_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        },
+        AnamnesisTemplate {
+            id: "anam:minor_pediatric".to_string(),
+            clinic_id: "clinic:luria_dent".to_string(),
+            template_type: "minor".to_string(),
+            title: "Anamnese Infantil (Odontopediatria)".to_string(),
+            questions: vec![
+                AnamnesisQuestion {
+                    id: "qp_1".to_string(),
+                    category: "Histórico Médico".to_string(),
+                    question_text: "A criança toma algum medicamento regularmente?".to_string(),
+                    question_type: "yes_no".to_string(),
+                    options: None,
+                    required: true,
+                },
+                AnamnesisQuestion {
+                    id: "qp_2".to_string(),
+                    category: "Alergias".to_string(),
+                    question_text: "Possui histórico de alergias alimentares ou respiratórias (asma, rinite)?".to_string(),
+                    question_type: "yes_no".to_string(),
+                    options: None,
+                    required: true,
+                },
+            ],
+            created_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        }
+    ];
     let patients = vec![
         Patient {
             id: "patient:maria_barbosa".to_string(),
@@ -1189,6 +1292,7 @@ fn init_mock_database() -> MockDatabase {
         stock_movements: vec![],
         treatment_templates,
         treatment_plans: vec![],
+        anamnesis_templates: default_anamnesis_templates,
         contract_templates: vec![
             ContractTemplate {
                 id: "tpl:contrato_servicos".to_string(),

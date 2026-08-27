@@ -7,6 +7,7 @@ mod api;
 mod components;
 mod icons;
 mod pages;
+pub mod permissions;
 mod router;
 
 use api::{load_active_clinic, load_session};

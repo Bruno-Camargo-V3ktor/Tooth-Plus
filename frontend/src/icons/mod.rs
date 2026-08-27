@@ -81,3 +81,12 @@ pub mod camera;
 pub use camera::IconCamera;
 pub mod tag;
 pub use tag::IconTag;
+
+pub mod building;
+pub use building::IconBuilding;
+pub mod shield_check;
+pub use shield_check::IconShieldCheck;
+pub mod check_circle;
+pub use check_circle::IconCheckCircle;
+pub mod chair;
+pub use chair::IconChair;

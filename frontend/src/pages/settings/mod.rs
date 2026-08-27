@@ -3,6 +3,7 @@ pub mod components;
 use crate::api::mock_db::DB;
 use crate::api::ActiveClinicState;
 use crate::components::toast::{ToastState, ToastVariant};
+use crate::icons::{IconBuilding, IconChair, IconFileText, IconTag, IconUsers};
 use shared::clinics::ClinicAddress;
 use dioxus::prelude::*;
 
@@ -151,42 +152,38 @@ pub fn SettingsView() -> Element {
         document::Link { rel: "stylesheet", href: STYLE }
 
         div { class: "settings-page",
-            // TOP HEADER & NAVIGATION TABS
-            div { class: "settings-header-container",
-                div { class: "settings-header-top",
-                    div { class: "settings-header-title-group",
-                        div {
-                            h1 { class: "settings-header-title", "Configurações da Clínica" }
-                            p { class: "settings-header-subtitle", "Gerencie dados institucionais, membros da equipe, planos e consultórios." }
-                        }
-                    }
-                }
-
+            // TOP NAVBAR LIMPA E DIRETA COM ÍCONES SVG
+            div { class: "settings-header-container", style: "padding: 0 32px;",
                 div { class: "settings-top-navbar",
                     button {
                         class: if active_tab_val == SettingsTab::Clinic { "settings-nav-tab active" } else { "settings-nav-tab" },
                         onclick: move |_| current_tab.set(SettingsTab::Clinic),
-                        "🏢 Clínica"
+                        IconBuilding { size: 16, color: "currentColor".to_string() }
+                        span { "Clínica" }
                     }
                     button {
                         class: if active_tab_val == SettingsTab::Team { "settings-nav-tab active" } else { "settings-nav-tab" },
                         onclick: move |_| current_tab.set(SettingsTab::Team),
-                        "👥 Equipe & Acessos"
+                        IconUsers { size: 16, color: "currentColor".to_string() }
+                        span { "Equipe & Acessos" }
                     }
                     button {
                         class: if active_tab_val == SettingsTab::Plans { "settings-nav-tab active" } else { "settings-nav-tab" },
                         onclick: move |_| current_tab.set(SettingsTab::Plans),
-                        "📋 Planos & Convênios"
+                        IconTag { size: 16, color: "currentColor".to_string() }
+                        span { "Planos & Convênios" }
                     }
                     button {
                         class: if active_tab_val == SettingsTab::Anamnesis { "settings-nav-tab active" } else { "settings-nav-tab" },
                         onclick: move |_| current_tab.set(SettingsTab::Anamnesis),
-                        "📝 Modelos de Anamnese"
+                        IconFileText { size: 16, color: "currentColor".to_string() }
+                        span { "Modelos de Anamnese" }
                     }
                     button {
                         class: if active_tab_val == SettingsTab::Chairs { "settings-nav-tab active" } else { "settings-nav-tab" },
                         onclick: move |_| current_tab.set(SettingsTab::Chairs),
-                        "🪑 Cadeiras & Consultórios"
+                        IconChair { size: 16, color: "currentColor".to_string() }
+                        span { "Cadeiras & Consultórios" }
                     }
                 }
             }
@@ -220,7 +217,7 @@ pub fn SettingsView() -> Element {
                         TabPlans {}
                     },
                     SettingsTab::Anamnesis => rsx! {
-                        TabAnamnesis {}
+                        TabAnamnesis { clinic_id: clinic_id.clone() }
                     },
                     SettingsTab::Chairs => rsx! {
                         TabChairs {}

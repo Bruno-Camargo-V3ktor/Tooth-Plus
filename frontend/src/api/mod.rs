@@ -110,3 +110,5 @@ pub fn load_active_clinic() -> Option<ActiveClinicState> {
 }
 
 pub mod documents;
+
+pub mod anamnesis;
