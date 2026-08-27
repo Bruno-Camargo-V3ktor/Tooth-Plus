@@ -36,6 +36,13 @@ pub fn AgendaGrid(
     ];
 
     let is_day_view = view_mode == "day";
+    let first_day = days.first().cloned().unwrap_or(DayColumn {
+        name: "Qua".to_string(),
+        num: "26".to_string(),
+        date_str: "2026-08-26".to_string(),
+        is_today: true,
+    });
+    let d_month = first_day.date_str.split('-').nth(1).map(|m| format!("/{}", m)).unwrap_or_else(|| "/08".to_string());
 
     rsx! {
         div { class: "agenda-grid-scroll",
@@ -48,21 +55,26 @@ pub fn AgendaGrid(
                     for (i, doc) in doctors.iter().enumerate() {
                         {
                             let doc_c = doc.clone();
-                            let d_date = days.first().map(|d| d.date_str.clone()).unwrap_or_default();
+                            let d_date = first_day.date_str.clone();
+                            let d_name = first_day.name.clone();
+                            let d_num = first_day.num.clone();
+                            let d_month_c = d_month.clone();
+
                             rsx! {
                                 div { key: "{doc.id}", class: "agenda-header-day", style: "display: flex; align-items: center; justify-content: space-between; padding: 8px 12px;",
                                     div { style: "display: flex; align-items: center; gap: 8px;",
                                         if i == 0 {
                                             button {
                                                 r#type: "button",
+                                                title: "Novo Agendamento neste dia",
                                                 style: "width: 22px; height: 22px; border-radius: 50%; background: #16a34a; color: #ffffff; font-size: 13px; font-weight: 700; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;",
                                                 "+"
                                             }
                                         }
                                         div {
-                                            span { style: "font-size: 11px; color: #38bdf8; font-weight: 700;", "Qua. " }
-                                            strong { style: "font-size: 14px; color: #38bdf8;", "26" }
-                                            span { style: "font-size: 11px; color: #64748b;", " /08" }
+                                            span { style: "font-size: 11px; color: #38bdf8; font-weight: 700;", "{d_name}. " }
+                                            strong { style: "font-size: 14px; color: #38bdf8;", "{d_num}" }
+                                            span { style: "font-size: 11px; color: #64748b;", "{d_month_c}" }
                                         }
                                     }
 
@@ -91,15 +103,15 @@ pub fn AgendaGrid(
                     }
                 }
 
-                // Linha de "Dia inteiro" (compacta)
-                div { class: "agenda-time-label", style: "height: 20px; font-size: 9.5px; color: #64748b; line-height: 20px;", "Dia inteiro" }
+                // Linha de "Dia inteiro" (compacta: 18px)
+                div { class: "agenda-time-label", style: "height: 18px; min-height: 18px; max-height: 18px; font-size: 9px; color: #64748b; line-height: 18px; padding: 0 4px;", "Dia inteiro" }
                 if is_day_view {
                     for doc in doctors.iter() {
-                        div { key: "allday-{doc.id}", class: "agenda-cell", style: "height: 20px; background: rgba(255,255,255,0.01);" }
+                        div { key: "allday-{doc.id}", class: "agenda-cell", style: "height: 18px; min-height: 18px; max-height: 18px; padding: 0; background: rgba(255,255,255,0.01);" }
                     }
                 } else {
                     for d in days.iter() {
-                        div { key: "allday-{d.date_str}", class: "agenda-cell", style: "height: 20px; background: rgba(255,255,255,0.01);" }
+                        div { key: "allday-{d.date_str}", class: "agenda-cell", style: "height: 18px; min-height: 18px; max-height: 18px; padding: 0; background: rgba(255,255,255,0.01);" }
                     }
                 }
 
@@ -111,11 +123,12 @@ pub fn AgendaGrid(
                         for doc in doctors.iter() {
                             {
                                 let doc_id = doc.id.clone();
-                                let d_date = days.first().map(|d| d.date_str.clone()).unwrap_or_default();
+                                let d_date = first_day.date_str.clone();
 
                                 let slot_apps: Vec<AppointmentResponse> = appointments
                                     .iter()
                                     .filter(|a| {
+                                        if !a.scheduled_for.starts_with(&d_date) { return false; }
                                         let (ah, _) = super::event_card::extract_hhmm(&a.scheduled_for);
                                         ah == h && (a.assigned_users.iter().any(|u| u.user_id == doc_id) || doc_id == "usr:dr_lucas")
                                     })

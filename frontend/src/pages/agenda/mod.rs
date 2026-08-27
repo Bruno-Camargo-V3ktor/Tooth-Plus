@@ -1,8 +1,10 @@
 pub mod components;
 
+use chrono::{Datelike, Duration, NaiveDate};
 use crate::api::appointments::AppointmentsApi;
 use crate::api::mock_db::DB;
 use crate::api::patients::PatientsApi;
+use crate::api::treatments::TreatmentsApi;
 use crate::api::ActiveClinicState;
 use crate::components::toast::{ToastState, ToastVariant};
 use shared::appointments::{
@@ -10,6 +12,7 @@ use shared::appointments::{
     CreateAppointmentRequest, UpdateAppointmentRequest, UpdateAppointmentStatusRequest,
 };
 use shared::patients::Patient;
+use shared::treatments::TreatmentTemplate;
 use dioxus::prelude::*;
 
 pub use components::*;
@@ -21,6 +24,50 @@ pub struct PopoverPos {
     pub x: f64,
     pub y: f64,
     pub appointment_id: String,
+}
+
+fn calculate_week_days(base_date: NaiveDate) -> Vec<DayColumn> {
+    let weekday = base_date.weekday();
+    let days_from_monday = weekday.num_days_from_monday();
+    let monday = base_date - Duration::days(days_from_monday as i64);
+    let pt_weekdays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+    (0..7)
+        .map(|i| {
+            let d = monday + Duration::days(i);
+            let name = pt_weekdays[i as usize].to_string();
+            let num = d.format("%d").to_string();
+            let date_str = d.format("%Y-%m-%d").to_string();
+            let is_today = d == base_date;
+            DayColumn {
+                name,
+                num,
+                date_str,
+                is_today,
+            }
+        })
+        .collect()
+}
+
+fn calculate_single_day(date: NaiveDate) -> Vec<DayColumn> {
+    let pt_weekdays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+    let name = pt_weekdays[date.weekday().num_days_from_monday() as usize].to_string();
+    let num = date.format("%d").to_string();
+    let date_str = date.format("%Y-%m-%d").to_string();
+    vec![DayColumn {
+        name,
+        num,
+        date_str,
+        is_today: true,
+    }]
+}
+
+fn format_month_label(date: NaiveDate) -> String {
+    let months = [
+        "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+    ];
+    let m_idx = (date.month() - 1) as usize;
+    format!("{} {}", months[m_idx], date.year())
 }
 
 #[component]
@@ -40,12 +87,13 @@ pub fn AgendaView() -> Element {
 
     let mut appointments = use_signal(Vec::<AppointmentResponse>::new);
     let mut patients_list = use_signal(Vec::<Patient>::new);
+    let mut treatments_list = use_signal(Vec::<TreatmentTemplate>::new);
     let mut selected_patient_id = use_signal(String::new);
     let mut selected_label = use_signal(String::new);
     let mut reload_trigger = use_signal(|| 0);
 
     let mut view_mode = use_signal(|| "week".to_string());
-    let mut current_date_str = use_signal(|| "2026-08-26".to_string());
+    let mut current_nav_date = use_signal(|| NaiveDate::from_ymd_opt(2026, 8, 26).unwrap());
     let mut dentist_filter = use_signal(|| "all".to_string());
     let mut show_new_modal = use_signal(|| false);
     let mut editing_appointment_id = use_signal(|| None::<String>);
@@ -80,18 +128,22 @@ pub fn AgendaView() -> Element {
             if let Ok(pats) = PatientsApi::list_patients(None).await {
                 patients_list.set(pats.items);
             }
+            if let Ok(tpls) = TreatmentsApi::list_templates(&cid).await {
+                treatments_list.set(tpls);
+            }
         });
     });
 
-    let days = vec![
-        DayColumn { name: "Seg".to_string(), num: "24".to_string(), date_str: "2026-08-24".to_string(), is_today: false },
-        DayColumn { name: "Ter".to_string(), num: "25".to_string(), date_str: "2026-08-25".to_string(), is_today: false },
-        DayColumn { name: "Qua".to_string(), num: "26".to_string(), date_str: "2026-08-26".to_string(), is_today: true },
-        DayColumn { name: "Qui".to_string(), num: "27".to_string(), date_str: "2026-08-27".to_string(), is_today: false },
-        DayColumn { name: "Sex".to_string(), num: "28".to_string(), date_str: "2026-08-28".to_string(), is_today: false },
-        DayColumn { name: "Sáb".to_string(), num: "29".to_string(), date_str: "2026-08-29".to_string(), is_today: false },
-        DayColumn { name: "Dom".to_string(), num: "30".to_string(), date_str: "2026-08-30".to_string(), is_today: false },
-    ];
+    let current_dt = *current_nav_date.read();
+    let current_view = view_mode.read().clone();
+    let current_date_str = current_dt.format("%Y-%m-%d").to_string();
+    let month_label = format_month_label(current_dt);
+
+    let days = if current_view == "day" {
+        calculate_single_day(current_dt)
+    } else {
+        calculate_week_days(current_dt)
+    };
 
     let handle_submit = {
         let cid = clinic_id.clone();
@@ -203,15 +255,26 @@ pub fn AgendaView() -> Element {
             AgendaToolbar {
                 dentist_filter,
                 view_mode,
-                current_date_str,
-                month_label: "Ago 2026".to_string(),
-                on_prev: move |_| current_date_str.set("2026-08-19".to_string()),
-                on_today: move |_| current_date_str.set("2026-08-26".to_string()),
-                on_next: move |_| current_date_str.set("2026-09-02".to_string()),
+                current_date_str: Signal::new(current_date_str),
+                month_label,
+                on_prev: move |_| {
+                    let cur = *current_nav_date.read();
+                    let step = if *view_mode.read() == "day" { 1 } else { 7 };
+                    current_nav_date.set(cur - Duration::days(step));
+                },
+                on_today: move |_| {
+                    current_nav_date.set(NaiveDate::from_ymd_opt(2026, 8, 26).unwrap());
+                },
+                on_next: move |_| {
+                    let cur = *current_nav_date.read();
+                    let step = if *view_mode.read() == "day" { 1 } else { 7 };
+                    current_nav_date.set(cur + Duration::days(step));
+                },
                 on_open_new: move |_| {
                     editing_appointment_id.set(None);
                     selected_patient_id.set(String::new());
                     patient_query.set(String::new());
+                    procedure_name.set(String::new());
                     show_new_modal.set(true);
                 },
             }
@@ -229,6 +292,7 @@ pub fn AgendaView() -> Element {
                     appt_time.set(format!("{:02}:00", hour_val));
                     selected_patient_id.set(String::new());
                     patient_query.set(String::new());
+                    procedure_name.set(String::new());
                     show_new_modal.set(true);
                 },
                 on_event_click: move |(x, y, app_id)| {
@@ -314,6 +378,7 @@ pub fn AgendaView() -> Element {
             ModalAppointment {
                 is_open: show_new_modal(),
                 patients: patients_list(),
+                treatments: treatments_list(),
                 labels: clinic_labels(),
                 selected_patient_id,
                 selected_label,
