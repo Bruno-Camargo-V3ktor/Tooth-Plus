@@ -76,3 +76,8 @@ pub use whatsapp::IconWhatsapp;
 
 pub mod arrow_up_down;
 pub use arrow_up_down::IconArrowUpDown;
+
+pub mod camera;
+pub use camera::IconCamera;
+pub mod tag;
+pub use tag::IconTag;

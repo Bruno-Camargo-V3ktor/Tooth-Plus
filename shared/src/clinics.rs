@@ -26,10 +26,45 @@ pub struct ClinicResponse {
     /// Lista de rótulos/tags de agendamento da clínica
     #[serde(default = "default_appointment_labels")]
     pub appointment_labels: Vec<String>,
+    #[serde(default)]
+    pub communication_name: Option<String>,
+    #[serde(default)]
+    pub manager_name: Option<String>,
+    #[serde(default = "default_timezone")]
+    pub timezone: String,
+    #[serde(default = "default_fiscal_issuer")]
+    pub fiscal_issuer: String,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub phone: Option<String>,
+    #[serde(default)]
+    pub cellphone: Option<String>,
+    #[serde(default = "default_true")]
+    pub print_letterhead: bool,
+    #[serde(default = "default_letterhead_options")]
+    pub letterhead_options: Vec<String>,
 }
 
 fn default_opening_hour() -> u32 { 8 }
 fn default_closing_hour() -> u32 { 19 }
+fn default_true() -> bool { true }
+fn default_timezone() -> String { "Brasilia/São Paulo".to_string() }
+fn default_fiscal_issuer() -> String { "Clínica".to_string() }
+
+fn default_letterhead_options() -> Vec<String> {
+    vec![
+        "Orçamento".to_string(),
+        "Evoluções".to_string(),
+        "Anamnese".to_string(),
+        "Receituários".to_string(),
+        "Atestados".to_string(),
+        "Documentos personalizados".to_string(),
+        "Controle de prótese".to_string(),
+        "Recibos".to_string(),
+    ]
+}
+
 fn default_appointment_labels() -> Vec<String> {
     vec![
         "Primeira Consulta".to_string(),
@@ -72,4 +107,13 @@ pub struct UpdateClinicRequest {
     pub opening_hour: Option<u32>,
     pub closing_hour: Option<u32>,
     pub appointment_labels: Option<Vec<String>>,
+    pub communication_name: Option<String>,
+    pub manager_name: Option<String>,
+    pub timezone: Option<String>,
+    pub fiscal_issuer: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub cellphone: Option<String>,
+    pub print_letterhead: Option<bool>,
+    pub letterhead_options: Option<Vec<String>>,
 }
