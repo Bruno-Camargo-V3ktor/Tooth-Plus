@@ -1,4 +1,4 @@
-use crate::icons::{IconChevronLeft, IconChevronRight, IconPlus};
+use crate::icons::{IconChevronLeft, IconChevronRight};
 use dioxus::prelude::*;
 
 #[component]
@@ -18,7 +18,7 @@ pub fn AgendaToolbar(
         div { class: "agenda-toolbar",
             div { class: "agenda-toolbar-left",
                 select {
-                    class: "agenda-dentist-select",
+                    class: "agenda-select-prof",
                     value: "{dentist_filter}",
                     onchange: move |e| dentist_filter.set(e.value()),
                     option { value: "all", "Todos os profissionais" }
@@ -29,56 +29,60 @@ pub fn AgendaToolbar(
 
                 button {
                     r#type: "button",
-                    class: "btn-today",
+                    class: "agenda-today-btn",
                     onclick: move |_| on_today.call(()),
                     "HOJE"
                 }
 
-                div { class: "agenda-nav-arrows",
+                div { class: "agenda-nav-group",
                     button {
                         r#type: "button",
-                        class: "btn-arrow",
+                        class: "agenda-nav-btn",
                         title: "Anterior",
                         onclick: move |_| on_prev.call(()),
                         IconChevronLeft { size: 16, color: "#94a3b8".to_string() }
                     }
                     button {
                         r#type: "button",
-                        class: "btn-arrow",
+                        class: "agenda-nav-btn",
                         title: "Próximo",
                         onclick: move |_| on_next.call(()),
                         IconChevronRight { size: 16, color: "#94a3b8".to_string() }
                     }
                 }
 
-                span { class: "agenda-current-month-label", "{month_label}" }
+                span { class: "agenda-current-period", "{month_label}" }
             }
 
             div { class: "agenda-toolbar-right",
-                div { style: "display: flex; align-items: center; gap: 8px;",
-                    input {
-                        r#type: "date",
-                        class: "agenda-date-picker-input",
-                        value: "{current_date_str}",
-                        onchange: move |e| current_date_str.set(e.value()),
-                    }
+                input {
+                    r#type: "date",
+                    class: "agenda-date-input",
+                    value: "{current_date_str}",
+                    onchange: move |e| current_date_str.set(e.value()),
+                }
 
-                    select {
-                        class: "agenda-dentist-select",
-                        style: "min-width: 100px; height: 34px;",
-                        value: "{view_mode}",
-                        onchange: move |e| view_mode.set(e.value()),
-                        option { value: "week", "Semana" }
-                        option { value: "day", "Dia" }
+                div { class: "agenda-view-toggle",
+                    button {
+                        r#type: "button",
+                        class: if current_view == "week" { "agenda-view-btn active" } else { "agenda-view-btn" },
+                        onclick: move |_| view_mode.set("week".to_string()),
+                        "Semana"
+                    }
+                    button {
+                        r#type: "button",
+                        class: if current_view == "day" { "agenda-view-btn active" } else { "agenda-view-btn" },
+                        onclick: move |_| view_mode.set("day".to_string()),
+                        "Dia"
                     }
                 }
 
                 button {
                     r#type: "button",
-                    class: "btn-new-appointment",
+                    class: "agenda-new-btn",
                     title: "Novo Agendamento",
                     onclick: move |_| on_open_new.call(()),
-                    IconPlus { size: 16, color: "#ffffff".to_string() }
+                    "+"
                 }
             }
         }

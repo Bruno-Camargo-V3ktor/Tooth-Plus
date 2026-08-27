@@ -1,4 +1,4 @@
-use crate::icons::{IconClose, IconCopy, IconEdit, IconExternalLink, IconInfo, IconUser};
+use crate::icons::{IconClose, IconEdit, IconExternalLink, IconInfo, IconUser};
 use crate::router::Route;
 use shared::appointments::{AppointmentResponse, AppointmentStatus};
 use dioxus::prelude::*;
@@ -11,7 +11,6 @@ pub fn AppointmentPopover(
     on_close: EventHandler<()>,
     on_change_status: EventHandler<String>,
     on_cancel: EventHandler<()>,
-    on_copy: EventHandler<AppointmentResponse>,
     on_edit: EventHandler<AppointmentResponse>,
 ) -> Element {
     let mut selected_patient_id = consume_context::<Signal<Option<String>>>();
@@ -44,8 +43,6 @@ pub fn AppointmentPopover(
 
     let p_phone = "+55 11 98765-4321";
     let p_id_opt = app.patient_id.clone();
-
-    let app_copy = app.clone();
     let app_edit = app.clone();
 
     rsx! {
@@ -62,14 +59,6 @@ pub fn AppointmentPopover(
                     style: format!("background: {}; padding: 14px 16px; color: #ffffff; position: relative;", header_bg),
 
                     div { style: "display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 8px;",
-                        button {
-                            r#type: "button",
-                            class: "action-btn-icon",
-                            style: "color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.2); width: 26px; height: 26px;",
-                            title: "Copiar dados do agendamento",
-                            onclick: move |_| on_copy.call(app_copy.clone()),
-                            IconCopy { size: 13, color: "#ffffff".to_string() }
-                        }
                         button {
                             r#type: "button",
                             class: "action-btn-icon",

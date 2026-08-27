@@ -7,7 +7,7 @@ use crate::api::ActiveClinicState;
 use crate::components::toast::{ToastState, ToastVariant};
 use shared::appointments::{
     AppointmentResponse, AppointmentStatus, AppointmentType, AssignedUserDto,
-    CreateAppointmentRequest, UpdateAppointmentStatusRequest,
+    CreateAppointmentRequest, UpdateAppointmentRequest, UpdateAppointmentStatusRequest,
 };
 use shared::patients::Patient;
 use dioxus::prelude::*;
@@ -48,6 +48,7 @@ pub fn AgendaView() -> Element {
     let mut current_date_str = use_signal(|| "2026-08-26".to_string());
     let mut dentist_filter = use_signal(|| "all".to_string());
     let mut show_new_modal = use_signal(|| false);
+    let mut editing_appointment_id = use_signal(|| None::<String>);
     let mut popover = use_signal(|| None::<PopoverPos>);
 
     let mut is_compromisso = use_signal(|| false);
@@ -64,7 +65,6 @@ pub fn AgendaView() -> Element {
         let _ = reload_trigger.read();
         let cid = cid_eff.clone();
 
-        // Carrega horários dinâmicos da clínica
         if let Ok(db) = DB.lock() {
             if let Some(c) = db.clinics.iter().find(|c| c.id == cid) {
                 open_hour.set(c.opening_hour);
@@ -98,6 +98,7 @@ pub fn AgendaView() -> Element {
         let mut toast_c = toast.clone();
         let mut modal_sig = show_new_modal;
         let mut reload_sig = reload_trigger;
+        let mut edit_id_sig = editing_appointment_id;
 
         let p_query = patient_query.clone();
         let p_id_sig = selected_patient_id.clone();
@@ -122,37 +123,67 @@ pub fn AgendaView() -> Element {
             }];
 
             let pid_val = if p_id_sig.read().is_empty() { None } else { Some(p_id_sig.read().clone()) };
-
-            let req = CreateAppointmentRequest {
-                clinic_id: cid.clone(),
-                patient_id: pid_val,
-                patient_name: Some(pat.clone()),
-                treatment_id: None,
-                treatment_plan_id: None,
-                title: pat,
-                scheduled_for,
-                duration_minutes: *dur.read() as i32,
-                appointment_type: AppointmentType::Consultation,
-                financial_amount_cents: None,
-                financial_type: None,
-                notes: Some(obs.read().clone()),
-                assigned_users,
-                consumed_items: vec![],
-                assigned_equipment: None,
-            };
+            let edit_opt = edit_id_sig.read().clone();
 
             let mut toast_resp = toast_c.clone();
             let mut reload_c = reload_sig;
             let mut modal_c = modal_sig;
+            let mut edit_id_reset = edit_id_sig;
+            let cid_call = cid.clone();
 
             spawn(async move {
-                match AppointmentsApi::create_appointment(req).await {
-                    Ok(_) => {
-                        toast_resp.show("Agendamento criado com sucesso!", ToastVariant::Success);
-                        modal_c.set(false);
-                        reload_c.set(reload_c() + 1);
+                if let Some(ref edit_id) = edit_opt {
+                    let req = UpdateAppointmentRequest {
+                        title: Some(pat.clone()),
+                        scheduled_for: Some(scheduled_for),
+                        duration_minutes: Some(*dur.read() as i32),
+                        appointment_type: Some(AppointmentType::Consultation),
+                        patient_id: pid_val,
+                        patient_name: Some(pat),
+                        treatment_id: None,
+                        treatment_plan_id: None,
+                        financial_amount_cents: None,
+                        financial_type: None,
+                        notes: Some(obs.read().clone()),
+                        assigned_users: Some(assigned_users),
+                        consumed_items: None,
+                        assigned_equipment: None,
+                    };
+                    match AppointmentsApi::update_appointment(edit_id, req).await {
+                        Ok(_) => {
+                            toast_resp.show("Agendamento atualizado com sucesso!", ToastVariant::Success);
+                            modal_c.set(false);
+                            edit_id_reset.set(None);
+                            reload_c.set(reload_c() + 1);
+                        }
+                        Err(err) => toast_resp.show(err, ToastVariant::Error),
                     }
-                    Err(err) => toast_resp.show(err, ToastVariant::Error),
+                } else {
+                    let req = CreateAppointmentRequest {
+                        clinic_id: cid_call,
+                        patient_id: pid_val,
+                        patient_name: Some(pat.clone()),
+                        treatment_id: None,
+                        treatment_plan_id: None,
+                        title: pat,
+                        scheduled_for,
+                        duration_minutes: *dur.read() as i32,
+                        appointment_type: AppointmentType::Consultation,
+                        financial_amount_cents: None,
+                        financial_type: None,
+                        notes: Some(obs.read().clone()),
+                        assigned_users,
+                        consumed_items: vec![],
+                        assigned_equipment: None,
+                    };
+                    match AppointmentsApi::create_appointment(req).await {
+                        Ok(_) => {
+                            toast_resp.show("Agendamento criado com sucesso!", ToastVariant::Success);
+                            modal_c.set(false);
+                            reload_c.set(reload_c() + 1);
+                        }
+                        Err(err) => toast_resp.show(err, ToastVariant::Error),
+                    }
                 }
             });
         }
@@ -164,7 +195,6 @@ pub fn AgendaView() -> Element {
 
     let mut reload_status = reload_trigger;
     let mut reload_cancel = reload_trigger;
-    let mut toast_cp = toast.clone();
 
     rsx! {
         document::Link { rel: "stylesheet", href: STYLE }
@@ -179,6 +209,7 @@ pub fn AgendaView() -> Element {
                 on_today: move |_| current_date_str.set("2026-08-26".to_string()),
                 on_next: move |_| current_date_str.set("2026-09-02".to_string()),
                 on_open_new: move |_| {
+                    editing_appointment_id.set(None);
                     selected_patient_id.set(String::new());
                     patient_query.set(String::new());
                     show_new_modal.set(true);
@@ -193,6 +224,7 @@ pub fn AgendaView() -> Element {
                 appointments: appointments(),
                 dentist_filter: dentist_filter(),
                 on_slot_click: move |(date_val, hour_val)| {
+                    editing_appointment_id.set(None);
                     appt_date.set(date_val);
                     appt_time.set(format!("{:02}:00", hour_val));
                     selected_patient_id.set(String::new());
@@ -215,11 +247,9 @@ pub fn AgendaView() -> Element {
                             x: pos.x,
                             y: pos.y,
                             on_close: move |_| popover.set(None),
-                            on_copy: move |_app_to_cp: AppointmentResponse| {
-                                toast_cp.show("Dados do agendamento copiados com sucesso!", ToastVariant::Success);
-                            },
                             on_edit: move |app_to_edit: AppointmentResponse| {
                                 popover.set(None);
+                                editing_appointment_id.set(Some(app_to_edit.id.clone()));
                                 selected_patient_id.set(app_to_edit.patient_id.clone().unwrap_or_default());
                                 patient_query.set(app_to_edit.patient_name.clone().unwrap_or(app_to_edit.title.clone()));
                                 let (h, m) = components::event_card::extract_hhmm(&app_to_edit.scheduled_for);
@@ -287,7 +317,10 @@ pub fn AgendaView() -> Element {
                 labels: clinic_labels(),
                 selected_patient_id,
                 selected_label,
-                on_close: move |_| show_new_modal.set(false),
+                on_close: move |_| {
+                    editing_appointment_id.set(None);
+                    show_new_modal.set(false);
+                },
                 on_submit: handle_submit,
                 is_compromisso,
                 patient_query,
