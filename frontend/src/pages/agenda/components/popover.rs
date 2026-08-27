@@ -11,6 +11,8 @@ pub fn AppointmentPopover(
     on_close: EventHandler<()>,
     on_change_status: EventHandler<String>,
     on_cancel: EventHandler<()>,
+    on_copy: EventHandler<AppointmentResponse>,
+    on_edit: EventHandler<AppointmentResponse>,
 ) -> Element {
     let mut selected_patient_id = consume_context::<Signal<Option<String>>>();
     let nav = navigator();
@@ -43,6 +45,9 @@ pub fn AppointmentPopover(
     let p_phone = "+55 11 98765-4321";
     let p_id_opt = app.patient_id.clone();
 
+    let app_copy = app.clone();
+    let app_edit = app.clone();
+
     rsx! {
         div {
             class: "event-popover-overlay",
@@ -61,7 +66,8 @@ pub fn AppointmentPopover(
                             r#type: "button",
                             class: "action-btn-icon",
                             style: "color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.2); width: 26px; height: 26px;",
-                            title: "Copiar dados",
+                            title: "Copiar dados do agendamento",
+                            onclick: move |_| on_copy.call(app_copy.clone()),
                             IconCopy { size: 13, color: "#ffffff".to_string() }
                         }
                         button {
@@ -69,6 +75,7 @@ pub fn AppointmentPopover(
                             class: "action-btn-icon",
                             style: "color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.2); width: 26px; height: 26px;",
                             title: "Editar agendamento",
+                            onclick: move |_| on_edit.call(app_edit.clone()),
                             IconEdit { size: 13, color: "#ffffff".to_string() }
                         }
                         button {

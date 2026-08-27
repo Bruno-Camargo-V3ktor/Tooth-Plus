@@ -1,4 +1,4 @@
-use crate::icons::{IconDollar, IconFileText, IconTrash};
+use crate::icons::{IconCheck, IconDollar, IconTrash};
 use crate::router::Route;
 use shared::finance::{Transaction, TransactionDirection, TransactionStatus};
 use dioxus::prelude::*;
@@ -11,6 +11,7 @@ pub fn FinanceTable(
     on_delete_transaction: EventHandler<String>,
 ) -> Element {
     let mut selected_patient_id = consume_context::<Signal<Option<String>>>();
+    let mut open_context_menu_id = use_signal(|| None::<String>);
     let nav = navigator();
 
     if transactions.is_empty() {
@@ -34,47 +35,40 @@ pub fn FinanceTable(
                         th { "Descrição" }
                         th { "Paciente / Fornecedor" }
                         th { "Categoria" }
-                        th { "Forma Pagto" }
-                        th { "Valor" }
-                        th { "Status" }
-                        th { style: "text-align: right; padding-right: 20px;", "Ações" }
+                        th { style: "text-align: right; padding-right: 24px;", "Valor" }
+                        th { style: "text-align: center; width: 48px;", "" }
                     }
                 }
                 tbody {
                     for tx in transactions {
                         {
                             let tx_id = tx.id.clone();
+                            let tx_id_ctx = tx.id.clone();
                             let tx_id_det = tx.id.clone();
                             let tx_id_del = tx.id.clone();
                             let is_income = tx.direction == TransactionDirection::Income;
-                            let is_pending = tx.status == TransactionStatus::Pending || tx.status == TransactionStatus::Partial;
+                            let is_paid = tx.status == TransactionStatus::Paid;
                             let p_name = tx.patient_name.clone().unwrap_or_else(|| "Clínica / Geral".to_string());
                             let p_id_opt = tx.patient_id.clone();
 
                             let val_formatted = format!("R$ {:.2}", (tx.amount_cents as f64) / 100.0);
                             let cat_name = tx.category.clone();
-                            let method_name = tx.payment_method.clone().unwrap_or_else(|| "PIX".to_string()).to_uppercase();
+                            let is_ctx_open = open_context_menu_id.read().as_ref() == Some(&tx.id);
 
-                            let badge_cls = match tx.status {
-                                TransactionStatus::Paid => "badge badge-green",
-                                TransactionStatus::Partial => "badge badge-yellow",
-                                TransactionStatus::Pending => "badge badge-yellow",
-                                TransactionStatus::Canceled | TransactionStatus::Refunded => "badge badge-gray",
-                            };
-
-                            let badge_label = match tx.status {
-                                TransactionStatus::Paid => "Pago",
-                                TransactionStatus::Partial => "Parcial",
-                                TransactionStatus::Pending => "Aberto",
-                                TransactionStatus::Canceled => "Cancelado",
-                                TransactionStatus::Refunded => "Estornado",
-                            };
+                            let action_label = if is_income { "RECEBER" } else { "PAGAR" };
+                            let val_color = if is_income { "#22c55e" } else { "#ef4444" };
+                            let val_prefix = if is_income { "+ " } else { "- " };
 
                             rsx! {
                                 tr { key: "{tx.id}", class: "patient-table-row",
-                                    td { "{tx.due_date}" }
+                                    td { style: "color: #94a3b8; font-size: 13px;", "{tx.due_date}" }
                                     td {
-                                        strong { style: "color: #f1f5f9;", "{tx.description}" }
+                                        div {
+                                            strong { style: "color: #f1f5f9; font-size: 13.5px; display: block;", "{tx.description}" }
+                                            if let Some(ref pm) = tx.payment_method {
+                                                span { style: "font-size: 11.5px; color: #64748b;", "{pm.to_uppercase()}" }
+                                            }
+                                        }
                                     }
                                     td {
                                         span {
@@ -88,41 +82,64 @@ pub fn FinanceTable(
                                             "{p_name}"
                                         }
                                     }
-                                    td { "{cat_name}" }
-                                    td { "{method_name}" }
                                     td {
-                                        span {
-                                            style: if is_income { "font-weight: 700; color: #22c55e;" } else { "font-weight: 700; color: #ef4444;" },
-                                            if is_income { "+ " } else { "- " }
-                                            "{val_formatted}"
-                                        }
+                                        span { style: "font-size: 12.5px; color: #94a3b8;", "{cat_name}" }
                                     }
-                                    td {
-                                        span { class: "{badge_cls}", "{badge_label}" }
-                                    }
-                                    td {
-                                        div { style: "display: flex; align-items: center; justify-content: flex-end; gap: 6px;",
-                                            if is_pending {
+                                    td { style: "text-align: right;",
+                                        div { style: "display: inline-flex; align-items: center; justify-content: flex-end; gap: 12px;",
+                                            span { style: "font-weight: 800; font-size: 14.5px; color: {val_color};",
+                                                "{val_prefix}{val_formatted}"
+                                            }
+
+                                            if is_paid {
+                                                div { style: "width: 22px; height: 22px; border-radius: 50%; background: rgba(34,197,94,0.15); display: flex; align-items: center; justify-content: center; color: #22c55e;",
+                                                    IconCheck { size: 14, color: "#22c55e".to_string() }
+                                                }
+                                            } else {
                                                 button {
                                                     r#type: "button",
-                                                    class: "btn-pay-action-blue",
+                                                    class: "btn-secondary",
+                                                    style: "color: #38bdf8; border-color: rgba(56,189,248,0.4); font-size: 11.5px; font-weight: 800; padding: 4px 10px;",
                                                     onclick: move |_| on_open_payment_modal.call(tx_id.clone()),
-                                                    if is_income { "RECEBER" } else { "PAGAR" }
+                                                    "{action_label}"
                                                 }
                                             }
-                                            button {
-                                                r#type: "button",
-                                                class: "action-btn-icon",
-                                                title: "Ver Detalhes / Comprovantes",
-                                                onclick: move |_| on_open_details_modal.call(tx_id_det.clone()),
-                                                IconFileText { size: 15, color: "#94a3b8".to_string() }
-                                            }
-                                            button {
-                                                r#type: "button",
-                                                class: "action-btn-icon",
-                                                title: "Excluir Lançamento",
-                                                onclick: move |_| on_delete_transaction.call(tx_id_del.clone()),
-                                                IconTrash { size: 15, color: "#ef4444".to_string() }
+                                        }
+                                    }
+                                    td { style: "text-align: center; position: relative;",
+                                        button {
+                                            r#type: "button",
+                                            class: "action-btn-icon",
+                                            onclick: move |_| {
+                                                if is_ctx_open {
+                                                    open_context_menu_id.set(None);
+                                                } else {
+                                                    open_context_menu_id.set(Some(tx_id_ctx.clone()));
+                                                }
+                                            },
+                                            "⋮"
+                                        }
+
+                                        if is_ctx_open {
+                                            div { class: "finance-add-menu", style: "right: 0; top: 28px; z-index: 50;",
+                                                button {
+                                                    r#type: "button",
+                                                    class: "finance-menu-item",
+                                                    onclick: move |_| {
+                                                        open_context_menu_id.set(None);
+                                                        on_open_details_modal.call(tx_id_det.clone());
+                                                    },
+                                                    "Editar lançamento"
+                                                }
+                                                button {
+                                                    r#type: "button",
+                                                    class: "finance-menu-item menu-item-expense",
+                                                    onclick: move |_| {
+                                                        open_context_menu_id.set(None);
+                                                        on_delete_transaction.call(tx_id_del.clone());
+                                                    },
+                                                    "Excluir"
+                                                }
                                             }
                                         }
                                     }

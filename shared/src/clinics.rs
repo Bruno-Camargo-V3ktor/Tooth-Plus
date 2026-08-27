@@ -23,10 +23,25 @@ pub struct ClinicResponse {
     /// Hora de fechamento da clínica (0-23), padrão 19
     #[serde(default = "default_closing_hour")]
     pub closing_hour: u32,
+    /// Lista de rótulos/tags de agendamento da clínica
+    #[serde(default = "default_appointment_labels")]
+    pub appointment_labels: Vec<String>,
 }
 
 fn default_opening_hour() -> u32 { 8 }
 fn default_closing_hour() -> u32 { 19 }
+fn default_appointment_labels() -> Vec<String> {
+    vec![
+        "Primeira Consulta".to_string(),
+        "Retorno".to_string(),
+        "Avaliação".to_string(),
+        "Urgência".to_string(),
+        "Cirurgia".to_string(),
+        "Manutenção".to_string(),
+        "Ortodontia".to_string(),
+        "Prótese".to_string(),
+    ]
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ClinicAddress {
@@ -54,4 +69,7 @@ pub struct UpdateClinicRequest {
     pub smtp_pass: Option<String>,
     pub smtp_from: Option<String>,
     pub smtp_tls: Option<bool>,
+    pub opening_hour: Option<u32>,
+    pub closing_hour: Option<u32>,
+    pub appointment_labels: Option<Vec<String>>,
 }

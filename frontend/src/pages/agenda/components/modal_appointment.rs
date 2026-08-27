@@ -6,7 +6,9 @@ use dioxus::prelude::*;
 pub fn ModalAppointment(
     is_open: bool,
     patients: Vec<Patient>,
+    labels: Vec<String>,
     selected_patient_id: Signal<String>,
+    selected_label: Signal<String>,
     on_close: EventHandler<()>,
     on_submit: EventHandler<()>,
     is_compromisso: Signal<bool>,
@@ -24,9 +26,21 @@ pub fn ModalAppointment(
 
     let is_comp = *is_compromisso.read();
     let current_notes = notes.read().clone();
-    let patients_options = patients.clone();
     let current_patient = patient_query.read().clone();
     let current_pid = selected_patient_id.read().clone();
+    let patients_options = patients.clone();
+    let labels_options = if labels.is_empty() {
+        vec![
+            "Primeira Consulta".to_string(),
+            "Retorno".to_string(),
+            "Avaliação".to_string(),
+            "Urgência".to_string(),
+            "Cirurgia".to_string(),
+            "Manutenção".to_string(),
+        ]
+    } else {
+        labels.clone()
+    };
 
     rsx! {
         Modal {
@@ -39,12 +53,12 @@ pub fn ModalAppointment(
                         select {
                             class: "form-select",
                             style: "max-width: 180px; height: 36px; font-size: 12.5px; background: rgba(255,255,255,0.05);",
+                            value: "{selected_label}",
+                            onchange: move |e| selected_label.set(e.value()),
                             option { value: "", "Sem rótulo" }
-                            option { value: "urgencia", "Urgência" }
-                            option { value: "primeira", "Primeira Consulta" }
-                            option { value: "retorno", "Retorno" }
-                            option { value: "cirurgia", "Cirurgia" }
-                            option { value: "avaliacao", "Avaliação" }
+                            for lbl in labels_options {
+                                option { value: "{lbl}", "{lbl}" }
+                            }
                         }
                     } else {
                         div {}

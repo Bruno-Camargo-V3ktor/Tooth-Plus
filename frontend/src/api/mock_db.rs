@@ -1092,6 +1092,16 @@ fn init_mock_database() -> MockDatabase {
             smtp_tls: None,
             opening_hour: 8,
             closing_hour: 19,
+                appointment_labels: vec![
+                    "Primeira Consulta".to_string(),
+                    "Retorno".to_string(),
+                    "Avaliação".to_string(),
+                    "Urgência".to_string(),
+                    "Cirurgia".to_string(),
+                    "Manutenção".to_string(),
+                    "Ortodontia".to_string(),
+                    "Prótese".to_string(),
+                ],
         },
         ClinicResponse {
             id: "clinic:luria_dent".to_string(),
@@ -1119,6 +1129,16 @@ fn init_mock_database() -> MockDatabase {
             smtp_tls: None,
             opening_hour: 9,
             closing_hour: 18,
+            appointment_labels: vec![
+                "Primeira Consulta".to_string(),
+                "Retorno".to_string(),
+                "Avaliação".to_string(),
+                "Urgência".to_string(),
+                "Cirurgia".to_string(),
+                "Manutenção".to_string(),
+                "Ortodontia".to_string(),
+                "Prótese".to_string(),
+            ],
         }
     ];
 
