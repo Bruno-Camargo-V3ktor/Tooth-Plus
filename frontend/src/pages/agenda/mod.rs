@@ -1,30 +1,31 @@
 pub mod components;
 
 use crate::api::appointments::AppointmentsApi;
-use crate::api::mock_db::DB;
+use crate::api::patients::PatientsApi;
 use crate::api::ActiveClinicState;
 use crate::components::toast::{ToastState, ToastVariant};
 use shared::appointments::{
     AppointmentResponse, AppointmentStatus, AppointmentType, AssignedUserDto,
     CreateAppointmentRequest, UpdateAppointmentStatusRequest,
 };
+use shared::patients::Patient;
 use dioxus::prelude::*;
 
-pub use components::{AgendaGrid, AgendaToolbar, AppointmentPopover, DayColumn, ModalAppointment};
+pub use components::*;
 
 const STYLE: Asset = asset!("/src/pages/agenda/style.css");
 
 #[derive(Clone, PartialEq)]
-struct PopoverPos {
-    x: f64,
-    y: f64,
-    appointment_id: String,
+pub struct PopoverPos {
+    pub x: f64,
+    pub y: f64,
+    pub appointment_id: String,
 }
 
 #[component]
 pub fn AgendaView() -> Element {
     let active_clinic = consume_context::<Signal<Option<ActiveClinicState>>>();
-    let mut toast = consume_context::<ToastState>();
+    let toast = consume_context::<ToastState>();
 
     let clinic_id = active_clinic
         .read()
@@ -32,49 +33,41 @@ pub fn AgendaView() -> Element {
         .map(|c| c.clinic_id.clone())
         .unwrap_or_default();
 
-    let (open_hour, close_hour) = if let Ok(db) = DB.lock() {
-        if let Some(clinic) = db.clinics.iter().find(|c| c.id == clinic_id) {
-            (clinic.opening_hour, clinic.closing_hour)
-        } else {
-            (8, 19)
-        }
-    } else {
-        (8, 19)
-    };
+    let open_hour = 8u32;
+    let close_hour = 19u32;
 
     let mut appointments = use_signal(Vec::<AppointmentResponse>::new);
+    let mut patients_list = use_signal(Vec::<Patient>::new);
+    let mut selected_patient_id = use_signal(String::new);
+    let mut reload_trigger = use_signal(|| 0);
+
     let mut view_mode = use_signal(|| "week".to_string());
     let mut current_date_str = use_signal(|| "2026-08-26".to_string());
     let mut dentist_filter = use_signal(|| "all".to_string());
-    let mut popover = use_signal(|| None::<PopoverPos>);
     let mut show_new_modal = use_signal(|| false);
+    let mut popover = use_signal(|| None::<PopoverPos>);
 
-    // Form fields
     let mut is_compromisso = use_signal(|| false);
     let mut patient_query = use_signal(String::new);
     let mut appt_date = use_signal(|| "2026-08-26".to_string());
-    let mut appt_time = use_signal(|| "08:00".to_string());
+    let mut appt_time = use_signal(|| "09:00".to_string());
     let mut duration = use_signal(|| 30u32);
     let mut procedure_name = use_signal(String::new);
     let mut notes = use_signal(String::new);
-    let mut assigned_user_id = use_signal(|| "usr-1".to_string());
+    let mut assigned_user_id = use_signal(|| "usr:dr_lucas".to_string());
 
-    let load_appointments = {
-        let cid = clinic_id.clone();
-        let mut apps_sig = appointments;
-        move || {
-            let cid = cid.clone();
-            spawn(async move {
-                if let Ok(list) = AppointmentsApi::list_appointments(&cid, None).await {
-                    apps_sig.set(list);
-                }
-            });
-        }
-    };
-
-    use_effect({
-        let mut loader = load_appointments.clone();
-        move || loader()
+    let cid_eff = clinic_id.clone();
+    use_effect(move || {
+        let _ = reload_trigger.read();
+        let cid = cid_eff.clone();
+        spawn(async move {
+            if let Ok(resps) = AppointmentsApi::list_appointments(&cid, None).await {
+                appointments.set(resps);
+            }
+            if let Ok(pats) = PatientsApi::list_patients(None).await {
+                patients_list.set(pats.items);
+            }
+        });
     });
 
     let days = vec![
@@ -90,9 +83,11 @@ pub fn AgendaView() -> Element {
     let handle_submit = {
         let cid = clinic_id.clone();
         let mut toast_c = toast.clone();
-        let mut loader = load_appointments.clone();
         let mut modal_sig = show_new_modal;
+        let mut reload_sig = reload_trigger;
+
         let p_query = patient_query.clone();
+        let p_id_sig = selected_patient_id.clone();
         let a_date = appt_date.clone();
         let a_time = appt_time.clone();
         let dur = duration.clone();
@@ -102,20 +97,22 @@ pub fn AgendaView() -> Element {
         move |_| {
             let pat = p_query.read().trim().to_string();
             if pat.is_empty() {
-                toast_c.show("Informe o nome do paciente ou título.", ToastVariant::Error);
+                toast_c.show("Informe o nome do paciente ou selecione um cadastrado.", ToastVariant::Error);
                 return;
             }
             let scheduled_for = format!("{}T{}:00Z", a_date.read(), a_time.read());
             let assigned_users = vec![AssignedUserDto {
                 user_id: usr_id.read().clone(),
-                user_name: Some("Dr. Roberto Alencar".to_string()),
+                user_name: Some("Dr. Lucas Mendes".to_string()),
                 role_in_appointment: "Dentista Principal".to_string(),
                 split_percentage: 100,
             }];
 
+            let pid_val = if p_id_sig.read().is_empty() { None } else { Some(p_id_sig.read().clone()) };
+
             let req = CreateAppointmentRequest {
                 clinic_id: cid.clone(),
-                patient_id: None,
+                patient_id: pid_val,
                 patient_name: Some(pat.clone()),
                 treatment_id: None,
                 treatment_plan_id: None,
@@ -132,7 +129,7 @@ pub fn AgendaView() -> Element {
             };
 
             let mut toast_resp = toast_c.clone();
-            let mut loader_c = loader.clone();
+            let mut reload_c = reload_sig;
             let mut modal_c = modal_sig;
 
             spawn(async move {
@@ -140,7 +137,7 @@ pub fn AgendaView() -> Element {
                     Ok(_) => {
                         toast_resp.show("Agendamento criado com sucesso!", ToastVariant::Success);
                         modal_c.set(false);
-                        loader_c();
+                        reload_c.set(reload_c() + 1);
                     }
                     Err(err) => toast_resp.show(err, ToastVariant::Error),
                 }
@@ -151,6 +148,9 @@ pub fn AgendaView() -> Element {
     let selected_app = popover.read().as_ref().and_then(|p| {
         appointments.read().iter().find(|a| a.id == p.appointment_id).cloned()
     });
+
+    let mut reload_status = reload_trigger;
+    let mut reload_cancel = reload_trigger;
 
     rsx! {
         document::Link { rel: "stylesheet", href: STYLE }
@@ -164,7 +164,11 @@ pub fn AgendaView() -> Element {
                 on_prev: move |_| current_date_str.set("2026-08-19".to_string()),
                 on_today: move |_| current_date_str.set("2026-08-26".to_string()),
                 on_next: move |_| current_date_str.set("2026-09-02".to_string()),
-                on_open_new: move |_| show_new_modal.set(true),
+                on_open_new: move |_| {
+                    selected_patient_id.set(String::new());
+                    patient_query.set(String::new());
+                    show_new_modal.set(true);
+                },
             }
 
             AgendaGrid {
@@ -177,6 +181,8 @@ pub fn AgendaView() -> Element {
                 on_slot_click: move |(date_val, hour_val)| {
                     appt_date.set(date_val);
                     appt_time.set(format!("{:02}:00", hour_val));
+                    selected_patient_id.set(String::new());
+                    patient_query.set(String::new());
                     show_new_modal.set(true);
                 },
                 on_event_click: move |(x, y, app_id)| {
@@ -188,8 +194,6 @@ pub fn AgendaView() -> Element {
                 {
                     let app_id_for_status = app.id.clone();
                     let app_id_for_cancel = app.id.clone();
-                    let mut loader_for_status = load_appointments.clone();
-                    let mut loader_for_cancel = load_appointments.clone();
 
                     rsx! {
                         AppointmentPopover {
@@ -199,13 +203,17 @@ pub fn AgendaView() -> Element {
                             on_close: move |_| popover.set(None),
                             on_change_status: move |new_st_str: String| {
                                 let aid = app_id_for_status.clone();
-                                let mut ldr = loader_for_status.clone();
                                 let mut pop_sig = popover;
+                                let mut reload_c = reload_status;
 
                                 let new_status = match new_st_str.as_str() {
                                     "confirmed" => AppointmentStatus::Confirmed,
-                                    "completed" => AppointmentStatus::Completed,
+                                    "waiting" => AppointmentStatus::Waiting,
                                     "in_progress" => AppointmentStatus::InProgress,
+                                    "completed" => AppointmentStatus::Completed,
+                                    "no_show" => AppointmentStatus::NoShow,
+                                    "canceled_pat" => AppointmentStatus::CanceledByPatient,
+                                    "canceled_doc" => AppointmentStatus::CanceledByDoctor,
                                     "canceled" => AppointmentStatus::Canceled,
                                     _ => AppointmentStatus::Pending,
                                 };
@@ -218,13 +226,13 @@ pub fn AgendaView() -> Element {
                                     };
                                     let _ = AppointmentsApi::update_appointment_status(&aid, req).await;
                                     pop_sig.set(None);
-                                    ldr();
+                                    reload_c.set(reload_c() + 1);
                                 });
                             },
                             on_cancel: move |_| {
                                 let aid = app_id_for_cancel.clone();
-                                let mut ldr = loader_for_cancel.clone();
                                 let mut pop_sig = popover;
+                                let mut reload_c = reload_cancel;
                                 spawn(async move {
                                     let req = UpdateAppointmentStatusRequest {
                                         status: AppointmentStatus::Canceled,
@@ -233,7 +241,7 @@ pub fn AgendaView() -> Element {
                                     };
                                     let _ = AppointmentsApi::update_appointment_status(&aid, req).await;
                                     pop_sig.set(None);
-                                    ldr();
+                                    reload_c.set(reload_c() + 1);
                                 });
                             },
                         }
@@ -243,6 +251,8 @@ pub fn AgendaView() -> Element {
 
             ModalAppointment {
                 is_open: show_new_modal(),
+                patients: patients_list(),
+                selected_patient_id,
                 on_close: move |_| show_new_modal.set(false),
                 on_submit: handle_submit,
                 is_compromisso,

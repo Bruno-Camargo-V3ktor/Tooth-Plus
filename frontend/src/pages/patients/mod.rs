@@ -34,7 +34,7 @@ pub fn PatientsView() -> Element {
 
     let mut search_query = use_signal(String::new);
     let mut show_modal = use_signal(|| false);
-    let mut selected_patient_id = use_signal(|| None::<String>);
+    let mut selected_patient_id = consume_context::<Signal<Option<String>>>();
     let mut active_tab = use_signal(|| PatientDetailTab::About);
     let mut reload_trigger = use_signal(|| 0);
 

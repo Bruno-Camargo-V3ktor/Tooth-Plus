@@ -91,15 +91,15 @@ pub fn AgendaGrid(
                     }
                 }
 
-                // Linha de "Dia inteiro"
-                div { class: "agenda-time-label", style: "font-size: 10.5px; color: #64748b;", "Dia inteiro" }
+                // Linha de "Dia inteiro" (compacta)
+                div { class: "agenda-time-label", style: "height: 20px; font-size: 9.5px; color: #64748b; line-height: 20px;", "Dia inteiro" }
                 if is_day_view {
                     for doc in doctors.iter() {
-                        div { key: "allday-{doc.id}", class: "agenda-cell", style: "height: 28px; background: rgba(255,255,255,0.01);" }
+                        div { key: "allday-{doc.id}", class: "agenda-cell", style: "height: 20px; background: rgba(255,255,255,0.01);" }
                     }
                 } else {
                     for d in days.iter() {
-                        div { key: "allday-{d.date_str}", class: "agenda-cell", style: "height: 28px; background: rgba(255,255,255,0.01);" }
+                        div { key: "allday-{d.date_str}", class: "agenda-cell", style: "height: 20px; background: rgba(255,255,255,0.01);" }
                     }
                 }
 
@@ -112,7 +112,6 @@ pub fn AgendaGrid(
                             {
                                 let doc_id = doc.id.clone();
                                 let d_date = days.first().map(|d| d.date_str.clone()).unwrap_or_default();
-                                let is_blocked = h < 8 || h == 12 || h > 18;
 
                                 let slot_apps: Vec<AppointmentResponse> = appointments
                                     .iter()
@@ -126,7 +125,7 @@ pub fn AgendaGrid(
                                 rsx! {
                                     div {
                                         key: "slot-{doc.id}-{h}",
-                                        class: if is_blocked { "agenda-cell agenda-cell-blocked" } else { "agenda-cell" },
+                                        class: "agenda-cell",
                                         onclick: move |_| on_slot_click.call((d_date.clone(), h)),
 
                                         for (idx, app) in slot_apps.into_iter().enumerate() {
@@ -146,7 +145,6 @@ pub fn AgendaGrid(
                             {
                                 let d_date = d.date_str.clone();
                                 let is_today = d.is_today;
-                                let is_blocked = h < 8 || h == 12 || h > 18;
 
                                 let slot_apps: Vec<AppointmentResponse> = appointments
                                     .iter()
@@ -165,7 +163,7 @@ pub fn AgendaGrid(
                                 rsx! {
                                     div {
                                         key: "{d_date}-{h}",
-                                        class: if is_blocked { "agenda-cell agenda-cell-blocked" } else if is_today { "agenda-cell today-col" } else { "agenda-cell" },
+                                        class: if is_today { "agenda-cell today-col" } else { "agenda-cell" },
                                         onclick: move |_| on_slot_click.call((d_date.clone(), h)),
 
                                         for (idx, app) in slot_apps.into_iter().enumerate() {

@@ -32,7 +32,10 @@ fn App() -> Element {
     // 2. Inicializa o estado da clínica ativa
     let _active_clinic = use_context_provider(|| Signal::new(load_active_clinic()));
 
-    // 3. Inicializa o contexto global de Toast
+    // 3. Inicializa o contexto de paciente selecionado globalmente
+    let _active_patient_id = use_context_provider(|| Signal::new(None::<String>));
+
+    // 4. Inicializa o contexto global de Toast
     use_context_provider(ToastState::new);
 
     rsx! {

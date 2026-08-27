@@ -1,4 +1,4 @@
-use crate::icons::{IconClose, IconCopy, IconEdit, IconExternalLink, IconInfo, IconWhatsapp};
+use crate::icons::{IconClose, IconCopy, IconEdit, IconExternalLink, IconInfo, IconUser};
 use crate::router::Route;
 use shared::appointments::{AppointmentResponse, AppointmentStatus};
 use dioxus::prelude::*;
@@ -12,6 +12,9 @@ pub fn AppointmentPopover(
     on_change_status: EventHandler<String>,
     on_cancel: EventHandler<()>,
 ) -> Element {
+    let mut selected_patient_id = consume_context::<Signal<Option<String>>>();
+    let nav = navigator();
+
     let patient_name = app.patient_name.clone().unwrap_or_else(|| app.title.clone());
     let (h, m) = super::event_card::extract_hhmm(&app.scheduled_for);
     let end_m = m + (app.duration_minutes.max(0) as u32);
@@ -29,14 +32,16 @@ pub fn AppointmentPopover(
         AppointmentStatus::Confirmed => ("confirmed", "#1e3a5f"),
         AppointmentStatus::Completed => ("completed", "#14532d"),
         AppointmentStatus::InProgress => ("in_progress", "#0369a1"),
-        AppointmentStatus::Pending => ("pending", "#78350f"),
+        AppointmentStatus::Waiting => ("waiting", "#475569"),
+        AppointmentStatus::Pending => ("pending", "#334155"),
         AppointmentStatus::NoShow => ("no_show", "#7f1d1d"),
-        AppointmentStatus::Canceled | AppointmentStatus::CanceledByDoctor | AppointmentStatus::CanceledByPatient => ("canceled", "#334155"),
+        AppointmentStatus::CanceledByPatient => ("canceled_pat", "#450a0a"),
+        AppointmentStatus::CanceledByDoctor => ("canceled_doc", "#450a0a"),
+        AppointmentStatus::Canceled => ("canceled", "#450a0a"),
     };
 
     let p_phone = "+55 11 98765-4321";
-    let encoded_msg = format!("Olá {}, confirmamos seu agendamento para hoje às {} com {}.", patient_name, time_display, doc_name);
-    let wa_link = format!("https://web.whatsapp.com/send?phone=5511987654321&text={}", encoded_msg);
+    let p_id_opt = app.patient_id.clone();
 
     rsx! {
         div {
@@ -44,19 +49,19 @@ pub fn AppointmentPopover(
             onclick: move |_| on_close.call(()),
             div {
                 class: "event-popover",
-                style: format!("left: {}px; top: {}px; width: 340px; border-radius: 12px; overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,0.7);", pop_x, pop_y),
+                style: format!("left: {}px; top: {}px; width: 330px; border-radius: 12px; overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,0.7);", pop_x, pop_y),
                 onclick: move |e| e.stop_propagation(),
 
                 // Top Header com a cor do status
                 div {
-                    style: format!("background: {}; padding: 16px; color: #ffffff; position: relative;", header_bg),
+                    style: format!("background: {}; padding: 14px 16px; color: #ffffff; position: relative;", header_bg),
 
                     div { style: "display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 8px;",
                         button {
                             r#type: "button",
                             class: "action-btn-icon",
                             style: "color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.2); width: 26px; height: 26px;",
-                            title: "Copiar dados do agendamento",
+                            title: "Copiar dados",
                             IconCopy { size: 13, color: "#ffffff".to_string() }
                         }
                         button {
@@ -78,19 +83,24 @@ pub fn AppointmentPopover(
 
                     div { style: "display: flex; align-items: center; gap: 12px;",
                         div {
-                            style: "width: 44px; height: 44px; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center; color: #0c1222; font-size: 20px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.2);",
-                            "👤"
+                            style: "width: 40px; height: 40px; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center; color: #0c1222; flex-shrink: 0;",
+                            IconUser { size: 22, color: "#0c1222".to_string() }
                         }
                         div { style: "flex: 1; min-width: 0;",
                             div { style: "display: flex; align-items: center; gap: 6px;",
-                                Link {
-                                    to: Route::PatientsView {},
-                                    style: "font-size: 15px; font-weight: 800; color: #ffffff; text-decoration: none; display: flex; align-items: center; gap: 4px;",
+                                span {
+                                    style: "font-size: 15px; font-weight: 800; color: #ffffff; cursor: pointer; display: flex; align-items: center; gap: 4px;",
+                                    onclick: move |_| {
+                                        if let Some(ref pid) = p_id_opt {
+                                            selected_patient_id.set(Some(pid.clone()));
+                                            nav.push(Route::PatientsView {});
+                                        }
+                                    },
                                     span { "{patient_name}" }
                                     IconExternalLink { size: 13, color: "rgba(255,255,255,0.8)".to_string() }
                                 }
                             }
-                            div { style: "font-size: 12.5px; color: rgba(255,255,255,0.85); margin-top: 2px;",
+                            div { style: "font-size: 12px; color: rgba(255,255,255,0.85); margin-top: 2px;",
                                 "{p_phone}"
                             }
                             div { style: "font-size: 11.5px; color: rgba(255,255,255,0.7); margin-top: 2px;",
@@ -101,7 +111,7 @@ pub fn AppointmentPopover(
                 }
 
                 // Body do Popover
-                div { style: "background: #182033; padding: 16px; display: flex; flex-direction: column; gap: 12px;",
+                div { style: "background: #182033; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;",
                     // Status selector
                     div { class: "form-field", style: "margin: 0;",
                         select {
@@ -109,23 +119,15 @@ pub fn AppointmentPopover(
                             style: "height: 38px; font-weight: 700;",
                             value: "{status_val}",
                             onchange: move |e| on_change_status.call(e.value()),
-                            option { value: "confirmed", "📅 Confirmado" }
-                            option { value: "in_progress", "📅 Em Atendimento" }
-                            option { value: "pending", "📅 Aguardando" }
-                            option { value: "completed", "📅 Finalizado" }
-                            option { value: "no_show", "📅 Falta" }
-                            option { value: "canceled", "📅 Desmarcado" }
+                            option { value: "pending", "Agendado" }
+                            option { value: "confirmed", "Confirmada" }
+                            option { value: "waiting", "Paciente aguardando" }
+                            option { value: "in_progress", "Em atendimento" }
+                            option { value: "completed", "Finalizada" }
+                            option { value: "no_show", "Falta" }
+                            option { value: "canceled_pat", "Cancelado pelo paciente" }
+                            option { value: "canceled_doc", "Cancelado pelo profissional" }
                         }
-                    }
-
-                    // Botão Reagendar por WhatsApp Web
-                    a {
-                        href: "{wa_link}",
-                        target: "_blank",
-                        style: "display: flex; align-items: center; justify-content: center; gap: 8px; background: #0f4a30; border: 1px solid #16a34a; border-radius: 6px; padding: 9px 12px; color: #86efac; font-size: 13px; font-weight: 700; text-decoration: none; transition: background 0.15s ease;",
-                        IconWhatsapp { size: 16, color: "#86efac".to_string() }
-                        span { "Reagendar por WhatsApp Web" }
-                        IconEdit { size: 13, color: "#86efac".to_string() }
                     }
 
                     // Profissional
@@ -141,7 +143,7 @@ pub fn AppointmentPopover(
                     input {
                         class: "form-input",
                         style: "font-size: 12.5px; height: 34px;",
-                        placeholder: "Rótulo da consulta (ex: Avaliação inicial...)",
+                        placeholder: "Rótulo da consulta...",
                         value: if let Some(ref note) = app.notes { "{note}" } else { "" },
                     }
                 }

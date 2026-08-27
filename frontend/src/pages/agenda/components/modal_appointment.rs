@@ -1,10 +1,12 @@
 use crate::components::modal::Modal;
-use crate::icons::IconExternalLink;
+use shared::patients::Patient;
 use dioxus::prelude::*;
 
 #[component]
 pub fn ModalAppointment(
     is_open: bool,
+    patients: Vec<Patient>,
+    selected_patient_id: Signal<String>,
     on_close: EventHandler<()>,
     on_submit: EventHandler<()>,
     is_compromisso: Signal<bool>,
@@ -22,7 +24,9 @@ pub fn ModalAppointment(
 
     let is_comp = *is_compromisso.read();
     let current_notes = notes.read().clone();
+    let patients_options = patients.clone();
     let current_patient = patient_query.read().clone();
+    let current_pid = selected_patient_id.read().clone();
 
     rsx! {
         Modal {
@@ -35,11 +39,12 @@ pub fn ModalAppointment(
                         select {
                             class: "form-select",
                             style: "max-width: 180px; height: 36px; font-size: 12.5px; background: rgba(255,255,255,0.05);",
-                            option { value: "", "Selecione um rótulo" }
-                            option { value: "urgencia", "🚨 Urgência" }
-                            option { value: "primeira", "⭐ Primeira Consulta" }
-                            option { value: "retorno", "🔄 Retorno" }
-                            option { value: "cirurgia", "💉 Cirurgia" }
+                            option { value: "", "Sem rótulo" }
+                            option { value: "urgencia", "Urgência" }
+                            option { value: "primeira", "Primeira Consulta" }
+                            option { value: "retorno", "Retorno" }
+                            option { value: "cirurgia", "Cirurgia" }
+                            option { value: "avaliacao", "Avaliação" }
                         }
                     } else {
                         div {}
@@ -65,8 +70,8 @@ pub fn ModalAppointment(
             },
 
             div { style: "display: flex; flex-direction: column; gap: 14px;",
-                // Top Tab Bar
-                div { style: "display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px; margin-bottom: 4px;",
+                // Top Tab Bar (Consulta / Compromisso)
+                div { style: "display: flex; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px; margin-bottom: 4px;",
                     div { style: "display: flex; gap: 8px;",
                         button {
                             r#type: "button",
@@ -83,13 +88,6 @@ pub fn ModalAppointment(
                             "Compromisso"
                         }
                     }
-
-                    a {
-                        href: "#",
-                        style: "display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: #94a3b8; text-decoration: none;",
-                        span { "Quer migrar seus dados? " strong { style: "color: #38bdf8; text-decoration: underline;", "Saiba mais" } }
-                        IconExternalLink { size: 13, color: "#38bdf8".to_string() }
-                    }
                 }
 
                 if !is_comp {
@@ -99,13 +97,20 @@ pub fn ModalAppointment(
                             label { class: "form-label", style: "color: #ef4444;", "Paciente *" }
                             a { href: "/patients", style: "font-size: 12px; color: #00a0e4; text-decoration: none; font-weight: 600;", "Cadastrar novo paciente" }
                         }
-                        input {
-                            class: "form-input",
-                            style: "border-color: rgba(255,255,255,0.15);",
-                            r#type: "text",
-                            placeholder: "Buscar paciente...",
-                            value: "{patient_query}",
-                            oninput: move |e| patient_query.set(e.value()),
+                        select {
+                            class: "form-select",
+                            value: "{current_pid}",
+                            onchange: move |e| {
+                                let val = e.value();
+                                selected_patient_id.set(val.clone());
+                                if let Some(p) = patients.iter().find(|p| p.id == val) {
+                                    patient_query.set(p.full_name.clone());
+                                }
+                            },
+                            option { value: "", "Selecione um paciente cadastrado..." }
+                            for p in patients_options {
+                                option { value: "{p.id}", "{p.full_name} ({p.phone})" }
+                            }
                         }
                     }
 
@@ -264,11 +269,11 @@ pub fn ModalAppointment(
                                 input { class: "form-input", r#type: "time", value: "11:15" }
                             }
                         }
-                    }
 
-                    div { style: "background: #0b1120; border: 1px solid rgba(255,255,255,0.06); padding: 10px 12px; border-radius: 6px; font-size: 12.5px; color: #94a3b8; display: flex; align-items: center; justify-content: space-between;",
-                        span { "Configurações extras • Ocupado para consultas • Sem alerta" }
-                        span { "▾" }
+                        div { style: "display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; margin-top: 10px;",
+                            input { r#type: "checkbox", id: "repeat-appt" }
+                            label { r#for: "repeat-appt", style: "cursor: pointer;", "Repetir compromisso" }
+                        }
                     }
                 }
             }

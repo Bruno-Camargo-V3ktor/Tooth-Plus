@@ -1,4 +1,5 @@
-use crate::icons::{IconCheck, IconDollar, IconExternalLink, IconFileText};
+use crate::icons::{IconDollar, IconFileText, IconTrash};
+use crate::router::Route;
 use shared::finance::{Transaction, TransactionDirection, TransactionStatus};
 use dioxus::prelude::*;
 
@@ -9,7 +10,8 @@ pub fn FinanceTable(
     on_open_details_modal: EventHandler<String>,
     on_delete_transaction: EventHandler<String>,
 ) -> Element {
-    let mut open_context_menu_id = use_signal(|| None::<String>);
+    let mut selected_patient_id = consume_context::<Signal<Option<String>>>();
+    let nav = navigator();
 
     if transactions.is_empty() {
         return rsx! {
@@ -17,8 +19,8 @@ pub fn FinanceTable(
                 div { class: "empty-debits-icon",
                     IconDollar { size: 48, color: "#475569".to_string() }
                 }
-                h3 { class: "empty-debits-title", "Sem resultados para o período" }
-                p { class: "empty-debits-desc", "Tente alterar os filtros de data ou categoria." }
+                h3 { class: "empty-debits-title", "Nenhuma movimentação no período" }
+                p { class: "empty-debits-desc", "Utilize a barra de ferramentas para registrar recebimentos ou despesas da clínica." }
             }
         };
     }
@@ -28,144 +30,99 @@ pub fn FinanceTable(
             table { class: "patients-list-table",
                 thead {
                     tr {
-                        th { style: "width: 32px;", input { r#type: "checkbox" } }
-                        th { style: "width: 24px;" }
-                        th { "Data ⇣" }
-                        th { "Nome" }
-                        th { style: "text-align: right; padding-right: 24px;", "Valor" }
-                        th { style: "width: 32px;" }
+                        th { "Vencimento ⇣" }
+                        th { "Descrição" }
+                        th { "Paciente / Fornecedor" }
+                        th { "Categoria" }
+                        th { "Forma Pagto" }
+                        th { "Valor" }
+                        th { "Status" }
+                        th { style: "text-align: right; padding-right: 20px;", "Ações" }
                     }
                 }
                 tbody {
                     for tx in transactions {
                         {
-                            let tid = tx.id.clone();
-                            let tid_pay = tx.id.clone();
-                            let tid_ctx = tx.id.clone();
-                            let tid_del = tx.id.clone();
-                            let tid_docs = tx.id.clone();
-
+                            let tx_id = tx.id.clone();
+                            let tx_id_det = tx.id.clone();
+                            let tx_id_del = tx.id.clone();
                             let is_income = tx.direction == TransactionDirection::Income;
-                            let is_paid = tx.status == TransactionStatus::Paid;
-                            let is_partial = tx.status == TransactionStatus::Partial;
-                            let date_clean = tx.due_date.split('T').next().unwrap_or(&tx.due_date);
+                            let is_pending = tx.status == TransactionStatus::Pending || tx.status == TransactionStatus::Partial;
+                            let p_name = tx.patient_name.clone().unwrap_or_else(|| "Clínica / Geral".to_string());
+                            let p_id_opt = tx.patient_id.clone();
 
-                            let val_color = if is_paid { "#22c55e" } else { "#ef4444" };
-                            let val_str = format!("R$ {:.2}", tx.amount_cents as f64 / 100.0);
-                            let action_label = if is_income { "RECEBER" } else { "PAGAR" };
+                            let val_formatted = format!("R$ {:.2}", (tx.amount_cents as f64) / 100.0);
+                            let cat_name = tx.category.clone();
+                            let method_name = tx.payment_method.clone().unwrap_or_else(|| "PIX".to_string()).to_uppercase();
 
-                            let is_ctx_open = open_context_menu_id.read().as_ref() == Some(&tid);
+                            let badge_cls = match tx.status {
+                                TransactionStatus::Paid => "badge badge-green",
+                                TransactionStatus::Partial => "badge badge-yellow",
+                                TransactionStatus::Pending => "badge badge-yellow",
+                                TransactionStatus::Canceled | TransactionStatus::Refunded => "badge badge-gray",
+                            };
+
+                            let badge_label = match tx.status {
+                                TransactionStatus::Paid => "Pago",
+                                TransactionStatus::Partial => "Parcial",
+                                TransactionStatus::Pending => "Aberto",
+                                TransactionStatus::Canceled => "Cancelado",
+                                TransactionStatus::Refunded => "Estornado",
+                            };
 
                             rsx! {
                                 tr { key: "{tx.id}", class: "patient-table-row",
-                                    td { input { r#type: "checkbox" } }
+                                    td { "{tx.due_date}" }
                                     td {
-                                        if is_income {
-                                            span { style: "color: #22c55e; font-weight: 800; font-size: 15px;", "↙" }
-                                        } else {
-                                            span { style: "color: #ef4444; font-weight: 800; font-size: 15px;", "↗" }
+                                        strong { style: "color: #f1f5f9;", "{tx.description}" }
+                                    }
+                                    td {
+                                        span {
+                                            class: "patient-name-link",
+                                            onclick: move |_| {
+                                                if let Some(ref pid) = p_id_opt {
+                                                    selected_patient_id.set(Some(pid.clone()));
+                                                    nav.push(Route::PatientsView {});
+                                                }
+                                            },
+                                            "{p_name}"
                                         }
                                     }
-                                    td { "{date_clean}" }
+                                    td { "{cat_name}" }
+                                    td { "{method_name}" }
                                     td {
-                                        div { style: "display: flex; align-items: center; gap: 8px; flex-wrap: wrap;",
-                                            span {
-                                                class: "patient-name-link",
-                                                style: if is_paid { "color: #f1f5f9;" } else { "color: #f87171;" },
-                                                "{tx.description}"
-                                            }
-                                            span { class: "action-btn-icon", style: "width: 18px; height: 18px;",
-                                                IconExternalLink { size: 12, color: "#00a0e4".to_string() }
-                                            }
-                                            if let Some(cpf) = tx.patient_id.as_ref() {
-                                                span { style: "font-size: 12px; color: #64748b;", "196.550.148-60" }
-                                            }
-                                            if tx.has_receipt {
+                                        span {
+                                            style: if is_income { "font-weight: 700; color: #22c55e;" } else { "font-weight: 700; color: #ef4444;" },
+                                            if is_income { "+ " } else { "- " }
+                                            "{val_formatted}"
+                                        }
+                                    }
+                                    td {
+                                        span { class: "{badge_cls}", "{badge_label}" }
+                                    }
+                                    td {
+                                        div { style: "display: flex; align-items: center; justify-content: flex-end; gap: 6px;",
+                                            if is_pending {
                                                 button {
                                                     r#type: "button",
-                                                    class: "action-btn-icon",
-                                                    style: "width: 22px; height: 22px;",
-                                                    title: "Ver recibo / comprovante",
-                                                    onclick: move |_| on_open_details_modal.call(tid_docs.clone()),
-                                                    IconFileText { size: 14, color: "#94a3b8".to_string() }
+                                                    class: "btn-pay-action-blue",
+                                                    onclick: move |_| on_open_payment_modal.call(tx_id.clone()),
+                                                    if is_income { "RECEBER" } else { "PAGAR" }
                                                 }
                                             }
-                                            if is_paid {
-                                                span { class: "badge badge-gray", style: "font-size: 11px; padding: 1px 6px;", "Débito" }
-                                            }
-                                            if is_partial {
-                                                span { class: "badge badge-blue", style: "font-size: 11px; padding: 1px 6px;",
-                                                    "Pago: R$ {tx.paid_amount_cents as f64 / 100.0:.2}"
-                                                }
-                                            }
-                                        }
-                                    }
-                                    td {
-                                        div { style: "display: flex; align-items: center; justify-content: flex-end; gap: 12px; position: relative;",
-                                            span { style: "font-weight: 800; font-size: 14.5px; color: {val_color};", "{val_str}" }
-
-                                            if is_paid {
-                                                div { style: "width: 22px; height: 22px; border-radius: 50%; background: rgba(34,197,94,0.15); display: flex; align-items: center; justify-content: center; color: #22c55e;",
-                                                    IconCheck { size: 14, color: "#22c55e".to_string() }
-                                                }
-                                            } else {
-                                                button {
-                                                    r#type: "button",
-                                                    class: "btn-secondary",
-                                                    style: "color: #38bdf8; border-color: rgba(56,189,248,0.4); font-size: 11.5px; font-weight: 800; padding: 4px 10px;",
-                                                    onclick: move |_| on_open_payment_modal.call(tid_pay.clone()),
-                                                    "{action_label}"
-                                                }
-                                            }
-                                        }
-                                    }
-                                    td {
-                                        div { style: "position: relative; text-align: center;",
                                             button {
                                                 r#type: "button",
                                                 class: "action-btn-icon",
-                                                onclick: move |_| {
-                                                    if is_ctx_open {
-                                                        open_context_menu_id.set(None);
-                                                    } else {
-                                                        open_context_menu_id.set(Some(tid_ctx.clone()));
-                                                    }
-                                                },
-                                                "⋮"
+                                                title: "Ver Detalhes / Comprovantes",
+                                                onclick: move |_| on_open_details_modal.call(tx_id_det.clone()),
+                                                IconFileText { size: 15, color: "#94a3b8".to_string() }
                                             }
-
-                                            if is_ctx_open {
-                                                div { class: "finance-add-menu", style: "right: 0; top: 28px;",
-                                                    button {
-                                                        r#type: "button",
-                                                        class: "finance-menu-item",
-                                                        onclick: move |_| {
-                                                            open_context_menu_id.set(None);
-                                                            on_open_details_modal.call(tid.clone());
-                                                        },
-                                                        "Editar"
-                                                    }
-                                                    button {
-                                                        r#type: "button",
-                                                        class: "finance-menu-item",
-                                                        "Emitir nota fiscal"
-                                                    }
-                                                    button {
-                                                        r#type: "button",
-                                                        class: "finance-menu-item menu-item-expense",
-                                                        onclick: move |_| {
-                                                            open_context_menu_id.set(None);
-                                                            on_delete_transaction.call(tid_del.clone());
-                                                        },
-                                                        "Excluir"
-                                                    }
-                                                    button {
-                                                        r#type: "button",
-                                                        class: "finance-menu-item",
-                                                        style: "color: #22c55e;",
-                                                        "Conversar no WhatsApp Web"
-                                                    }
-                                                }
+                                            button {
+                                                r#type: "button",
+                                                class: "action-btn-icon",
+                                                title: "Excluir Lançamento",
+                                                onclick: move |_| on_delete_transaction.call(tx_id_del.clone()),
+                                                IconTrash { size: 15, color: "#ef4444".to_string() }
                                             }
                                         }
                                     }

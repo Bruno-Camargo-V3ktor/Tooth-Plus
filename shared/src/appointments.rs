@@ -10,25 +10,27 @@ use serde::{Deserialize, Serialize};
 pub enum AppointmentStatus {
     Pending,
     Confirmed,
+    Waiting,
     InProgress,
     Completed,
-    CanceledByDoctor,
-    CanceledByPatient,
-    Canceled,
     NoShow,
+    CanceledByPatient,
+    CanceledByDoctor,
+    Canceled,
 }
 
 impl AppointmentStatus {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Pending => "Pendente",
-            Self::Confirmed => "Confirmado",
-            Self::InProgress => "Em Atendimento",
-            Self::Completed => "Concluído",
-            Self::CanceledByDoctor => "Cancelado (Doutor)",
-            Self::CanceledByPatient => "Cancelado (Paciente)",
+            Self::Pending => "Agendado",
+            Self::Confirmed => "Confirmada",
+            Self::Waiting => "Paciente aguardando",
+            Self::InProgress => "Em atendimento",
+            Self::Completed => "Finalizada",
+            Self::NoShow => "Falta",
+            Self::CanceledByPatient => "Cancelado pelo paciente",
+            Self::CanceledByDoctor => "Cancelado pelo profissional",
             Self::Canceled => "Cancelado",
-            Self::NoShow => "Não Compareceu",
         }
     }
 
@@ -36,12 +38,13 @@ impl AppointmentStatus {
         match self {
             Self::Pending => "app-status-pending",
             Self::Confirmed => "app-status-confirmed",
+            Self::Waiting => "app-status-waiting",
             Self::InProgress => "app-status-in-progress",
             Self::Completed => "app-status-completed",
-            Self::CanceledByDoctor => "app-status-canceled-doc",
-            Self::CanceledByPatient => "app-status-canceled-pat",
-            Self::Canceled => "app-status-canceled",
             Self::NoShow => "app-status-no-show",
+            Self::CanceledByPatient => "app-status-canceled-pat",
+            Self::CanceledByDoctor => "app-status-canceled-doc",
+            Self::Canceled => "app-status-canceled",
         }
     }
 
